@@ -1,0 +1,235 @@
+# 🔗 Chainlink
+
+**Agent orchestration. Simple, debuggable, cost-aware.**
+
+Chainlink is a lightweight framework for building production-ready agentic systems. Three classes, one decorator, full control.
+
+---
+
+## Quick Navigation
+
+| I want to... | Go to... |
+|--------------|----------|
+| **Build my first agent in 5 minutes** | [Quickstart →](quickstart.md) |
+| **Learn single-agent patterns** | [Single Agent →](single-agent.md) |
+| **Compose agents as tools** | [Composition →](composition.md) |
+| **Build sequential workflows** | [Chains →](chains.md) |
+| **Look up API details** | [API Reference →](api.md) |
+
+---
+
+## When to Use What
+
+### Single Agent
+**Use when:** You have one task, multiple tools.
+
+**Example:** "Search the web, calculate ROI, save to file"
+
+**Cost:** One model for everything.
+
+[Learn more →](single-agent.md)
+
+### Composition (Agents as Tools)
+**Use when:** You want specialist agents as black-box tools.
+
+**Example:** Fast researcher agent → expensive analyst agent (isolated contexts).
+
+**Cost:** Cheap models for grunt work, expensive for reasoning.
+
+[Learn more →](composition.md)
+
+### Chains (Shared Transcript)
+**Use when:** Each stage builds on previous work.
+
+**Example:** Search → analyze → write report (shared message history).
+
+**Cost:** Cheap for search, expensive for deep analysis.
+
+[Learn more →](chains.md)
+
+---
+
+## Cost Comparison
+
+**Scenario:** Research and analyze Tesla earnings.
+
+| Pattern | Model Strategy | Estimated Cost |
+|---------|---------------|----------------|
+| **Single Agent** | gpt-5 for everything | ~$5.00 |
+| **Composition** | gpt-5-mini search + gpt-5 analysis | ~$0.50 |
+| **Chain** | gpt-5-mini search → o1 reasoning → gpt-5 report | ~$8.40 |
+
+**Key insight:** Composition isolates contexts (cheapest). Chains share context (pays for what you need).
+
+---
+
+## Async Support
+
+Every pattern has full async/await support:
+
+```python
+from chainlink import AsyncAgent, AsyncChain, async_action
+
+# Async single agent
+agent = AsyncAgent(...)
+resp = await agent.run("query")
+
+# Async composition
+coordinator = AsyncAgent(
+    actions=[async_specialist.to_action(...)]
+)
+
+# Async chains
+chain = AsyncChain([async_agent1, async_agent2])
+resp = await chain.run("query")
+```
+
+**Use async when:** building web APIs, handling concurrent requests, or running multiple agents in parallel.
+
+---
+
+## Streaming
+
+Stream events in real-time as agents execute. Perfect for UI updates, progress tracking, and live feedback.
+
+```python
+from chainlink import ContentDelta, ActionStart, MessageEnd
+
+# Stream text deltas and action calls
+with agent.stream("Calculate 25 * 4") as events:
+    for event in events:
+        if isinstance(event, ContentDelta):
+            print(event.delta, end="", flush=True)
+        elif isinstance(event, ActionStart):
+            print(f"\n[Calling {event.name}...]")
+        elif isinstance(event, MessageEnd):
+            final_message = event.message
+```
+
+**Event types:**
+- `MessageStart` - Assistant message begins
+- `ContentDelta` - Text chunk streamed
+- `ActionStart` - Tool call begins
+- `ActionDelta` - Partially parsed tool args
+- `ActionEnd` - Tool call completes
+- `MessageEnd` - Complete message with all content
+
+**Two modes:**
+- `mode="deltas"` (default) - Stream granular events
+- `mode="messages"` - Stream only complete messages
+
+**Works for chains:**
+```python
+with chain.stream("Research and analyze") as events:
+    for event in events:
+        if isinstance(event, ContentDelta):
+            ui.append_text(event.delta)
+```
+
+---
+
+## Three Patterns in Code
+
+### 1. Single Agent
+```python
+from chainlink import Agent, action
+from chainlink.clients.openai import OpenAIClient
+
+agent = Agent(
+    client=OpenAIClient(model="gpt-5"),
+    actions=[search, calculate, write_file]
+)
+
+resp = agent.run("Research Tesla revenue, calculate growth, save report")
+```
+
+### 2. Composition
+```python
+# Fast specialist
+researcher = Agent(
+    client=OpenAIClient(model="gpt-5-mini"),
+    actions=[web_search, ResearchDone],
+    require_action=True
+)
+
+# Expensive coordinator
+analyst = Agent(
+    client=OpenAIClient(model="gpt-5"),
+    actions=[
+        researcher.to_action("research", "..."),
+        AnalysisDone
+    ],
+    require_action=True
+)
+```
+
+### 3. Chains
+```python
+from chainlink import Chain
+
+search_agent = Agent(...)  # Stage 1: search
+analysis_agent = Agent(...) # Stage 2: analyze
+
+chain = Chain([search_agent, analysis_agent])
+resp = chain.run("Research and analyze Tesla earnings")
+```
+
+---
+
+## Why Chainlink?
+
+| Feature | Chainlink | Typical Framework |
+|---------|-----------|-------------------|
+| **Lines of code** | 3 classes, 1 decorator | Dozens of abstractions |
+| **Cost visibility** | Built-in, per-run | Manual tracking |
+| **Debugging** | Full transcript access | Black box |
+| **Composition** | Agents = tools | Complex hierarchies |
+| **Async support** | Full async/await API | Often sync-only |
+| **Provider-agnostic** | OpenAI + Anthropic | Vendor lock-in |
+
+---
+
+## Production Checklist
+
+Before shipping:
+
+- ✅ **Guard exits:** Use `require_action=True` + exit actions for deterministic outputs
+- ✅ **Budget limits:** Set `max_iter` to prevent runaway costs
+- ✅ **Model selection:** Cheap for I/O, expensive for reasoning
+- ✅ **Logging:** Store `response.messages` and `response.usage`
+- ✅ **Testing:** Snapshot transcripts, track cost deltas
+
+---
+
+## Built-in Actions
+
+Chainlink ships with **safe Python execution**:
+
+```python
+from chainlink.actions import python_exec
+
+agent = Agent(
+    client=OpenAIClient(model="gpt-5"),
+    actions=[python_exec]
+)
+
+resp = agent.run("Calculate compound interest: $10k principal, 5% rate, 10 years")
+```
+
+Variables persist across calls—perfect for data analysis.
+
+---
+
+## Next Steps
+
+1. **New to Chainlink?** Start with [Quickstart →](quickstart.md)
+2. **Building single agents?** Read [Single Agent →](single-agent.md)
+3. **Need streaming?** See [Streaming →](streaming.md)
+4. **Need multi-agent systems?** Learn [Composition →](composition.md) or [Chains →](chains.md)
+5. **Looking up details?** Check [API Reference →](api.md)
+
+---
+
+## License
+
+MIT © 2025 Lucas Astorian
