@@ -129,7 +129,7 @@ class AsyncAgent:
         """
         Execute a single agent step (LLM call + action execution)."""
         # Call LLM
-        completion = await self.client.stream(
+        completions = await self.client.stream(
             messages=self.messages,
             system_prompt=system_prompt,
             actions=actions,
@@ -138,10 +138,13 @@ class AsyncAgent:
             verbose=self.verbose
         )
 
-        self.messages.append(completion)
+        # Client now returns List[Message] (main message + web searches if any)
+        self.messages.extend(completions)
         self.num_iter += 1
 
-        follow_ups = await self._call_actions(completion, actions)
+        # Only process actions from the main completion message (last one)
+        main_completion = completions[-1]
+        follow_ups = await self._call_actions(main_completion, actions)
 
         return follow_ups
 

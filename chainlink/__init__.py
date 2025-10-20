@@ -20,7 +20,9 @@ from chainlink.core.events import (
     ThoughtEnd,
     ActionStart,
     ActionDelta,
-    ActionEnd
+    ActionEnd,
+    ActionExecutionStart,
+    ActionExecuted
 )
 from chainlink.utils.usage import Usage
 
@@ -50,4 +52,6 @@ __all__ = [
     "ActionStart",
     "ActionDelta",
     "ActionEnd",
+    "ActionExecutionStart",
+    "ActionExecuted",
 ]

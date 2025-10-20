@@ -10,7 +10,7 @@ from chainlink.clients.base import BaseClient
 from chainlink.core.action import BaseAction, action
 from chainlink.core.message import Message, Action
 from chainlink.core.response import AgentResponse, ActionResponse, ActionFollowUp
-from chainlink.core.events import StreamEvent, MessageStart, MessageEnd, ContentDelta, ActionStart, ActionDelta, ActionEnd
+from chainlink.core.events import StreamEvent, MessageStart, MessageEnd, ContentDelta, ActionStart, ActionDelta, ActionEnd, ActionExecutionStart, ActionExecuted
 from chainlink.utils.usage import Usage
 from chainlink.utils.pricing import calculate_cost
 from chainlink.utils.verbose_logger import VerboseLogger
@@ -161,7 +161,7 @@ class Agent:
 
         Yields events and returns True if agent should exit.
         """
-        completion_message = None
+        completion_messages = []  # Collect all messages (web searches + main)
 
         # Stream the LLM completion
         for event in self.client.stream_events(
@@ -176,22 +176,25 @@ class Agent:
             if mode == "messages":
                 # Only yield MessageEnd events
                 if isinstance(event, MessageEnd):
-                    completion_message = event.message
+                    completion_messages.append(event.message)
                     yield event
             else:
                 # Yield all events (deltas mode)
                 yield event
 
-                # Capture the completion message
+                # Capture all completion messages
                 if isinstance(event, MessageEnd):
-                    completion_message = event.message
+                    completion_messages.append(event.message)
 
-        # Store the message
-        self.messages.append(completion_message)
+        # Store all messages (web searches + main completion)
+        self.messages.extend(completion_messages)
         self.num_iter += 1
 
+        # Main completion is the last message (has thoughts/content/actions)
+        main_completion = completion_messages[-1]
+
         # Check if we should exit (no actions or exit action called)
-        if not completion_message.actions:
+        if not main_completion.actions:
             if self.require_action:
                 error_msg = Message(
                     role="tool",
@@ -205,7 +208,7 @@ class Agent:
                 return True  # Exit - text response
 
         # Execute actions synchronously (no streaming for action execution)
-        for called_action in completion_message.actions:
+        for called_action in main_completion.actions:
             action_impl = self._find_action(called_action.name, actions)
 
             if not action_impl:
@@ -214,17 +217,21 @@ class Agent:
 
             # Check if this is an exit action
             if getattr(action_impl, '_is_exit', False):
+                # Yield action execution start
+                yield ActionExecutionStart(id=called_action.id, name=called_action.name, body=called_action.body)
                 response = action_impl(called_action)
                 self.messages.append(response.message)
-                # Yield tool result message
-                yield MessageEnd(message=response.message)
+                # Yield action execution result
+                yield ActionExecuted(message=response.message, summary=response.summary)
                 return True  # Exit
 
             # Execute regular action
+            # Yield action execution start
+            yield ActionExecutionStart(id=called_action.id, name=called_action.name, body=called_action.body)
             response = action_impl(called_action)
             self.messages.append(response.message)
-            # Yield tool result message
-            yield MessageEnd(message=response.message)
+            # Yield action execution result
+            yield ActionExecuted(message=response.message, summary=response.summary)
 
         # Continue loop
         return False
@@ -272,7 +279,7 @@ class Agent:
         system_prompt: str,
         allowed_actions: List[BaseAction] = None
     ) -> Optional[List[ActionFollowUp]]:
-        completion = self.client.stream(
+        completions = self.client.stream(
             messages=self.messages,
             system_prompt=system_prompt,
             actions=actions,
@@ -281,10 +288,13 @@ class Agent:
             verbose=self.verbose
         )
 
-        self.messages.append(completion)
+        # Client now returns List[Message] (main message + web searches if any)
+        self.messages.extend(completions)
         self.num_iter += 1
 
-        follow_ups = self._call_actions(completion, actions)
+        # Only process actions from the main completion message (last one)
+        main_completion = completions[-1]
+        follow_ups = self._call_actions(main_completion, actions)
 
         return follow_ups
 

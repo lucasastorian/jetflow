@@ -102,7 +102,7 @@ class Chain:
 
             # LOG: Chain transition end
             agent_duration = time.time() - agent_start_time
-            self.logger.log_chain_transition_end(i, agent_duration)
+            self.logger.log_chain_transition_end(i, len(self.agents), agent_duration)
 
             # Verify non-last agents exited properly
             if not is_last and not result.success:
@@ -266,7 +266,7 @@ class AsyncChain:
 
             # LOG: Chain transition end
             agent_duration = time.time() - agent_start_time
-            self.logger.log_chain_transition_end(i, agent_duration)
+            self.logger.log_chain_transition_end(i, len(self.agents), agent_duration)
 
             # Verify non-last agents exited properly
             if not is_last and not result.success:

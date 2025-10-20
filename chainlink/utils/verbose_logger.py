@@ -120,11 +120,11 @@ class VerboseLogger:
         if not self.verbose:
             return
 
-        print(f"\n{self._c('⛓️  CHAIN TRANSITION:', 'magenta')} {self._c(f'Agent {agent_index + 1}/{total_agents}', 'cyan')}", flush=True)
+        print(f"\n─── Chain Agent {agent_index + 1}/{total_agents} Start ───", flush=True)
 
-    def log_chain_transition_end(self, agent_index: int, duration: float):
+    def log_chain_transition_end(self, agent_index: int, total_agents: int, duration: float):
         """Log completion of agent in chain"""
         if not self.verbose:
             return
 
-        print(f"  {self._c('✓ CHAIN AGENT COMPLETE:', 'green')} Agent {agent_index + 1} ({duration:.1f}s)", flush=True)
+        print(f"─── Chain Agent {agent_index + 1}/{total_agents} End ({duration:.1f}s) ───\n", flush=True)
