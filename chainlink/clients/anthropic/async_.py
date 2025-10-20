@@ -49,7 +49,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         verbose: bool = True
-    ) -> Message:
+    ) -> List[Message]:
         """Stream a completion with the given messages"""
         formatted_messages = [message.anthropic_format() for message in messages]
 
@@ -251,12 +251,12 @@ class AsyncAnthropicClient(AsyncBaseClient):
         )),
         reraise=True
     )
-    async def _stream_with_retry(self, params: dict, verbose: bool) -> Message:
+    async def _stream_with_retry(self, params: dict, verbose: bool) -> List[Message]:
         """Create and consume a streaming response with retries"""
         response = await self.client.beta.messages.create(**params)
         return await self._stream_completion(response, verbose)
 
-    async def _stream_completion(self, response: AsyncStream, verbose: bool) -> Message:
+    async def _stream_completion(self, response: AsyncStream, verbose: bool) -> List[Message]:
         """Stream an Anthropic completion and return final Message"""
         completion = Message(
             role="assistant",
@@ -337,4 +337,5 @@ class AsyncAnthropicClient(AsyncBaseClient):
 
         completion.status = 'completed'
 
-        return completion
+        # Anthropic doesn't support server-side web searches, so always return single message
+        return [completion]

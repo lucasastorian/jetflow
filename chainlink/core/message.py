@@ -15,7 +15,6 @@ class Action:
     body: dict
 
     external_id: str = None  # OpenAI Responses API 'id' attribute
-    index: int = None
 
 
 @dataclass
@@ -23,15 +22,14 @@ class Thought:
     """Reasoning trace from LLM"""
     id: str
     summaries: List[str]
-    index: int = None
 
 
 @dataclass
 class WebSearch:
-    """Web search call (OpenAI only)"""
+    """Web search call and results (OpenAI only)"""
     id: str
     query: str
-    index: int = None
+    results: str = None  # Search results content
 
 
 @dataclass
@@ -39,13 +37,15 @@ class Message:
     """Unified message format across providers"""
 
     role: Literal['system', 'user', 'assistant', 'tool']
-    content: str
+    content: str = ""
     status: Literal['in_progress', 'completed', 'failed'] = 'completed'
 
-    # Optional content
+    # Optional content (bundled together)
     thoughts: List[Thought] = None
     actions: List[Action] = None
-    web_searches: List[WebSearch] = None
+
+    # Web searches get their own Message (OpenAI bundles query + results)
+    web_search: WebSearch = None
 
     # For tool messages
     action_id: str = None
@@ -60,7 +60,6 @@ class Message:
 
     # Provider-specific
     external_id: str = None
-    content_index: int = None
 
     # Internal
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -109,70 +108,53 @@ class Message:
             return {"role": self.role, "content": self.content}
 
     def openai_format(self) -> List[dict]:
-        """Formats the message as a list of items for the OpenAI Responses API, preserving index order."""
+        """Formats the message as a list of items for the OpenAI Responses API."""
         if self.role == "tool":
             return [{"call_id": self.action_id, "output": self.content, "type": "function_call_output"}]
 
         if self.role != "assistant":
             return [{"role": self.role, "content": self.content}]
 
-        blocks = []
+        items = []
 
+        # Order: thoughts → content → actions (standard for regular messages)
         if self.thoughts:
             for t in self.thoughts:
-                blocks.append({
-                    "type": "thought",
-                    "index": t.index,
-                    "value": {
-                        "id": t.id,
-                        "summary": [{"text": s, "type": "summary_text"} for s in t.summaries],
-                        "type": "reasoning",
-                    }
-                })
-
-        if self.actions:
-            for a in self.actions:
-                blocks.append({
-                    "type": "action",
-                    "index": a.index,
-                    "value": {
-                        "id": a.external_id,
-                        "call_id": a.id,
-                        "name": a.name,
-                        "arguments": json.dumps(a.body),
-                        "type": "function_call",
-                    }
+                items.append({
+                    "id": t.id,
+                    "summary": [{"text": s, "type": "summary_text"} for s in t.summaries],
+                    "type": "reasoning",
                 })
 
         if self.content:
-            blocks.append({
-                "type": "message",
-                "index": self.content_index,
-                "value": {
-                    "id": self.external_id,
-                    "role": self.role,
-                    "content": self.content,
-                    "status": "completed",
-                    "type": "message"
-                }
+            items.append({
+                "id": self.external_id,
+                "role": self.role,
+                "content": self.content,
+                "status": "completed",
+                "type": "message"
             })
 
-        if self.web_searches:
-            for s in self.web_searches:
-                blocks.append({
-                    "type": "web_search",
-                    "index": s.index,
-                    "value": {
-                        "id": s.id,
-                        "action": {"query": s.query, "type": "search", "sources": None},
-                        "status": "completed",
-                        "type": "web_search_call"
-                    }
+        if self.actions:
+            for a in self.actions:
+                items.append({
+                    "id": a.external_id,
+                    "call_id": a.id,
+                    "name": a.name,
+                    "arguments": json.dumps(a.body),
+                    "type": "function_call",
                 })
 
-        blocks.sort(key=lambda b: b["index"] or 0)
+        # Web search messages (separate Message objects)
+        if self.web_search:
+            items.append({
+                "id": self.web_search.id,
+                "action": {"query": self.web_search.query, "type": "search", "sources": None},
+                "status": "completed",
+                "type": "web_search_call"
+            })
 
-        return [b["value"] for b in blocks]
+        return items
 
     def legacy_openai_format(self) -> dict:
         """Returns the legacy chat completions formatted message"""

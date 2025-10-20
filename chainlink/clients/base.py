@@ -23,8 +23,12 @@ class BaseClient(ABC):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
-    ) -> 'Message':
-        """Stream a completion and return final Message (sync)"""
+    ) -> List['Message']:
+        """Stream a completion and return list of Messages (sync).
+
+        Returns list to support multi-message responses (e.g., web searches in OpenAI).
+        Most providers will return a single-item list.
+        """
         raise NotImplementedError
 
     @abstractmethod
@@ -54,8 +58,12 @@ class AsyncBaseClient(ABC):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
-    ) -> 'Message':
-        """Stream a completion and return final Message (async)"""
+    ) -> List['Message']:
+        """Stream a completion and return list of Messages (async).
+
+        Returns list to support multi-message responses (e.g., web searches in OpenAI).
+        Most providers will return a single-item list.
+        """
         raise NotImplementedError
 
     @abstractmethod

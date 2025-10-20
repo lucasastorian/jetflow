@@ -66,6 +66,21 @@ class ActionEnd:
     body: dict
 
 
+@dataclass
+class ActionExecutionStart:
+    """Action execution begins (after params parsed)"""
+    id: str
+    name: str
+    body: dict  # The parsed parameters
+
+
+@dataclass
+class ActionExecuted:
+    """Action execution completes with result"""
+    message: Message  # The tool response message (role="tool")
+    summary: str = None  # Optional summary for display/logging
+
+
 # Union type for all streaming events
 StreamEvent = Union[
     MessageStart,
@@ -76,5 +91,7 @@ StreamEvent = Union[
     ThoughtEnd,
     ActionStart,
     ActionDelta,
-    ActionEnd
+    ActionEnd,
+    ActionExecutionStart,
+    ActionExecuted
 ]

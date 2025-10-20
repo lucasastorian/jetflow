@@ -52,8 +52,8 @@ class AsyncOpenAIClient(AsyncBaseClient):
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         verbose: bool = True
-    ) -> Message:
-        """Stream a completion with the given messages"""
+    ) -> List[Message]:
+        """Stream a completion with the given messages. Returns list of Messages (multiple if web searches occur)."""
         items = [item for message in messages for item in message.openai_format()]
 
         params = {
@@ -153,10 +153,10 @@ class AsyncOpenAIClient(AsyncBaseClient):
             status="in_progress",
             content="",
             thoughts=[],
-            actions=[],
-            web_searches=[]
+            actions=[]
         )
         tool_call_arguments = ""
+        current_web_search = None  # Track active web search
 
         # Yield message start
         yield MessageStart(role="assistant")
@@ -172,7 +172,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
             elif event.type == 'response.output_item.added':
 
                 if event.item.type == 'reasoning':
-                    thought = Thought(id=event.item.id, summaries=[], index=event.output_index)
+                    thought = Thought(id=event.item.id, summaries=[])
                     completion.thoughts.append(thought)
                     # Yield thought start event
                     yield ThoughtStart(id=thought.id)
@@ -184,8 +184,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
                         name=event.item.name,
                         status="streaming",
                         body={},
-                        external_id=event.item.id,
-                        index=event.output_index
+                        external_id=event.item.id
                     )
                     completion.actions.append(action)
                     # Yield action start event
@@ -193,13 +192,16 @@ class AsyncOpenAIClient(AsyncBaseClient):
 
                 elif event.item.type == 'message':
                     completion.external_id = event.item.id
-                    completion.content_index = event.output_index
                     if verbose:
                         print("", flush=True)  # Add separator before response
 
                 elif event.item.type == 'web_search_call':
-                    web_search = WebSearch(id=event.item.id, query="", index=event.output_index)
-                    completion.web_searches.append(web_search)
+                    # Create new web search message
+                    current_web_search = Message(
+                        role="assistant",
+                        status="completed",
+                        web_search=WebSearch(id=event.item.id, query="")
+                    )
 
             elif event.type == 'response.reasoning_summary_part.added':
                 completion.thoughts[-1].summaries.append("")
@@ -260,7 +262,9 @@ class AsyncOpenAIClient(AsyncBaseClient):
                 yield ContentDelta(delta=event.delta)
 
             elif event.type == 'response.output_text.done':
-                pass
+                # Add spacing after content finishes streaming
+                if verbose and completion.content:
+                    print("\n\n", sep="", end="")
 
             elif event.type == 'response.content_part.done':
                 pass
@@ -268,7 +272,12 @@ class AsyncOpenAIClient(AsyncBaseClient):
             elif event.type == 'response.output_item.done':
 
                 if event.item.type == 'web_search_call':
-                    completion.web_searches[-1].query = event.item.action.query
+                    # Populate web search message with query and results
+                    current_web_search.web_search.query = event.item.action.query
+                    # TODO: Extract results from event.item.action.sources if available
+                    # Yield separate MessageEnd for this web search
+                    yield MessageEnd(message=current_web_search)
+                    current_web_search = None
 
             elif event.type == 'response.completed':
                 usage = event.response.usage
@@ -296,22 +305,22 @@ class AsyncOpenAIClient(AsyncBaseClient):
         )),
         reraise=True
     )
-    async def _stream_with_retry(self, params: dict, verbose: bool) -> Message:
+    async def _stream_with_retry(self, params: dict, verbose: bool) -> List[Message]:
         """Create and consume a streaming response with retries"""
         stream = await self.client.responses.create(**params)
         return await self._stream_completion(stream, verbose)
 
-    async def _stream_completion(self, response: AsyncStream, verbose: bool) -> Message:
-        """Stream a chat completion and return final Message"""
+    async def _stream_completion(self, response: AsyncStream, verbose: bool) -> List[Message]:
+        """Stream a chat completion and return list of Messages (main message + web searches)"""
         completion = Message(
             role="assistant",
             status="in_progress",
             content="",
             thoughts=[],
-            actions=[],
-            web_searches=[]
+            actions=[]
         )
         tool_call_arguments = ""
+        messages = []  # Collect all messages (web searches interleaved)
 
         async for event in response:
 
@@ -325,7 +334,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
 
                 if event.item.type == 'reasoning':
                     completion.thoughts.append(
-                        Thought(id=event.item.id, summaries=[], index=event.output_index)
+                        Thought(id=event.item.id, summaries=[])
                     )
                     if verbose:
                         print(self._c("Thinking: ", "yellow") + "\n\n", sep="", end="")
@@ -337,20 +346,23 @@ class AsyncOpenAIClient(AsyncBaseClient):
                         name=event.item.name,
                         status="streaming",
                         body={},
-                        external_id=event.item.id,
-                        index=event.output_index
+                        external_id=event.item.id
                     )
                     completion.actions.append(action)
 
                 elif event.item.type == 'message':
                     completion.external_id = event.item.id
-                    completion.content_index = event.output_index
                     if verbose:
                         print("", flush=True)  # Add separator before response
 
                 elif event.item.type == 'web_search_call':
-                    web_search = WebSearch(id=event.item.id, query="", index=event.output_index)
-                    completion.web_searches.append(web_search)
+                    # Create separate web search message
+                    web_search_msg = Message(
+                        role="assistant",
+                        status="completed",
+                        web_search=WebSearch(id=event.item.id, query="")
+                    )
+                    messages.append(web_search_msg)
                     if verbose:
                         print("Searching Web: ", sep="", end="")
 
@@ -394,14 +406,16 @@ class AsyncOpenAIClient(AsyncBaseClient):
             elif event.type == 'response.output_text.delta':
                 # Print header on first content delta
                 if verbose and completion.content == "":
-                    print(f"\n{self._c('Assistant:', 'cyan')}\n\n", sep="", end="")
+                    print(self._c('Assistant:', 'cyan') + "\n\n", sep="", end="")
 
                 completion.content += event.delta
                 if verbose:
                     print(event.delta, sep="", end="")
 
             elif event.type == 'response.output_text.done':
-                pass
+                # Add spacing after content finishes streaming
+                if verbose and completion.content:
+                    print("\n\n", sep="", end="")
 
             elif event.type == 'response.content_part.done':
                 pass
@@ -409,7 +423,12 @@ class AsyncOpenAIClient(AsyncBaseClient):
             elif event.type == 'response.output_item.done':
 
                 if event.item.type == 'web_search_call':
-                    completion.web_searches[-1].query = event.item.action.query
+                    # Populate web search message with query (find the most recent web search message)
+                    for msg in reversed(messages):
+                        if msg.web_search and not msg.web_search.query:
+                            msg.web_search.query = event.item.action.query
+                            # TODO: Extract results from event.item.action.sources if available
+                            break
                     if verbose:
                         print(f"{event.item.action.query}\n\n")
 
@@ -425,4 +444,11 @@ class AsyncOpenAIClient(AsyncBaseClient):
 
         completion.status = 'completed'
 
-        return completion
+        # If no web searches, return just the main message
+        if not messages:
+            return [completion]
+
+        # Otherwise, append main completion and return all messages
+        # Order: web searches (chronological) + main completion (thoughts/content/actions)
+        messages.append(completion)
+        return messages

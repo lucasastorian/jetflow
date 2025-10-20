@@ -9,7 +9,7 @@ Stream events as your agent executes—perfect for building responsive UIs, show
 ## Quick Start
 
 ```python
-from chainlink import Agent, ContentDelta, ActionStart, ActionEnd, MessageEnd
+from chainlink import Agent, ContentDelta, ActionStart, ActionExecutionStart, ActionExecuted, MessageEnd
 from chainlink.clients.openai import OpenAIClient
 
 agent = Agent(client=OpenAIClient(model="gpt-5"), actions=[...])
@@ -22,7 +22,10 @@ with agent.stream("What is 25 * 4?") as events:
         elif isinstance(event, ActionStart):
             print(f"\n[Calling {event.name}...]")
 
-        elif isinstance(event, ActionEnd):
+        elif isinstance(event, ActionExecutionStart):
+            print(f"[Executing...]")
+
+        elif isinstance(event, ActionExecuted):
             print(f"✓ Done")
 
         elif isinstance(event, MessageEnd):
@@ -33,6 +36,7 @@ with agent.stream("What is 25 * 4?") as events:
 ```
 The answer is
 [Calling calculator...]
+[Executing...]
 ✓ Done
 100
 ```
@@ -79,6 +83,8 @@ for event in events:
         text_buffer += event.delta
         ui.update_text(text_buffer)
 ```
+
+**Note:** This event is optional. If the LLM only calls tools without generating any text, you won't receive any `ContentDelta` events.
 
 ---
 
@@ -214,16 +220,75 @@ class ActionEnd:
     body: dict  # Final complete parsed body
 ```
 
-**When:** When tool arguments are fully parsed.
+**When:** When tool arguments are fully parsed (LLM finished streaming the tool call).
 
-**Use for:** Hiding spinners, logging complete calls, executing actions.
+**Use for:** Logging the complete tool call parameters.
 
 **Example:**
 ```python
 if isinstance(event, ActionEnd):
-    spinner.hide()
-    log.info(f"Called {event.name} with {event.body}")
+    log.info(f"Tool call parsed: {event.name} with {event.body}")
 ```
+
+**Note:** This does NOT mean the action has executed yet - see `ActionExecutionStart` and `ActionExecuted`.
+
+---
+
+### ActionExecutionStart
+
+Action execution begins (after parameters are parsed).
+
+```python
+@dataclass
+class ActionExecutionStart:
+    id: str
+    name: str
+    body: dict  # The parsed parameters
+```
+
+**When:** Immediately before the action function executes.
+
+**Use for:** Showing "Executing..." spinners, starting timers for long-running actions.
+
+**Example:**
+```python
+if isinstance(event, ActionExecutionStart):
+    spinner.show(f"Executing {event.name}...")
+    start_time = time.time()
+```
+
+**Note:** This event fills the gap between parameter parsing (ActionEnd) and execution completion (ActionExecuted). Some actions can take several seconds to execute.
+
+---
+
+### ActionExecuted
+
+Action execution completes with result.
+
+```python
+@dataclass
+class ActionExecuted:
+    message: Message  # Tool result message (role="tool")
+    summary: str = None  # Optional summary for display/logging
+```
+
+**When:** When the action function returns a result.
+
+**Use for:** Hiding spinners, showing results, logging execution time.
+
+**Example:**
+```python
+if isinstance(event, ActionExecuted):
+    duration = time.time() - start_time
+    spinner.hide()
+    print(f"✓ {event.summary or 'Done'} ({duration:.1f}s)")
+```
+
+**Message includes:**
+- `content` - The tool result (string)
+- `action_id` - Links back to the ActionStart/ActionEnd ID
+- `role` - Always "tool"
+- `error` - True if action raised an exception
 
 ---
 
@@ -257,11 +322,71 @@ if isinstance(event, MessageEnd):
 
 ---
 
+## Event Flow
+
+Understanding the complete event sequence for a typical agent execution:
+
+```
+1. MessageStart (LLM begins response)
+   ├─ ThoughtStart (optional - if extended thinking)
+   ├─ ThoughtDelta × N
+   └─ ThoughtEnd
+
+2. ContentDelta × N (optional - only if LLM generates text)
+
+3. ActionStart (LLM calls a tool)
+   ├─ ActionDelta × N (parameters streaming/parsing)
+   └─ ActionEnd (parameters fully parsed)
+
+4. ActionExecutionStart (about to execute tool)
+
+5. [Tool function executes - could take several seconds]
+
+6. ActionExecuted (tool returned result)
+
+7. ContentDelta × N (optional - more text after tool, if any)
+
+8. MessageEnd (LLM response complete)
+```
+
+**Note:** `ContentDelta` events only occur when the LLM generates text. Tool-only responses (no text) will skip steps 2 and 7.
+
+**Multiple Tool Calls:**
+
+When the LLM calls multiple tools, steps 3-6 repeat for each tool before step 7:
+
+```
+MessageStart
+  → ContentDelta (thinking text)
+  → ActionStart (tool 1)
+    → ActionEnd
+    → ActionExecutionStart
+    → ActionExecuted
+  → ActionStart (tool 2)
+    → ActionEnd
+    → ActionExecutionStart
+    → ActionExecuted
+  → ContentDelta (final answer)
+→ MessageEnd
+```
+
+**Multi-Iteration Agents:**
+
+Agents that loop multiple times repeat the entire flow:
+
+```
+Iteration 1: MessageStart → ... → MessageEnd → ActionExecuted
+Iteration 2: MessageStart → ... → MessageEnd → ActionExecuted
+Iteration 3: MessageStart → ... → MessageEnd (final response, no tools)
+```
+
+---
+
 ## Streaming Modes
 
 ### Deltas Mode (Default)
 
-Stream all granular events: `MessageStart`, `ContentDelta`, `ActionStart`, `ActionDelta`, `ActionEnd`, `MessageEnd`.
+Stream all granular events: `MessageStart`, `ContentDelta`, `ThoughtStart`, `ThoughtDelta`, `ThoughtEnd`, `ActionStart`, `ActionDelta`, `ActionEnd`, `ActionExecutionStart`, `ActionExecuted`, `MessageEnd`.
 
 ```python
 with agent.stream("query") as events:
@@ -270,23 +395,24 @@ with agent.stream("query") as events:
         ...
 ```
 
-**Use when:** Building UIs, showing live progress, tracking every step.
+**Use when:** Building UIs, showing live progress, tracking every step, showing action execution status.
 
 ---
 
 ### Messages Mode
 
-Stream only complete messages (`MessageEnd` events).
+Stream only complete messages and action execution events (`MessageEnd` and `ActionExecuted` events).
 
 ```python
 with agent.stream("query", mode="messages") as events:
     for event in events:
-        # Only MessageEnd events
-        assert isinstance(event, MessageEnd)
-        print(event.message.content)
+        if isinstance(event, MessageEnd):
+            print(f"Message: {event.message.content}")
+        elif isinstance(event, ActionExecuted):
+            print(f"Action result: {event.summary}")
 ```
 
-**Use when:** You only care about complete messages, not intermediate updates.
+**Use when:** You only care about complete messages and action results, not intermediate updates.
 
 **Perfect for:** Logging, database storage, batch processing.
 
@@ -392,10 +518,13 @@ with agent.stream("Complex multi-step task") as events:
     progress = tqdm(desc="Agent thinking")
 
     for event in events:
-        if isinstance(event, ActionEnd):
+        if isinstance(event, ActionExecutionStart):
+            progress.set_description(f"Executing {event.name}")
+        elif isinstance(event, ActionExecuted):
             progress.update(1)
         elif isinstance(event, MessageEnd):
-            progress.close()
+            if event.message.role == "assistant":
+                progress.close()
 ```
 
 ### UI Updates (Gradio/Streamlit)
@@ -404,6 +533,7 @@ with agent.stream("Complex multi-step task") as events:
 import streamlit as st
 
 output_container = st.empty()
+status_container = st.empty()
 text_buffer = ""
 
 with agent.stream("Analyze data") as events:
@@ -413,7 +543,13 @@ with agent.stream("Analyze data") as events:
             output_container.markdown(text_buffer)
 
         elif isinstance(event, ActionStart):
-            st.info(f"🔧 Running {event.name}...")
+            status_container.info(f"🔧 Calling {event.name}...")
+
+        elif isinstance(event, ActionExecutionStart):
+            status_container.info(f"⏳ Executing {event.name}...")
+
+        elif isinstance(event, ActionExecuted):
+            status_container.success(f"✓ {event.summary or 'Complete'}")
 ```
 
 ### Database Logging
@@ -421,12 +557,22 @@ with agent.stream("Analyze data") as events:
 ```python
 with agent.stream("query", mode="messages") as events:
     for event in events:
-        # Only complete messages
-        db.save_message(
-            content=event.message.content,
-            tokens=event.message.completion_tokens,
-            actions=[a.name for a in event.message.actions or []]
-        )
+        if isinstance(event, MessageEnd):
+            # Save assistant messages
+            db.save_message(
+                role=event.message.role,
+                content=event.message.content,
+                tokens=event.message.completion_tokens,
+                actions=[a.name for a in event.message.actions or []]
+            )
+        elif isinstance(event, ActionExecuted):
+            # Save action results
+            db.save_action_result(
+                action_id=event.message.action_id,
+                content=event.message.content,
+                summary=event.summary,
+                error=event.message.error
+            )
 ```
 
 ### Cost Tracking
@@ -497,19 +643,29 @@ Let me consider the constraints...
 The answer is 42.
 ```
 
-### Tool Result Streaming
+### Action Execution Tracking
 
-Tool results are automatically streamed as `MessageEnd` events:
+Track the full lifecycle of action execution:
 
 ```python
+action_timers = {}
+
 with agent.stream("Search and analyze") as events:
     for event in events:
-        if isinstance(event, MessageEnd):
-            if event.message.role == "tool":
-                # Tool result
-                print(f"📦 Tool returned: {event.message.content[:80]}...")
-            elif event.message.role == "assistant":
-                # LLM response
+        if isinstance(event, ActionStart):
+            print(f"🔧 {event.name} called")
+
+        elif isinstance(event, ActionExecutionStart):
+            action_timers[event.id] = time.time()
+            print(f"  ⏳ Executing...")
+
+        elif isinstance(event, ActionExecuted):
+            duration = time.time() - action_timers.get(event.message.action_id, 0)
+            print(f"  ✓ Result: {event.summary} ({duration:.2f}s)")
+            print(f"    Content: {event.message.content[:80]}...")
+
+        elif isinstance(event, MessageEnd):
+            if event.message.role == "assistant":
                 print(f"💬 Assistant: {event.message.content[:80]}...")
 ```
 
@@ -583,13 +739,14 @@ except Exception as e:
     print(f"Stream error: {e}")
 ```
 
-**Errors are captured in tool messages:**
+**Errors are captured in ActionExecuted events:**
 ```python
 with agent.stream("query") as events:
     for event in events:
-        if isinstance(event, MessageEnd):
-            if event.message.role == "tool" and event.message.error:
-                print(f"Tool error: {event.message.content}")
+        if isinstance(event, ActionExecuted):
+            if event.message.error:
+                print(f"Action error: {event.message.content}")
+                # Handle error (retry, log, notify user, etc.)
 ```
 
 ---
@@ -641,9 +798,11 @@ with agent.stream("query") as events:
 
 ```python
 from chainlink import Agent, action
-from chainlink import MessageStart, MessageEnd, ContentDelta, ActionStart, ActionEnd
+from chainlink import MessageStart, MessageEnd, ContentDelta
+from chainlink import ActionStart, ActionExecutionStart, ActionExecuted
 from chainlink.clients.openai import OpenAIClient
 from pydantic import BaseModel
+import time
 
 # Define calculator action
 class Calculate(BaseModel):
@@ -665,7 +824,7 @@ print("User: What is (10 + 5) * 2?")
 print("Assistant: ", end="")
 
 text_buffer = ""
-actions_called = []
+action_timers = {}
 
 with agent.stream("What is (10 + 5) * 2?") as events:
     for event in events:
@@ -674,30 +833,33 @@ with agent.stream("What is (10 + 5) * 2?") as events:
             print(event.delta, end="", flush=True)
 
         elif isinstance(event, ActionStart):
-            print(f"\n[Calling {event.name}...]", end="")
+            print(f"\n[Calling {event.name}...]", end="", flush=True)
 
-        elif isinstance(event, ActionEnd):
-            actions_called.append(event.name)
-            print(f" ✓")
+        elif isinstance(event, ActionExecutionStart):
+            action_timers[event.id] = time.time()
+            print(f" executing...", end="", flush=True)
+
+        elif isinstance(event, ActionExecuted):
+            duration = time.time() - action_timers.get(event.message.action_id, 0)
+            print(f" ✓ ({duration:.2f}s)", flush=True)
 
         elif isinstance(event, MessageEnd):
-            print(f"\n\nSummary:")
-            print(f"  Final answer: {text_buffer}")
-            print(f"  Actions called: {len(actions_called)}")
-            print(f"  Tokens: {event.message.completion_tokens}")
-            print(f"  Cost: ${event.message.completion_tokens * 0.001:.4f}")
+            if event.message.role == "assistant":
+                print(f"\n\nSummary:")
+                print(f"  Final answer: {text_buffer}")
+                print(f"  Tokens: {event.message.completion_tokens}")
+                print(f"  Cost: ${event.message.completion_tokens * 0.001:.4f}")
 ```
 
 **Output:**
 ```
 User: What is (10 + 5) * 2?
 Assistant: Let me calculate that for you.
-[Calling calculator...] ✓
+[Calling calculator...] executing... ✓ (0.12s)
 The answer is 30.
 
 Summary:
   Final answer: Let me calculate that for you. The answer is 30.
-  Actions called: 1
   Tokens: 45
   Cost: $0.0450
 ```
