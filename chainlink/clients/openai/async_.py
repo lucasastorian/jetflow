@@ -392,6 +392,10 @@ class AsyncOpenAIClient(AsyncBaseClient):
                 completion.actions[-1].status = 'parsed'
 
             elif event.type == 'response.output_text.delta':
+                # Print header on first content delta
+                if verbose and completion.content == "":
+                    print(f"\n{self._c('Assistant:', 'cyan')}\n\n", sep="", end="")
+
                 completion.content += event.delta
                 if verbose:
                     print(event.delta, sep="", end="")

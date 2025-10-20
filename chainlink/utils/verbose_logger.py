@@ -46,13 +46,12 @@ class VerboseLogger:
             Number of tokens
         """
         if self._encoding is None:
-            # Lazy load the encoding (cl100k_base is used by GPT-3.5-turbo, GPT-4, etc.)
             self._encoding = tiktoken.get_encoding("cl100k_base")
 
         try:
             return len(self._encoding.encode(content))
         except Exception:
-            # Fallback to rough word-based estimate if encoding fails
+            # Fallback to word count if encoding fails
             return len(content.split())
 
     def log_handoff(self, agent_name: str, instructions: str):
@@ -60,22 +59,21 @@ class VerboseLogger:
         if not self.verbose:
             return
 
-        print(f"\n{self._c('🤝 HANDING OFF TO AGENT:', 'magenta')} {self._c(agent_name, 'cyan')}", flush=True)
+        print(f"\n─── {agent_name} Start ───", flush=True)
 
-        # Show instructions (truncate if too long)
+        # Show instructions below separator (truncate if too long)
         if len(instructions) > 200:
             preview = instructions[:200].replace('\n', ' ') + '...'
-            print(f"  {self._c('With instructions:', 'dim')} {preview}", flush=True)
+            print(f"  Instructions: {preview}\n\n", flush=True)
         else:
-            # Show full instructions, preserving structure
-            print(f"  {self._c('With instructions:', 'dim')} {instructions}", flush=True)
+            print(f"  Instructions: {instructions}\n\n", flush=True)
 
     def log_agent_complete(self, agent_name: str, duration: float):
         """Log nested agent completion"""
         if not self.verbose:
             return
 
-        print(f"  {self._c('✓ AGENT COMPLETE:', 'green')} {agent_name} ({duration:.1f}s)\n", flush=True)
+        print(f"─── {agent_name} End ({duration:.1f}s) ───\n", flush=True)
 
     def log_action_start(self, action_name: str, params: dict):
         """Log action start with parameters"""
