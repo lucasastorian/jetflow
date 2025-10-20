@@ -23,12 +23,10 @@ class AnthropicClient(BaseClient):
         model: str = "claude-sonnet-4-5",
         api_key: str = None,
         temperature: float = 1.0,
-        reasoning_effort: Literal['low', 'medium', 'high', 'none'] = 'medium',
-        verbose: bool = True
+        reasoning_effort: Literal['low', 'medium', 'high', 'none'] = 'medium'
     ):
         self.model = model
         self.temperature = temperature
-        self.verbose = verbose
         self.reasoning_effort = reasoning_effort
         self.reasoning_budget = {
             "low": 1024,
@@ -48,7 +46,8 @@ class AnthropicClient(BaseClient):
         system_prompt: str,
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False
+        enable_web_search: bool = False,
+        verbose: bool = True
     ) -> Message:
         formatted_messages = [message.anthropic_format() for message in messages]
 
@@ -73,7 +72,7 @@ class AnthropicClient(BaseClient):
             params["tools"] = [action.anthropic_schema for action in allowed_actions]
             params['tool_choice'] = {"type": "tool"}
 
-        return self._stream_with_retry(params)
+        return self._stream_with_retry(params, verbose)
 
     def stream_events(
         self,
@@ -81,7 +80,8 @@ class AnthropicClient(BaseClient):
         system_prompt: str,
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False
+        enable_web_search: bool = False,
+        verbose: bool = True
     ) -> Iterator[StreamEvent]:
         """Stream a completion and yield events in real-time"""
         formatted_messages = [message.anthropic_format() for message in messages]
@@ -107,7 +107,7 @@ class AnthropicClient(BaseClient):
             params["tools"] = [action.anthropic_schema for action in allowed_actions]
             params['tool_choice'] = {"type": "tool"}
 
-        yield from self._stream_events_with_retry(params)
+        yield from self._stream_events_with_retry(params, verbose)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -121,12 +121,12 @@ class AnthropicClient(BaseClient):
         )),
         reraise=True
     )
-    def _stream_events_with_retry(self, params: dict) -> Iterator[StreamEvent]:
+    def _stream_events_with_retry(self, params: dict, verbose: bool) -> Iterator[StreamEvent]:
         """Create and consume a streaming response with retries, yielding events"""
         response = self.client.beta.messages.create(**params)
-        yield from self._stream_completion_events(response)
+        yield from self._stream_completion_events(response, verbose)
 
-    def _stream_completion_events(self, response) -> Iterator[StreamEvent]:
+    def _stream_completion_events(self, response, verbose: bool) -> Iterator[StreamEvent]:
         """Stream a chat completion and yield events"""
         completion = Message(
             role="assistant",
@@ -247,11 +247,11 @@ class AnthropicClient(BaseClient):
         )),
         reraise=True
     )
-    def _stream_with_retry(self, params: dict) -> Message:
+    def _stream_with_retry(self, params: dict, verbose: bool) -> Message:
         response = self.client.beta.messages.create(**params)
-        return self._stream_completion(response)
+        return self._stream_completion(response, verbose)
 
-    def _stream_completion(self, response) -> Message:
+    def _stream_completion(self, response, verbose: bool) -> Message:
         completion = Message(
             role="assistant",
             status="in_progress",
@@ -269,7 +269,7 @@ class AnthropicClient(BaseClient):
             elif event.type == 'content_block_start':
                 if event.content_block.type == 'thinking':
                     completion.thoughts.append(Thought(id="", summaries=[""]))
-                    if self.verbose:
+                    if verbose:
                         print("Thinking: \n\n", sep="", end="")
 
                 elif event.content_block.type == 'text':
@@ -288,7 +288,7 @@ class AnthropicClient(BaseClient):
             elif event.type == 'content_block_delta':
                 if event.delta.type == 'thinking_delta':
                     completion.thoughts[-1].summaries[0] += event.delta.thinking
-                    if self.verbose:
+                    if verbose:
                         print(event.delta.thinking, sep="", end="")
 
                 elif event.delta.type == 'signature_delta':
@@ -311,11 +311,11 @@ class AnthropicClient(BaseClient):
 
                 elif event.delta.type == 'text_delta':
                     completion.content += event.delta.text
-                    if self.verbose:
+                    if verbose:
                         print(event.delta.text, sep="", end="")
 
             elif event.type == 'content_block_stop':
-                if self.verbose and completion.thoughts and completion.thoughts[-1].summaries:
+                if verbose and completion.thoughts and completion.thoughts[-1].summaries:
                     print("\n\n")
 
             elif event.type == 'message_delta':

@@ -134,7 +134,8 @@ class AsyncAgent:
             system_prompt=system_prompt,
             actions=actions,
             allowed_actions=allowed_actions,
-            enable_web_search=False  # Can be made configurable
+            enable_web_search=False,  # Can be made configurable
+            verbose=self.verbose
         )
 
         self.messages.append(completion)

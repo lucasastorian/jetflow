@@ -169,7 +169,8 @@ class Agent:
             system_prompt=system_prompt,
             actions=actions,
             allowed_actions=allowed_actions,
-            enable_web_search=False
+            enable_web_search=False,
+            verbose=self.verbose
         ):
             # Filter events based on mode
             if mode == "messages":
@@ -276,7 +277,8 @@ class Agent:
             system_prompt=system_prompt,
             actions=actions,
             allowed_actions=allowed_actions,
-            enable_web_search=False
+            enable_web_search=False,
+            verbose=self.verbose
         )
 
         self.messages.append(completion)
