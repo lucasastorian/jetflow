@@ -40,6 +40,11 @@ class AnthropicClient(BaseClient):
             timeout=60.0
         )
 
+    def _supports_thinking(self) -> bool:
+        """Check if the model supports extended thinking"""
+        # Only claude-sonnet-4-5 and claude-opus-4-1 support thinking
+        return self.model.startswith("claude-sonnet-4-5") or self.model.startswith("claude-opus-4-1")
+
     def stream(
         self,
         messages: List[Message],
@@ -62,7 +67,7 @@ class AnthropicClient(BaseClient):
             "stream": True
         }
 
-        if self.reasoning_budget > 0:
+        if self.reasoning_budget > 0 and self._supports_thinking():
             params['thinking'] = {
                 "type": "enabled",
                 "budget_tokens": self.reasoning_budget
@@ -97,7 +102,7 @@ class AnthropicClient(BaseClient):
             "stream": True
         }
 
-        if self.reasoning_budget > 0:
+        if self.reasoning_budget > 0 and self._supports_thinking():
             params['thinking'] = {
                 "type": "enabled",
                 "budget_tokens": self.reasoning_budget
@@ -315,8 +320,7 @@ class AnthropicClient(BaseClient):
                         print(event.delta.text, sep="", end="")
 
             elif event.type == 'content_block_stop':
-                if verbose and completion.thoughts and completion.thoughts[-1].summaries:
-                    print("\n\n")
+                pass
 
             elif event.type == 'message_delta':
                 usage = event.usage

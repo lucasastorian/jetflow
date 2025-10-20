@@ -41,6 +41,11 @@ class AsyncAnthropicClient(AsyncBaseClient):
             timeout=60.0
         )
 
+    def _supports_thinking(self) -> bool:
+        """Check if the model supports extended thinking"""
+        # Only claude-sonnet-4-5 and claude-opus-4-1 support thinking
+        return self.model.startswith("claude-sonnet-4-5") or self.model.startswith("claude-opus-4-1")
+
     async def stream(
         self,
         messages: List[Message],
@@ -64,7 +69,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
             "stream": True
         }
 
-        if self.reasoning_budget > 0:
+        if self.reasoning_budget > 0 and self._supports_thinking():
             params['thinking'] = {
                 "type": "enabled",
                 "budget_tokens": self.reasoning_budget
@@ -99,7 +104,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
             "stream": True
         }
 
-        if self.reasoning_budget > 0:
+        if self.reasoning_budget > 0 and self._supports_thinking():
             params['thinking'] = {
                 "type": "enabled",
                 "budget_tokens": self.reasoning_budget
