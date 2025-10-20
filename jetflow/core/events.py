@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Literal, Union
-from chainlink.core.message import Message
+from jetflow.core.message import Message
 
 
 @dataclass

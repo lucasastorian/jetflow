@@ -4,9 +4,9 @@ from abc import ABC, abstractmethod
 from typing import List, Iterator, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from chainlink.core.message import Message
-    from chainlink.core.action import BaseAction
-    from chainlink.core.events import StreamEvent
+    from jetflow.core.message import Message
+    from jetflow.core.action import BaseAction
+    from jetflow.core.events import StreamEvent
 
 
 class BaseClient(ABC):

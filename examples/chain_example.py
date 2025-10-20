@@ -6,7 +6,7 @@ A search agent (cheap, fast) hands off to an analysis agent (expensive, smart).
 """
 
 from pydantic import BaseModel, Field
-from chainlink import Agent, Chain, action
+from jetflow import Agent, Chain, action
 
 
 # ============================================================================
@@ -70,7 +70,7 @@ def main():
     # Note: This example requires actual API keys to run
     # For demonstration purposes, we show the structure
 
-    from chainlink.clients.openai import OpenAIClient
+    from jetflow.clients.openai import OpenAIClient
 
     # Stage 1: Search agent (cheap, fast model)
     search_agent = Agent(
@@ -144,7 +144,7 @@ def ReviewDone(params: ReviewComplete) -> str:
 def multi_stage_example():
     """Demonstrate 3-stage chain: research → draft → review"""
 
-    from chainlink.clients.openai import OpenAIClient
+    from jetflow.clients.openai import OpenAIClient
 
     # Stage 1: Research
     research_agent = Agent(

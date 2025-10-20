@@ -9,8 +9,8 @@ One agent, multiple tools, full control. This guide covers exit actions, control
 ## Basic Agent
 
 ```python
-from chainlink import Agent, action
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, action
+from jetflow.clients.openai import OpenAIClient
 from pydantic import BaseModel
 
 class Calculate(BaseModel):
@@ -89,7 +89,7 @@ agent = Agent(
 Force the agent to call specific actions next.
 
 ```python
-from chainlink import ActionResult
+from jetflow import ActionResult
 
 @action(schema=CodeReview)
 def review_code(params: CodeReview) -> ActionResult:
@@ -122,7 +122,7 @@ def review_code(params: CodeReview) -> ActionResult:
 Use `AsyncAgent` and `@async_action` for async workflows.
 
 ```python
-from chainlink import AsyncAgent, async_action
+from jetflow import AsyncAgent, async_action
 
 @async_action(schema=SearchQuery)
 async def async_search(params: SearchQuery) -> str:
@@ -155,7 +155,7 @@ Stream events in real-time as your agent executes. Perfect for UI updates, progr
 ### Basic Streaming
 
 ```python
-from chainlink import ContentDelta, ActionStart, ActionEnd, MessageEnd
+from jetflow import ContentDelta, ActionStart, ActionEnd, MessageEnd
 
 with agent.stream("What is 25 * 4?") as events:
     for event in events:
@@ -377,7 +377,7 @@ Same agent, different provider. **Zero code changes.**
 
 ```python
 # OpenAI
-from chainlink.clients.openai import OpenAIClient
+from jetflow.clients.openai import OpenAIClient
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
@@ -385,7 +385,7 @@ agent = Agent(
 )
 
 # Anthropic (same actions work)
-from chainlink.clients.anthropic import AnthropicClient
+from jetflow.clients.anthropic import AnthropicClient
 
 agent = Agent(
     client=AnthropicClient(model="claude-sonnet-4-5"),
@@ -434,8 +434,8 @@ Before shipping:
 ## Complete Example
 
 ```python
-from chainlink import Agent, action, ActionResult
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, action, ActionResult
+from jetflow.clients.openai import OpenAIClient
 from pydantic import BaseModel, Field
 
 # Define actions

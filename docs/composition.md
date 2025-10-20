@@ -11,8 +11,8 @@ Fast specialists scout. Expensive coordinators reason. Isolated contexts keep co
 Create specialized agents and compose them into a coordinator:
 
 ```python
-from chainlink import Agent, action
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, action
+from jetflow.clients.openai import OpenAIClient
 
 # 1. Create specialized search agent
 search_agent = Agent(
@@ -152,7 +152,7 @@ search_agent = Agent(
 Use `AsyncAgent` for async workflows.
 
 ```python
-from chainlink import AsyncAgent, async_action
+from jetflow import AsyncAgent, async_action
 
 # Async specialist
 @async_action(schema=SearchQuery)
@@ -189,8 +189,8 @@ response = await async_coordinator.run("Research AI safety")
 ## Complete Example
 
 ```python
-from chainlink import Agent, action
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, action
+from jetflow.clients.openai import OpenAIClient
 from pydantic import BaseModel
 
 # ============================================================================

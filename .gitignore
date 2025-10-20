@@ -138,3 +138,5 @@ Thumbs.db
 
 # Internal tracking
 ISSUES.md
+
+check_pypi_names.py

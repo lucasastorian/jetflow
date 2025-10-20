@@ -8,8 +8,8 @@ import sys
 import traceback
 from pydantic import BaseModel, Field
 
-from chainlink.core.action import action
-from chainlink.actions.python_exec.utils import (
+from jetflow.core.action import action
+from jetflow.actions.python_exec.utils import (
     preprocess_code,
     format_syntax_error,
     diff_namespace,

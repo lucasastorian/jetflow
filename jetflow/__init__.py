@@ -4,13 +4,13 @@ Chainlink - Lightweight Agent Coordination Framework
 A lightweight, production-ready framework for building agentic workflows with LLMs.
 """
 
-from chainlink.__version__ import __version__
-from chainlink.core.agent import Agent, AsyncAgent
-from chainlink.core.action import action, async_action
-from chainlink.core.message import Message, Action, Thought
-from chainlink.core.response import AgentResponse, ActionResult, ChainResponse
-from chainlink.core.chain import Chain, AsyncChain
-from chainlink.core.events import (
+from jetflow.__version__ import __version__
+from jetflow.core.agent import Agent, AsyncAgent
+from jetflow.core.action import action, async_action
+from jetflow.core.message import Message, Action, Thought
+from jetflow.core.response import AgentResponse, ActionResult, ChainResponse
+from jetflow.core.chain import Chain, AsyncChain
+from jetflow.core.events import (
     StreamEvent,
     MessageStart,
     MessageEnd,
@@ -24,7 +24,7 @@ from chainlink.core.events import (
     ActionExecutionStart,
     ActionExecuted
 )
-from chainlink.utils.usage import Usage
+from jetflow.utils.usage import Usage
 
 __all__ = [
     "__version__",

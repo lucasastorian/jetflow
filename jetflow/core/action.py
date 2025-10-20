@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from chainlink.core.message import Action, Message
-    from chainlink.core.response import ActionResponse
+    from jetflow.core.message import Action, Message
+    from jetflow.core.response import ActionResponse
 
 
 class BaseAction(ABC):
@@ -89,7 +89,7 @@ class AsyncBaseAction(ABC):
 
 def action(schema: type[BaseModel], exit: bool = False):
     """Decorator for sync actions"""
-    from chainlink.core._action_wrappers import _wrap_function_action, _wrap_class_action
+    from jetflow.core._action_wrappers import _wrap_function_action, _wrap_class_action
 
     def decorator(target):
         if isinstance(target, type):
@@ -101,7 +101,7 @@ def action(schema: type[BaseModel], exit: bool = False):
 
 def async_action(schema: type[BaseModel], exit: bool = False):
     """Decorator for async actions"""
-    from chainlink.core._action_wrappers import _wrap_async_function_action, _wrap_async_class_action
+    from jetflow.core._action_wrappers import _wrap_async_function_action, _wrap_async_class_action
 
     def decorator(target):
         if isinstance(target, type):

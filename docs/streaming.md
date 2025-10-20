@@ -9,8 +9,8 @@ Stream events as your agent executes—perfect for building responsive UIs, show
 ## Quick Start
 
 ```python
-from chainlink import Agent, ContentDelta, ActionStart, ActionExecutionStart, ActionExecuted, MessageEnd
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, ContentDelta, ActionStart, ActionExecutionStart, ActionExecuted, MessageEnd
+from jetflow.clients.openai import OpenAIClient
 
 agent = Agent(client=OpenAIClient(model="gpt-5"), actions=[...])
 
@@ -423,7 +423,7 @@ with agent.stream("query", mode="messages") as events:
 ### Basic Example
 
 ```python
-from chainlink import Agent, ContentDelta, MessageEnd
+from jetflow import Agent, ContentDelta, MessageEnd
 
 agent = Agent(...)
 
@@ -453,7 +453,7 @@ with agent.stream("Do research, then analyze") as events:
 ### Async Streaming
 
 ```python
-from chainlink import AsyncAgent
+from jetflow import AsyncAgent
 
 async_agent = AsyncAgent(...)
 
@@ -470,7 +470,7 @@ async with async_agent.stream("query") as events:
 Chains stream events from all agents sequentially.
 
 ```python
-from chainlink import Chain
+from jetflow import Chain
 
 chain = Chain([search_agent, analysis_agent, report_agent])
 
@@ -605,8 +605,8 @@ with agent.stream("Call multiple tools") as events:
 ### Thought Streaming (O1 Models)
 
 ```python
-from chainlink import Agent, ThoughtStart, ThoughtDelta, ThoughtEnd
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, ThoughtStart, ThoughtDelta, ThoughtEnd
+from jetflow.clients.openai import OpenAIClient
 
 agent = Agent(
     client=OpenAIClient(model="o1"),
@@ -797,10 +797,10 @@ with agent.stream("query") as events:
 ## Complete Example
 
 ```python
-from chainlink import Agent, action
-from chainlink import MessageStart, MessageEnd, ContentDelta
-from chainlink import ActionStart, ActionExecutionStart, ActionExecuted
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, action
+from jetflow import MessageStart, MessageEnd, ContentDelta
+from jetflow import ActionStart, ActionExecutionStart, ActionExecuted
+from jetflow.clients.openai import OpenAIClient
 from pydantic import BaseModel
 import time
 

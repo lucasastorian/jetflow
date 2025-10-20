@@ -1,8 +1,8 @@
-# 🔗 Chainlink
+# ⚡ Jetflow
 
 **Agent orchestration. Simple, debuggable, cost-aware.**
 
-Chainlink is a lightweight framework for building production-ready agentic systems. Three classes, one decorator, full control.
+Jetflow is a lightweight framework for building production-ready agentic systems. Three classes, one decorator, full control.
 
 ---
 
@@ -68,7 +68,7 @@ Chainlink is a lightweight framework for building production-ready agentic syste
 Every pattern has full async/await support:
 
 ```python
-from chainlink import AsyncAgent, AsyncChain, async_action
+from jetflow import AsyncAgent, AsyncChain, async_action
 
 # Async single agent
 agent = AsyncAgent(...)
@@ -93,7 +93,7 @@ resp = await chain.run("query")
 Stream events in real-time as agents execute. Perfect for UI updates, progress tracking, and live feedback.
 
 ```python
-from chainlink import ContentDelta, ActionStart, MessageEnd
+from jetflow import ContentDelta, ActionStart, MessageEnd
 
 # Stream text deltas and action calls
 with agent.stream("Calculate 25 * 4") as events:
@@ -132,8 +132,8 @@ with chain.stream("Research and analyze") as events:
 
 ### 1. Single Agent
 ```python
-from chainlink import Agent, action
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, action
+from jetflow.clients.openai import OpenAIClient
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
@@ -165,7 +165,7 @@ analyst = Agent(
 
 ### 3. Chains
 ```python
-from chainlink import Chain
+from jetflow import Chain
 
 search_agent = Agent(...)  # Stage 1: search
 analysis_agent = Agent(...) # Stage 2: analyze
@@ -176,9 +176,9 @@ resp = chain.run("Research and analyze Tesla earnings")
 
 ---
 
-## Why Chainlink?
+## Why Jetflow?
 
-| Feature | Chainlink | Typical Framework |
+| Feature | Jetflow | Typical Framework |
 |---------|-----------|-------------------|
 | **Lines of code** | 3 classes, 1 decorator | Dozens of abstractions |
 | **Cost visibility** | Built-in, per-run | Manual tracking |
@@ -203,10 +203,10 @@ Before shipping:
 
 ## Built-in Actions
 
-Chainlink ships with **safe Python execution**:
+Jetflow ships with **safe Python execution**:
 
 ```python
-from chainlink.actions import python_exec
+from jetflow.actions import python_exec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
@@ -222,7 +222,7 @@ Variables persist across calls—perfect for data analysis.
 
 ## Next Steps
 
-1. **New to Chainlink?** Start with [Quickstart →](quickstart.md)
+1. **New to Jetflow?** Start with [Quickstart →](quickstart.md)
 2. **Building single agents?** Read [Single Agent →](single-agent.md)
 3. **Need streaming?** See [Streaming →](streaming.md)
 4. **Need multi-agent systems?** Learn [Composition →](composition.md) or [Chains →](chains.md)

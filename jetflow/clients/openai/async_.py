@@ -1,18 +1,19 @@
-"""Sync OpenAI client implementation"""
+"""Async OpenAI client implementation"""
 
 import os
 import openai
 from jiter import from_json
-from typing import Literal, List, Iterator
+from openai import AsyncStream
+from typing import Literal, List, AsyncIterator
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from chainlink.core.action import BaseAction
-from chainlink.core.message import Message, Action, Thought, WebSearch
-from chainlink.core.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
-from chainlink.clients.base import BaseClient
+from jetflow.core.action import BaseAction
+from jetflow.core.message import Message, Action, Thought, WebSearch
+from jetflow.core.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
+from jetflow.clients.base import AsyncBaseClient
 
 
-class OpenAIClient(BaseClient):
+class AsyncOpenAIClient(AsyncBaseClient):
     provider: str = "OpenAI"
     supports_thinking: List[str] = ['gpt-5', 'o1', 'o3', 'o4']
 
@@ -27,9 +28,9 @@ class OpenAIClient(BaseClient):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
-        self.tier = tier
+        self.tier = tier  # Reserved for future rate limiting
 
-        self.client = openai.OpenAI(
+        self.client = openai.AsyncOpenAI(
             base_url="https://api.openai.com/v1",
             api_key=api_key or os.environ.get('OPENAI_API_KEY'),
             timeout=300.0,
@@ -48,7 +49,7 @@ class OpenAIClient(BaseClient):
         }
         return f"{colors.get(color, '')}{text}{colors['reset']}"
 
-    def stream(
+    async def stream(
         self,
         messages: List[Message],
         system_prompt: str,
@@ -88,9 +89,9 @@ class OpenAIClient(BaseClient):
                 ]
             }
 
-        return self._stream_with_retry(params, verbose)
+        return await self._stream_with_retry(params, verbose)
 
-    def stream_events(
+    async def stream_events(
         self,
         messages: List[Message],
         system_prompt: str,
@@ -98,7 +99,7 @@ class OpenAIClient(BaseClient):
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         verbose: bool = True
-    ) -> Iterator[StreamEvent]:
+    ) -> AsyncIterator[StreamEvent]:
         """Stream a completion and yield events in real-time"""
         items = [item for message in messages for item in message.openai_format()]
 
@@ -130,7 +131,8 @@ class OpenAIClient(BaseClient):
                 ]
             }
 
-        yield from self._stream_events_with_retry(params, verbose)
+        async for event in self._stream_events_with_retry(params, verbose):
+            yield event
 
     @retry(
         stop=stop_after_attempt(3),
@@ -143,12 +145,13 @@ class OpenAIClient(BaseClient):
         )),
         reraise=True
     )
-    def _stream_events_with_retry(self, params: dict, verbose: bool) -> Iterator[StreamEvent]:
+    async def _stream_events_with_retry(self, params: dict, verbose: bool) -> AsyncIterator[StreamEvent]:
         """Create and consume a streaming response with retries, yielding events"""
-        stream = self.client.responses.create(**params)
-        yield from self._stream_completion_events(stream, verbose)
+        stream = await self.client.responses.create(**params)
+        async for event in self._stream_completion_events(stream, verbose):
+            yield event
 
-    def _stream_completion_events(self, response, verbose: bool) -> Iterator[StreamEvent]:
+    async def _stream_completion_events(self, response: AsyncStream, verbose: bool) -> AsyncIterator[StreamEvent]:
         """Stream a chat completion and yield events"""
         completion = Message(
             role="assistant",
@@ -163,7 +166,7 @@ class OpenAIClient(BaseClient):
         # Yield message start
         yield MessageStart(role="assistant")
 
-        for event in response:
+        async for event in response:
 
             if event.type == 'response.created':
                 pass
@@ -307,12 +310,12 @@ class OpenAIClient(BaseClient):
         )),
         reraise=True
     )
-    def _stream_with_retry(self, params: dict, verbose: bool) -> List[Message]:
+    async def _stream_with_retry(self, params: dict, verbose: bool) -> List[Message]:
         """Create and consume a streaming response with retries"""
-        stream = self.client.responses.create(**params)
-        return self._stream_completion(stream, verbose)
+        stream = await self.client.responses.create(**params)
+        return await self._stream_completion(stream, verbose)
 
-    def _stream_completion(self, response, verbose: bool) -> List[Message]:
+    async def _stream_completion(self, response: AsyncStream, verbose: bool) -> List[Message]:
         """Stream a chat completion and return list of Messages (main message + web searches)"""
         completion = Message(
             role="assistant",
@@ -324,7 +327,7 @@ class OpenAIClient(BaseClient):
         tool_call_arguments = ""
         messages = []  # Collect all messages (web searches interleaved)
 
-        for event in response:
+        async for event in response:
 
             if event.type == 'response.created':
                 pass

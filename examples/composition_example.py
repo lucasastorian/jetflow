@@ -6,7 +6,7 @@ using the clean .to_action() pattern.
 """
 
 from pydantic import BaseModel, Field
-from chainlink import Agent, action
+from jetflow import Agent, action
 
 
 # ============================================================================
@@ -50,7 +50,7 @@ def SearchDone(params: SearchComplete) -> str:
 def main():
     """Demonstrate clean agent composition"""
 
-    from chainlink.clients.openai import OpenAIClient
+    from jetflow.clients.openai import OpenAIClient
 
     # Step 1: Create a specialized sub-agent
     search_agent = Agent(
@@ -112,7 +112,7 @@ def AnalysisDone(params: DataAnalysisComplete) -> str:
 def multi_agent_example():
     """Demonstrate multiple specialized agents working together"""
 
-    from chainlink.clients.openai import OpenAIClient
+    from jetflow.clients.openai import OpenAIClient
 
     # Create specialized agents
     search_agent = Agent(
@@ -160,7 +160,7 @@ def multi_agent_example():
 def comparison_example():
     """Show the difference between old and new pattern"""
 
-    from chainlink.clients.openai import OpenAIClient
+    from jetflow.clients.openai import OpenAIClient
 
     # OLD PATTERN (with input_schema - still works but awkward):
     #
