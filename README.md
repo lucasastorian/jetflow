@@ -3,6 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/jetflow.svg)](https://pypi.org/project/jetflow)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-jetflow-blue.svg)](https://jetflow.readthedocs.io)
 
 **Stop rebuilding the same agent patterns.**
 
@@ -44,6 +45,8 @@ export OPENAI_API_KEY=...
 export ANTHROPIC_API_KEY=...
 ```
 
+**📚 [Full Documentation →](https://jetflow.readthedocs.io)** | [Quickstart](https://jetflow.readthedocs.io/quickstart) | [Single Agent](https://jetflow.readthedocs.io/single-agent) | [Composition](https://jetflow.readthedocs.io/composition) | [Chains](https://jetflow.readthedocs.io/chains) | [API Reference](https://jetflow.readthedocs.io/api)
+
 **Async support:** Full async/await API available. Use `AsyncAgent`, `AsyncChain`, and `@async_action`.
 
 ---
@@ -79,6 +82,8 @@ print(f"Cost: ${resp.usage.estimated_cost:.4f}")
 ```
 
 **Why teams use this:** strong schemas reduce junk calls, a short loop keeps latency predictable, and you see spend immediately.
+
+→ **[Learn more: Single Agent Guide](https://jetflow.readthedocs.io/single-agent)**
 
 ---
 
@@ -133,6 +138,8 @@ print(resp.content)
 
 **What this buys you:** fast models scout, strong models conclude; strict boundaries prevent prompt bloat; parents get one crisp payload per child.
 
+→ **[Learn more: Composition Guide](https://jetflow.readthedocs.io/composition)**
+
 ---
 
 ## Quick Start 3 — Sequential Agent Chains (shared transcript, sequential hand-off)
@@ -164,6 +171,8 @@ print(f"Total cost: ${resp.usage.estimated_cost:.4f}")
 ```
 
 **Why chains win:** you share context only when it compounds value, swap models per stage to balance speed and accuracy, and keep each agent narrowly focused.
+
+→ **[Learn more: Chains Guide](https://jetflow.readthedocs.io/chains)**
 
 ---
 
@@ -224,6 +233,8 @@ with chain.stream("Research and analyze") as events:
             print(event.delta, end="")
 ```
 
+→ **[Learn more: Streaming Guide](https://jetflow.readthedocs.io/streaming)**
+
 ---
 
 ## Why Jetflow (in one breath)
@@ -267,13 +278,14 @@ Variables persist across calls. Perfect for data analysis workflows.
 
 ## Docs
 
-📚 [Full Documentation](https://jetflow.readthedocs.io)
+📚 **[Full Documentation](https://jetflow.readthedocs.io)**
 
-- [Quickstart](https://jetflow.readthedocs.io/quickstart) — 5-minute tutorial
-- [Single Agent](https://jetflow.readthedocs.io/single-agent) — Actions, control flow, debugging
-- [Composition](https://jetflow.readthedocs.io/composition) — Agents as tools
-- [Chains](https://jetflow.readthedocs.io/chains) — Multi-stage workflows
-- [API Reference](https://jetflow.readthedocs.io/api) — Complete API docs
+- **[Quickstart](https://jetflow.readthedocs.io/quickstart)** — 5-minute tutorial
+- **[Single Agent](https://jetflow.readthedocs.io/single-agent)** — Actions, control flow, debugging
+- **[Composition](https://jetflow.readthedocs.io/composition)** — Agents as tools
+- **[Chains](https://jetflow.readthedocs.io/chains)** — Multi-stage workflows
+- **[Streaming](https://jetflow.readthedocs.io/streaming)** — Real-time event streaming
+- **[API Reference](https://jetflow.readthedocs.io/api)** — Complete API docs
 
 ---
 
