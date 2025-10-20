@@ -14,6 +14,7 @@ from chainlink.clients.base import BaseClient
 
 class OpenAIClient(BaseClient):
     provider: str = "OpenAI"
+    supports_thinking: List[str] = ['gpt-5', 'o1', 'o3', 'o4']
 
     def __init__(
         self,
@@ -33,6 +34,10 @@ class OpenAIClient(BaseClient):
             api_key=api_key or os.environ.get('OPENAI_API_KEY'),
             timeout=300.0,
         )
+
+    def _supports_thinking(self) -> bool:
+        """Check if the model supports extended thinking"""
+        return any(self.model.startswith(prefix) for prefix in self.supports_thinking)
 
     def _c(self, text: str, color: str) -> str:
         """Color text for terminal output"""

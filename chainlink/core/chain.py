@@ -50,6 +50,55 @@ class Chain:
                     f"Agent at index {i} must have at least one exit action to hand off control."
                 )
 
+        # Validate thinking compatibility (provider-specific requirements)
+        anthropic_thinking_agents = []
+        anthropic_non_thinking_agents = []
+        openai_thinking_agents = []
+        openai_non_thinking_agents = []
+
+        for i, agent in enumerate(agents):
+            # Check if this client has thinking enabled
+            has_thinking = (
+                hasattr(agent.client, '_supports_thinking')
+                and agent.client._supports_thinking()
+                and hasattr(agent.client, 'reasoning_budget')
+                and agent.client.reasoning_budget > 0
+            )
+
+            if agent.client.provider == "Anthropic":
+                if has_thinking:
+                    anthropic_thinking_agents.append(i)
+                else:
+                    anthropic_non_thinking_agents.append(i)
+            elif agent.client.provider == "OpenAI":
+                if has_thinking:
+                    openai_thinking_agents.append(i)
+                else:
+                    openai_non_thinking_agents.append(i)
+
+        # Anthropic: cannot mix thinking and non-thinking at all
+        if anthropic_thinking_agents and anthropic_non_thinking_agents:
+            raise ValueError(
+                f"Cannot mix thinking and non-thinking models with Anthropic in a chain. "
+                f"Anthropic requires ALL assistant messages to have thinking blocks (or none). "
+                f"Non-thinking Anthropic agents: {anthropic_non_thinking_agents}, "
+                f"Thinking Anthropic agents: {anthropic_thinking_agents}. "
+                f"Either use all thinking models, or set reasoning_effort='none' for all Anthropic agents."
+            )
+
+        # OpenAI: cannot chain thinking → non-thinking (loses thinking context)
+        if openai_thinking_agents and openai_non_thinking_agents:
+            first_non_thinking = min(openai_non_thinking_agents)
+            last_thinking = max(openai_thinking_agents)
+
+            if last_thinking < first_non_thinking:
+                raise ValueError(
+                    f"Cannot chain thinking → non-thinking models with OpenAI. "
+                    f"Thinking OpenAI agents: {openai_thinking_agents}, "
+                    f"Non-thinking OpenAI agents: {openai_non_thinking_agents}. "
+                    f"OpenAI allows non-thinking → thinking, but not thinking → non-thinking."
+                )
+
         self.agents = agents
         self.verbose = verbose
         self.logger = VerboseLogger(verbose)
@@ -214,6 +263,55 @@ class AsyncChain:
             if not agent.exit_actions:
                 raise ValueError(
                     f"Agent at index {i} must have at least one exit action to hand off control."
+                )
+
+        # Validate thinking compatibility (provider-specific requirements)
+        anthropic_thinking_agents = []
+        anthropic_non_thinking_agents = []
+        openai_thinking_agents = []
+        openai_non_thinking_agents = []
+
+        for i, agent in enumerate(agents):
+            # Check if this client has thinking enabled
+            has_thinking = (
+                hasattr(agent.client, '_supports_thinking')
+                and agent.client._supports_thinking()
+                and hasattr(agent.client, 'reasoning_budget')
+                and agent.client.reasoning_budget > 0
+            )
+
+            if agent.client.provider == "Anthropic":
+                if has_thinking:
+                    anthropic_thinking_agents.append(i)
+                else:
+                    anthropic_non_thinking_agents.append(i)
+            elif agent.client.provider == "OpenAI":
+                if has_thinking:
+                    openai_thinking_agents.append(i)
+                else:
+                    openai_non_thinking_agents.append(i)
+
+        # Anthropic: cannot mix thinking and non-thinking at all
+        if anthropic_thinking_agents and anthropic_non_thinking_agents:
+            raise ValueError(
+                f"Cannot mix thinking and non-thinking models with Anthropic in a chain. "
+                f"Anthropic requires ALL assistant messages to have thinking blocks (or none). "
+                f"Non-thinking Anthropic agents: {anthropic_non_thinking_agents}, "
+                f"Thinking Anthropic agents: {anthropic_thinking_agents}. "
+                f"Either use all thinking models, or set reasoning_effort='none' for all Anthropic agents."
+            )
+
+        # OpenAI: cannot chain thinking → non-thinking (loses thinking context)
+        if openai_thinking_agents and openai_non_thinking_agents:
+            first_non_thinking = min(openai_non_thinking_agents)
+            last_thinking = max(openai_thinking_agents)
+
+            if last_thinking < first_non_thinking:
+                raise ValueError(
+                    f"Cannot chain thinking → non-thinking models with OpenAI. "
+                    f"Thinking OpenAI agents: {openai_thinking_agents}, "
+                    f"Non-thinking OpenAI agents: {openai_non_thinking_agents}. "
+                    f"OpenAI allows non-thinking → thinking, but not thinking → non-thinking."
                 )
 
         self.agents = agents

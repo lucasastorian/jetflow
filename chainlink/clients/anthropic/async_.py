@@ -18,6 +18,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
     provider: str = "Anthropic"
     max_tokens: int = 16384
     betas: List[str] = ["interleaved-thinking-2025-05-14"]
+    supports_thinking: List[str] = ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-sonnet-4-1']
 
     def __init__(
         self,
@@ -43,8 +44,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
 
     def _supports_thinking(self) -> bool:
         """Check if the model supports extended thinking"""
-        # Only claude-sonnet-4-5 and claude-opus-4-1 support thinking
-        return self.model.startswith("claude-sonnet-4-5") or self.model.startswith("claude-opus-4-1")
+        return any(self.model.startswith(prefix) for prefix in self.supports_thinking)
 
     async def stream(
         self,
