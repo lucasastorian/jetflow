@@ -2,6 +2,11 @@
 
 PRICING = {
     "Anthropic": {
+        "claude-opus-4-1": {
+            "input_per_million": 15,
+            "output_per_million": 75.0,
+            "cached_input_per_million": 1.50,
+        },
         "claude-sonnet-4-5": {
             "input_per_million": 3.0,
             "output_per_million": 15.0,
@@ -12,11 +17,6 @@ PRICING = {
             "output_per_million": 5.0,
             "cached_input_per_million": 0.1,
         },
-        "claude-opus-4-1": {
-            "input_per_million": 15,
-            "output_per_million": 75.0,
-            "cached_input_per_million": 1.50,
-        }
     },
     "OpenAI": {
         "gpt-5": {
