@@ -9,7 +9,7 @@ This tutorial gets you from zero to a functioning agent with cost tracking, type
 ## Install
 
 ```bash
-pip install chainlink[openai]
+pip install jetflow[openai]
 export OPENAI_API_KEY=sk-...
 ```
 
@@ -20,7 +20,7 @@ export OPENAI_API_KEY=sk-...
 Tools are just Pydantic schemas + functions. The `@action` decorator makes them LLM-callable.
 
 ```python
-from chainlink import action
+from jetflow import action
 from pydantic import BaseModel, Field
 
 class SearchQuery(BaseModel):
@@ -40,8 +40,8 @@ def search(params: SearchQuery) -> str:
 ## Step 2: Create an Agent
 
 ```python
-from chainlink import Agent
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent
+from jetflow.clients.openai import OpenAIClient
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
@@ -146,7 +146,7 @@ response = agent.run("How many papers were published? Multiply by 2")
 Skip writing custom calculators. Use the built-in Python executor.
 
 ```python
-from chainlink.actions import python_exec
+from jetflow.actions import python_exec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
@@ -165,7 +165,7 @@ response = agent.run("Calculate compound interest: $10k principal, 5% rate, 10 y
 Use `AsyncAgent` and `@async_action` for async workflows.
 
 ```python
-from chainlink import AsyncAgent, async_action
+from jetflow import AsyncAgent, async_action
 
 @async_action(schema=SearchQuery)
 async def async_search(params: SearchQuery) -> str:
@@ -207,7 +207,7 @@ response = agent.run("Is cold fusion real?")
 Stream events in real-time as your agent executes. Perfect for UI updates and live feedback.
 
 ```python
-from chainlink import ContentDelta, ActionStart, ActionEnd, MessageEnd
+from jetflow import ContentDelta, ActionStart, ActionEnd, MessageEnd
 
 with agent.stream("What is 25 * 4?") as events:
     for event in events:

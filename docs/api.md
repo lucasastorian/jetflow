@@ -1,6 +1,6 @@
 # API Reference
 
-Complete API documentation for Chainlink.
+Complete API documentation for Jetflow.
 
 ---
 
@@ -480,7 +480,7 @@ StreamEvent = Union[
 ### OpenAIClient
 
 ```python
-from chainlink.clients.openai import OpenAIClient
+from jetflow.clients.openai import OpenAIClient
 
 client = OpenAIClient(
     model: str = "gpt-5",
@@ -495,7 +495,7 @@ client = OpenAIClient(
 ### AnthropicClient
 
 ```python
-from chainlink.clients.anthropic import AnthropicClient
+from jetflow.clients.anthropic import AnthropicClient
 
 client = AnthropicClient(
     model: str = "claude-sonnet-4-5",
@@ -516,7 +516,7 @@ client = AnthropicClient(
 Safe Python code execution with persistent state.
 
 ```python
-from chainlink.actions import python_exec
+from jetflow.actions import python_exec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
@@ -601,8 +601,8 @@ DEFAULT_VERBOSE = True
 ### Basic Usage
 
 ```python
-from chainlink import Agent, action
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, action
+from jetflow.clients.openai import OpenAIClient
 from pydantic import BaseModel
 
 class Calculate(BaseModel):
@@ -639,7 +639,7 @@ coordinator = Agent(
 ### Chains
 
 ```python
-from chainlink import Chain
+from jetflow import Chain
 
 chain = Chain([search_agent, analysis_agent])
 response = chain.run("Research AI safety")
@@ -652,6 +652,6 @@ response = chain.run("Research AI safety")
 Current version: `1.0.0`
 
 ```python
-from chainlink import __version__
+from jetflow import __version__
 print(__version__)
 ```

@@ -4,12 +4,12 @@ import datetime
 from contextlib import contextmanager
 from typing import List, Union, Iterator, Literal
 
-from chainlink.core.agent import Agent, AsyncAgent
-from chainlink.core.message import Message
-from chainlink.core.response import ChainResponse
-from chainlink.core.events import StreamEvent, MessageEnd
-from chainlink.utils.usage import Usage
-from chainlink.utils.verbose_logger import VerboseLogger
+from jetflow.core.agent import Agent, AsyncAgent
+from jetflow.core.message import Message
+from jetflow.core.response import ChainResponse
+from jetflow.core.events import StreamEvent, MessageEnd
+from jetflow.utils.usage import Usage
+from jetflow.utils.verbose_logger import VerboseLogger
 
 
 class Chain:

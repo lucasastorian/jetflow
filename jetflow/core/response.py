@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from chainlink.core.message import Message
-    from chainlink.core.action import BaseAction
-    from chainlink.utils.usage import Usage
+    from jetflow.core.message import Message
+    from jetflow.core.action import BaseAction
+    from jetflow.utils.usage import Usage
 
 
 @dataclass

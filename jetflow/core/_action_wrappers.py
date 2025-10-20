@@ -6,13 +6,13 @@ API in action.py instead.
 """
 
 from pydantic import ValidationError
-from chainlink.core.message import Message
-from chainlink.core.response import ActionResponse, ActionResult, ActionFollowUp
+from jetflow.core.message import Message
+from jetflow.core.response import ActionResponse, ActionResult, ActionFollowUp
 
 
 def _wrap_function_action(fn, schema, exit):
     """Wrap a function as a sync action"""
-    from chainlink.core.action import BaseAction
+    from jetflow.core.action import BaseAction
 
     class FunctionAction(BaseAction):
         def __call__(self, action) -> ActionResponse:
@@ -78,7 +78,7 @@ def _wrap_function_action(fn, schema, exit):
 
 def _wrap_class_action(cls, schema, exit):
     """Wrap a class as a sync action"""
-    from chainlink.core.action import BaseAction
+    from jetflow.core.action import BaseAction
 
     class ClassAction(BaseAction):
         def __init__(self, *args, **kwargs):
@@ -147,7 +147,7 @@ def _wrap_class_action(cls, schema, exit):
 
 def _wrap_async_function_action(fn, schema, exit):
     """Wrap a function as an async action"""
-    from chainlink.core.action import AsyncBaseAction
+    from jetflow.core.action import AsyncBaseAction
 
     class AsyncFunctionAction(AsyncBaseAction):
         async def __call__(self, action) -> ActionResponse:
@@ -213,7 +213,7 @@ def _wrap_async_function_action(fn, schema, exit):
 
 def _wrap_async_class_action(cls, schema, exit):
     """Wrap a class as an async action"""
-    from chainlink.core.action import AsyncBaseAction
+    from jetflow.core.action import AsyncBaseAction
 
     class AsyncClassAction(AsyncBaseAction):
         def __init__(self, *args, **kwargs):

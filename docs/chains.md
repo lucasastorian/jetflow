@@ -11,7 +11,7 @@ Sequential execution where each agent builds on previous work. Shared transcript
 Agents run in order, each seeing the full conversation history:
 
 ```python
-from chainlink import Chain
+from jetflow import Chain
 
 chain = Chain([
     search_agent,    # Stage 1
@@ -116,7 +116,7 @@ response = chain.run("Analyze Tesla Q3 earnings")
 Use `AsyncChain` and `AsyncAgent` for async workflows.
 
 ```python
-from chainlink import AsyncChain, AsyncAgent, async_action
+from jetflow import AsyncChain, AsyncAgent, async_action
 
 # Async search agent
 @async_action(schema=SearchQuery)
@@ -157,7 +157,7 @@ response = await chain.run("Research and analyze AI safety")
 Stream events from all agents in the chain sequentially. Perfect for showing progress across multiple stages.
 
 ```python
-from chainlink import ContentDelta, ActionEnd, MessageEnd, MessageStart
+from jetflow import ContentDelta, ActionEnd, MessageEnd, MessageStart
 
 with chain.stream("Research and analyze AI safety") as events:
     stage = 0
@@ -205,8 +205,8 @@ with chain.stream("Research and analyze", mode="messages") as events:
 ## Complete Example
 
 ```python
-from chainlink import Agent, Chain, action
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, Chain, action
+from jetflow.clients.openai import OpenAIClient
 from pydantic import BaseModel
 
 # ============================================================================
@@ -405,7 +405,7 @@ vs. using o1 for everything: ~$30
 Run multiple chains concurrently with async:
 
 ```python
-from chainlink import AsyncChain
+from jetflow import AsyncChain
 
 async def run_all():
     chains = [

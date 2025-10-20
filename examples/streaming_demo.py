@@ -7,9 +7,9 @@ Demonstrates the new streaming capabilities in Chainlink:
 - Streaming for both Agent and Chain
 """
 
-from chainlink import Agent, Chain, action
-from chainlink import MessageStart, MessageEnd, ContentDelta, ActionStart, ActionDelta, ActionEnd
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, Chain, action
+from jetflow import MessageStart, MessageEnd, ContentDelta, ActionStart, ActionDelta, ActionEnd
+from jetflow.clients.openai import OpenAIClient
 from pydantic import BaseModel, Field
 
 

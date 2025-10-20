@@ -1,12 +1,12 @@
-# 🔗 Chainlink
+# ⚡ Jetflow
 
-[![PyPI](https://img.shields.io/pypi/v/chainlink.svg)](https://pypi.org/project/chainlink)
+[![PyPI](https://img.shields.io/pypi/v/jetflow.svg)](https://pypi.org/project/jetflow)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Stop rebuilding the same agent patterns.**
 
-Chainlink gives you **typed tools**, **short agent loops**, and **clean multi-agent composition**—all with **full cost visibility**.
+Jetflow gives you **typed tools**, **short agent loops**, and **clean multi-agent composition**—all with **full cost visibility**.
 
 * **Move fast.** Stand up real agents in minutes, not weeks.
 * **Control cost.** See tokens and dollars per run.
@@ -18,12 +18,25 @@ Chainlink gives you **typed tools**, **short agent loops**, and **clean multi-ag
 
 ---
 
+## Why Jetflow (vs CrewAI/LangChain)
+
+A lightweight, developer-first agent toolkit for real applications. LLM-agnostic, easy to set up and debug, and flexible from single agents to multi-agent chains.
+
+| Dimension | Jetflow | CrewAI | LangChain |
+|---|---|---|---|
+| Target user | Developers integrating agents into apps | Non-dev “crew” workflows | Broad framework users |
+| Abstraction | Low-level, code-first | High-level roles/crews | Many abstractions (chains/graphs) |
+| Architecture | Explicit tools + short loops | Multi-agent by default | Varies by components |
+| Setup/Debug | Minutes; small surface; full transcript | Heavier config/orchestration | Larger surface; callbacks/tools |
+| LLM support | Vendor-neutral (OpenAI, Anthropic, pluggable) | Provider adapters | Large ecosystem |
+| Orchestration | Single, multi-agent, sequential agent chains | Teams/crews | Chains, agents, graphs |
+
 ## Install
 
 ```bash
-pip install chainlink[openai]      # OpenAI
-pip install chainlink[anthropic]   # Anthropic
-pip install chainlink[all]         # Both
+pip install jetflow[openai]      # OpenAI
+pip install jetflow[anthropic]   # Anthropic
+pip install jetflow[all]         # Both
 ```
 
 ```bash
@@ -41,8 +54,8 @@ Typed tool → short loop → visible cost.
 
 ```python
 from pydantic import BaseModel, Field
-from chainlink import Agent, action
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, action
+from jetflow.clients.openai import OpenAIClient
 
 class Calculate(BaseModel):
     """Evaluate a safe arithmetic expression"""
@@ -75,8 +88,8 @@ Let a **fast** model gather facts; let a **strong** model reason. Child agents r
 
 ```python
 from pydantic import BaseModel
-from chainlink import Agent, action
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Agent, action
+from jetflow.clients.openai import OpenAIClient
 
 # Child agent: research → returns a concise note
 class ResearchNote(BaseModel):
@@ -122,13 +135,13 @@ print(resp.content)
 
 ---
 
-## Quick Start 3 — Chains (shared transcript, sequential hand-off)
+## Quick Start 3 — Sequential Agent Chains (shared transcript, sequential hand-off)
 
 Run agents **in order** over the **same** message history. Classic "fast search → slow analysis".
 
 ```python
-from chainlink import Chain
-from chainlink.clients.openai import OpenAIClient
+from jetflow import Chain
+from jetflow.clients.openai import OpenAIClient
 
 search_agent = Agent(
     client=OpenAIClient(model="gpt-5-mini"),
@@ -159,7 +172,7 @@ print(f"Total cost: ${resp.usage.estimated_cost:.4f}")
 Full async/await API. Same patterns, async primitives.
 
 ```python
-from chainlink import AsyncAgent, AsyncChain, async_action
+from jetflow import AsyncAgent, AsyncChain, async_action
 
 @async_action(schema=Calculate)
 async def async_calculator(p: Calculate) -> str:
@@ -182,7 +195,7 @@ resp = await agent.run("What is 25 * 4 + 10?")
 Stream events in real-time as the agent executes. Perfect for UI updates, progress bars, and live feedback.
 
 ```python
-from chainlink import ContentDelta, ActionStart, ActionEnd, MessageEnd
+from jetflow import ContentDelta, ActionStart, ActionEnd, MessageEnd
 
 with agent.stream("What is 25 * 4 + 10?") as events:
     for event in events:
@@ -213,7 +226,7 @@ with chain.stream("Research and analyze") as events:
 
 ---
 
-## Why Chainlink (in one breath)
+## Why Jetflow (in one breath)
 
 * **Fewer moving parts.** Agents, actions, messages—nothing else.
 * **Deterministic endings.** Use `require_action=True` + a `format()` exit to get one reliable result.
@@ -235,10 +248,10 @@ with chain.stream("Research and analyze") as events:
 
 ## Built-in Actions
 
-Chainlink includes one useful action: **safe Python execution**.
+Jetflow includes one useful action: **safe Python execution**.
 
 ```python
-from chainlink.actions import python_exec
+from jetflow.actions import python_exec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
@@ -254,13 +267,13 @@ Variables persist across calls. Perfect for data analysis workflows.
 
 ## Docs
 
-📚 [Full Documentation](https://chainlink.readthedocs.io)
+📚 [Full Documentation](https://jetflow.readthedocs.io)
 
-- [Quickstart](https://chainlink.readthedocs.io/quickstart) — 5-minute tutorial
-- [Single Agent](https://chainlink.readthedocs.io/single-agent) — Actions, control flow, debugging
-- [Composition](https://chainlink.readthedocs.io/composition) — Agents as tools
-- [Chains](https://chainlink.readthedocs.io/chains) — Multi-stage workflows
-- [API Reference](https://chainlink.readthedocs.io/api) — Complete API docs
+- [Quickstart](https://jetflow.readthedocs.io/quickstart) — 5-minute tutorial
+- [Single Agent](https://jetflow.readthedocs.io/single-agent) — Actions, control flow, debugging
+- [Composition](https://jetflow.readthedocs.io/composition) — Agents as tools
+- [Chains](https://jetflow.readthedocs.io/chains) — Multi-stage workflows
+- [API Reference](https://jetflow.readthedocs.io/api) — Complete API docs
 
 ---
 

@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "chainlink"
+name = "jetflow"
 version = "1.0.0"
 description = "Lightweight, production-ready framework for building agentic workflows with LLMs"
 readme = "README.md"
@@ -48,16 +48,16 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/lucasastorian/chainlink"
-Repository = "https://github.com/lucasastorian/chainlink"
-Issues = "https://github.com/lucasastorian/chainlink/issues"
+Homepage = "https://github.com/lucasastorian/jetflow"
+Repository = "https://github.com/lucasastorian/jetflow"
+Issues = "https://github.com/lucasastorian/jetflow/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["chainlink*"]
+include = ["jetflow*"]
 
 [tool.setuptools.package-data]
-chainlink = ["py.typed"]
+jetflow = ["py.typed"]
 
 [tool.black]
 line-length = 100
