@@ -22,13 +22,11 @@ class AsyncOpenAIClient(AsyncBaseClient):
         api_key: str = None,
         temperature: float = 1.0,
         reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = 'medium',
-        verbose: bool = True,
         tier: str = "tier-3"
     ):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
-        self.verbose = verbose
         self.tier = tier  # Reserved for future rate limiting
 
         self.client = openai.AsyncOpenAI(
@@ -52,7 +50,8 @@ class AsyncOpenAIClient(AsyncBaseClient):
         system_prompt: str,
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False
+        enable_web_search: bool = False,
+        verbose: bool = True
     ) -> Message:
         """Stream a completion with the given messages"""
         items = [item for message in messages for item in message.openai_format()]
@@ -61,10 +60,13 @@ class AsyncOpenAIClient(AsyncBaseClient):
             "model": self.model,
             "instructions": system_prompt,
             "input": items,
-            "reasoning": {"effort": self.reasoning_effort, "summary": "auto"},
             "tools": [action.openai_schema for action in actions],
             "stream": True
         }
+
+        # Only include reasoning for gpt-5 and o- models
+        if self.model.startswith("gpt-5") or self.model.startswith("o-"):
+            params["reasoning"] = {"effort": self.reasoning_effort, "summary": "auto"}
 
         if enable_web_search:
             params['tools'].append({"type": "web_search"})
@@ -82,7 +84,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
                 ]
             }
 
-        return await self._stream_with_retry(params)
+        return await self._stream_with_retry(params, verbose)
 
     async def stream_events(
         self,
@@ -90,7 +92,8 @@ class AsyncOpenAIClient(AsyncBaseClient):
         system_prompt: str,
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False
+        enable_web_search: bool = False,
+        verbose: bool = True
     ) -> AsyncIterator[StreamEvent]:
         """Stream a completion and yield events in real-time"""
         items = [item for message in messages for item in message.openai_format()]
@@ -99,10 +102,13 @@ class AsyncOpenAIClient(AsyncBaseClient):
             "model": self.model,
             "instructions": system_prompt,
             "input": items,
-            "reasoning": {"effort": self.reasoning_effort, "summary": "auto"},
             "tools": [action.openai_schema for action in actions],
             "stream": True
         }
+
+        # Only include reasoning for gpt-5 and o- models
+        if self.model.startswith("gpt-5") or self.model.startswith("o-"):
+            params["reasoning"] = {"effort": self.reasoning_effort, "summary": "auto"}
 
         if enable_web_search:
             params['tools'].append({"type": "web_search"})
@@ -120,7 +126,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
                 ]
             }
 
-        async for event in self._stream_events_with_retry(params):
+        async for event in self._stream_events_with_retry(params, verbose):
             yield event
 
     @retry(
@@ -134,13 +140,13 @@ class AsyncOpenAIClient(AsyncBaseClient):
         )),
         reraise=True
     )
-    async def _stream_events_with_retry(self, params: dict) -> AsyncIterator[StreamEvent]:
+    async def _stream_events_with_retry(self, params: dict, verbose: bool) -> AsyncIterator[StreamEvent]:
         """Create and consume a streaming response with retries, yielding events"""
         stream = await self.client.responses.create(**params)
-        async for event in self._stream_completion_events(stream):
+        async for event in self._stream_completion_events(stream, verbose):
             yield event
 
-    async def _stream_completion_events(self, response: AsyncStream) -> AsyncIterator[StreamEvent]:
+    async def _stream_completion_events(self, response: AsyncStream, verbose: bool) -> AsyncIterator[StreamEvent]:
         """Stream a chat completion and yield events"""
         completion = Message(
             role="assistant",
@@ -188,7 +194,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
                 elif event.item.type == 'message':
                     completion.external_id = event.item.id
                     completion.content_index = event.output_index
-                    if self.verbose:
+                    if verbose:
                         print("", flush=True)  # Add separator before response
 
                 elif event.item.type == 'web_search_call':
@@ -290,12 +296,12 @@ class AsyncOpenAIClient(AsyncBaseClient):
         )),
         reraise=True
     )
-    async def _stream_with_retry(self, params: dict) -> Message:
+    async def _stream_with_retry(self, params: dict, verbose: bool) -> Message:
         """Create and consume a streaming response with retries"""
         stream = await self.client.responses.create(**params)
-        return await self._stream_completion(stream)
+        return await self._stream_completion(stream, verbose)
 
-    async def _stream_completion(self, response: AsyncStream) -> Message:
+    async def _stream_completion(self, response: AsyncStream, verbose: bool) -> Message:
         """Stream a chat completion and return final Message"""
         completion = Message(
             role="assistant",
@@ -321,7 +327,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
                     completion.thoughts.append(
                         Thought(id=event.item.id, summaries=[], index=event.output_index)
                     )
-                    if self.verbose:
+                    if verbose:
                         print(self._c("Thinking: ", "yellow") + "\n\n", sep="", end="")
 
                 elif event.item.type == 'function_call':
@@ -339,28 +345,28 @@ class AsyncOpenAIClient(AsyncBaseClient):
                 elif event.item.type == 'message':
                     completion.external_id = event.item.id
                     completion.content_index = event.output_index
-                    if self.verbose:
+                    if verbose:
                         print("", flush=True)  # Add separator before response
 
                 elif event.item.type == 'web_search_call':
                     web_search = WebSearch(id=event.item.id, query="", index=event.output_index)
                     completion.web_searches.append(web_search)
-                    if self.verbose:
+                    if verbose:
                         print("Searching Web: ", sep="", end="")
 
             elif event.type == 'response.reasoning_summary_part.added':
                 completion.thoughts[-1].summaries.append("")
-                if self.verbose:
+                if verbose:
                     print("- ", sep="", end="")
 
             elif event.type == 'response.reasoning_summary_text.delta':
                 completion.thoughts[-1].summaries[-1] += event.delta
-                if self.verbose:
+                if verbose:
                     print(event.delta, sep="", end="")
 
             elif event.type == 'response.reasoning_summary_text.done':
                 completion.thoughts[-1].summaries[-1] = event.text
-                if self.verbose:
+                if verbose:
                     print("\n\n")
 
             elif event.type == 'response.reasoning_summary_part.done':
@@ -387,7 +393,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
 
             elif event.type == 'response.output_text.delta':
                 completion.content += event.delta
-                if self.verbose:
+                if verbose:
                     print(event.delta, sep="", end="")
 
             elif event.type == 'response.output_text.done':
@@ -400,7 +406,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
 
                 if event.item.type == 'web_search_call':
                     completion.web_searches[-1].query = event.item.action.query
-                    if self.verbose:
+                    if verbose:
                         print(f"{event.item.action.query}\n\n")
 
             elif event.type == 'response.completed':
