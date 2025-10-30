@@ -6,8 +6,8 @@ from contextlib import contextmanager
 from typing import List, Optional, Union, Callable, Iterator, Literal, Type
 
 from pydantic import BaseModel, Field
-from jetflow.clients.base import BaseClient
-from jetflow.core.action import BaseAction, action
+from jetflow.clients.base import BaseClient, AsyncBaseClient
+from jetflow.core.action import BaseAction, AsyncBaseAction, action
 from jetflow.core.message import Message, Action
 from jetflow.core.response import AgentResponse, ActionResponse, ActionFollowUp
 from jetflow.core.events import StreamEvent, MessageStart, MessageEnd, ContentDelta, ActionStart, ActionDelta, ActionEnd, ActionExecutionStart, ActionExecuted
@@ -30,9 +30,24 @@ class Agent:
         require_action: bool = False,
         verbose: bool = True
     ):
+        if isinstance(client, AsyncBaseClient):
+            raise TypeError(
+                f"Agent (sync) requires a sync client, but got AsyncBaseClient. "
+                f"Use AsyncAgent with AsyncBaseClient instead."
+            )
+
         self.client = client
         # Instantiate action classes; use instances as-is for custom initialization
         self.actions = [a() if isinstance(a, type) else a for a in (actions or [])]
+
+        # Validate all actions are sync (not async)
+        for action in self.actions:
+            if isinstance(action, AsyncBaseAction):
+                raise TypeError(
+                    f"Agent (sync) requires sync actions (BaseAction), but got async action {type(action).__name__}. "
+                    f"Use @action decorator (not @async_action) or use AsyncAgent instead."
+                )
+
         self.max_iter = max_iter
         self.require_action = require_action
         self.verbose = verbose
