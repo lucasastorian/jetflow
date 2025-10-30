@@ -511,16 +511,16 @@ client = AnthropicClient(
 
 ## Built-in Actions
 
-### python_exec
+### PythonExec
 
 Safe Python code execution with persistent state.
 
 ```python
-from jetflow.actions import python_exec
+from jetflow.actions import PythonExec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
-    actions=[python_exec]
+    actions=[PythonExec]
 )
 ```
 
@@ -541,13 +541,13 @@ class PythonExec(BaseModel):
 **Example:**
 ```python
 # LLM calls:
-python_exec(PythonExec(code="x = 10; y = 20; x + y"))
+PythonExec(code="x = 10; y = 20; x + y")
 # Returns: "30"
 
-python_exec(PythonExec(code="x * 2"))
+PythonExec(code="x * 2")
 # Returns: "20" (x persists)
 
-python_exec(PythonExec(code="result = x + y; result"))
+PythonExec(code="result = x + y; result")
 # Returns: "30"
 ```
 

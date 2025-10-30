@@ -1,8 +1,9 @@
 """Built-in actions for common tasks"""
 
-from jetflow.actions.python_exec import PythonExec, python_exec
+from jetflow.actions.python_exec import PythonExec
+from jetflow.actions.plan import create_plan
 
 __all__ = [
     "PythonExec",
-    "python_exec",
+    "create_plan",
 ]

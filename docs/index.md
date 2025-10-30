@@ -206,11 +206,11 @@ Before shipping:
 Jetflow ships with **safe Python execution**:
 
 ```python
-from jetflow.actions import python_exec
+from jetflow.actions import PythonExec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
-    actions=[python_exec]
+    actions=[PythonExec]
 )
 
 resp = agent.run("Calculate compound interest: $10k principal, 5% rate, 10 years")

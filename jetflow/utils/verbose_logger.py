@@ -82,13 +82,26 @@ class VerboseLogger:
 
         print(f"\n{self._c('▶', 'cyan')} {self._c(action_name, 'cyan')}", flush=True)
 
-        # Show first 3 params, truncate if more
+        # Show first 3 params
         if params:
             items = list(params.items())[:3]
-            param_str = ", ".join(f"{k}={v}" for k, v in items)
+            for k, v in items:
+                v_str = str(v)
+
+                # For multiline values (like code), show on separate lines indented
+                if '\n' in v_str:
+                    print(f"  {self._c('→', 'dim')} {k}:", flush=True)
+                    # Indent each line of code
+                    for line in v_str.split('\n'):
+                        print(f"    {line}", flush=True)
+                else:
+                    # Single line params - truncate if too long
+                    if len(v_str) > 200:
+                        v_str = v_str[:200] + "..."
+                    print(f"  {self._c('→', 'dim')} {k}={v_str}", flush=True)
+
             if len(params) > 3:
-                param_str += "..."
-            print(f"  {self._c('→', 'dim')} {param_str}", flush=True)
+                print(f"  {self._c('→', 'dim')} ...{len(params) - 3} more param(s)", flush=True)
 
     def log_action_end(self, summary: str = None, content: str = "", error: bool = False):
         """Log action completion with summary and accurate token count"""
@@ -100,12 +113,16 @@ class VerboseLogger:
             if error:
                 summary = "Error"
             elif content:
-                content_len = len(content)
-                if content_len > 100:
-                    # Preview first 100 chars
-                    summary = content[:100].replace('\n', ' ') + '...'
+                # Truncate at 1000 chars if too long
+                content_display = content
+                if len(content_display) > 1000:
+                    content_display = content_display[:1000] + "..."
+
+                # For short content, show it all; for long, show preview
+                if len(content_display) > 100:
+                    summary = content_display[:100].replace('\n', ' ') + '...'
                 else:
-                    summary = content
+                    summary = content_display
             else:
                 summary = "Complete"
 
@@ -113,7 +130,13 @@ class VerboseLogger:
         tokens = self.num_tokens(content) if content else 0
 
         icon = self._c('✗', 'yellow') if error else self._c('✓', 'green')
-        print(f"  {icon} {summary} | tokens={tokens}\n", flush=True)
+
+        # Show full content (truncated at 1000 chars)
+        content_display = content
+        if len(content) > 1000:
+            content_display = content[:1000] + "\n... [truncated]"
+
+        print(f"  {icon} {content_display} | tokens={tokens}\n", flush=True)
 
     def log_chain_transition_start(self, agent_index: int, total_agents: int):
         """Log start of agent in chain"""

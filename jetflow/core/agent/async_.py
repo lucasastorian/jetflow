@@ -29,7 +29,8 @@ class AsyncAgent:
         verbose: bool = True
     ):
         self.client = client
-        self.actions = actions or []
+        # Instantiate all action classes to ensure isolated state per agent instance
+        self.actions = [a() for a in (actions or [])]
         self.max_iter = max_iter
         self.require_action = require_action
         self.verbose = verbose
