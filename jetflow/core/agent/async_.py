@@ -5,8 +5,8 @@ import json
 from typing import List, Optional, Union, Callable, Type
 
 from pydantic import BaseModel, Field
-from jetflow.clients.base import AsyncBaseClient
-from jetflow.core.action import BaseAction, async_action
+from jetflow.clients.base import AsyncBaseClient, BaseClient
+from jetflow.core.action import BaseAction, AsyncBaseAction, async_action
 from jetflow.core.message import Message, Action
 from jetflow.core.response import AgentResponse, ActionResponse, ActionFollowUp
 from jetflow.utils.usage import Usage
@@ -22,12 +22,18 @@ class AsyncAgent:
     def __init__(
         self,
         client: AsyncBaseClient,
-        actions: List[Union[Type[BaseAction], BaseAction]] = None,
+        actions: List[Union[Type[BaseAction], Type[AsyncBaseAction], BaseAction, AsyncBaseAction]] = None,
         system_prompt: Union[str, Callable[[], str]] = "",
         max_iter: int = 20,
         require_action: bool = False,
         verbose: bool = True
     ):
+        if not isinstance(client, AsyncBaseClient):
+            raise TypeError(
+                f"AsyncAgent requires AsyncBaseClient, but got {type(client).__name__}. "
+                f"Use Agent with sync clients (BaseClient) instead."
+            )
+
         self.client = client
         # Instantiate action classes; use instances as-is for custom initialization
         self.actions = [a() if isinstance(a, type) else a for a in (actions or [])]
@@ -194,7 +200,11 @@ class AsyncAgent:
             start_time = time.time()
 
             if getattr(action, '_is_exit', False):
-                response = await action(called_action)
+                # Handle both sync and async actions
+                if isinstance(action, AsyncBaseAction):
+                    response = await action(called_action)
+                else:
+                    response = action(called_action)
                 self.messages.append(response.message)
 
                 # LOG END for exit action
@@ -202,7 +212,11 @@ class AsyncAgent:
 
                 return None
 
-            response = await action(called_action)
+            # Handle both sync and async actions
+            if isinstance(action, AsyncBaseAction):
+                response = await action(called_action)
+            else:
+                response = action(called_action)
             self.messages.append(response.message)
 
             duration = time.time() - start_time
