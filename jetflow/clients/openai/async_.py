@@ -23,17 +23,19 @@ class AsyncOpenAIClient(AsyncBaseClient):
         api_key: str = None,
         temperature: float = 1.0,
         reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = 'medium',
-        tier: str = "tier-3"
+        tier: str = "tier-3",
+        use_flex: bool = False
     ):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
         self.tier = tier  # Reserved for future rate limiting
+        self.use_flex = use_flex
 
         self.client = openai.AsyncOpenAI(
             base_url="https://api.openai.com/v1",
             api_key=api_key or os.environ.get('OPENAI_API_KEY'),
-            timeout=300.0,
+            timeout=900.0 if use_flex else 300.0,
         )
 
     def _supports_thinking(self) -> bool:
@@ -69,6 +71,10 @@ class AsyncOpenAIClient(AsyncBaseClient):
             "stream": True
         }
 
+        # Add flex processing tier if enabled
+        if self.use_flex:
+            params["service_tier"] = "flex"
+
         # Only include reasoning for gpt-5 and o- models
         if self.model.startswith("gpt-5") or self.model.startswith("o-"):
             params["reasoning"] = {"effort": self.reasoning_effort, "summary": "auto"}
@@ -89,7 +95,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
                 ]
             }
 
-        return await self._stream_with_retry(params, verbose)
+        return await self._stream_with_retry(params, actions, verbose)
 
     async def stream_events(
         self,
@@ -111,6 +117,10 @@ class AsyncOpenAIClient(AsyncBaseClient):
             "stream": True
         }
 
+        # Add flex processing tier if enabled
+        if self.use_flex:
+            params["service_tier"] = "flex"
+
         # Only include reasoning for gpt-5 and o- models
         if self.model.startswith("gpt-5") or self.model.startswith("o-"):
             params["reasoning"] = {"effort": self.reasoning_effort, "summary": "auto"}
@@ -131,7 +141,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
                 ]
             }
 
-        async for event in self._stream_events_with_retry(params, verbose):
+        async for event in self._stream_events_with_retry(params, actions, verbose):
             yield event
 
     @retry(
@@ -145,13 +155,13 @@ class AsyncOpenAIClient(AsyncBaseClient):
         )),
         reraise=True
     )
-    async def _stream_events_with_retry(self, params: dict, verbose: bool) -> AsyncIterator[StreamEvent]:
+    async def _stream_events_with_retry(self, params: dict, actions: List[BaseAction], verbose: bool) -> AsyncIterator[StreamEvent]:
         """Create and consume a streaming response with retries, yielding events"""
         stream = await self.client.responses.create(**params)
-        async for event in self._stream_completion_events(stream, verbose):
+        async for event in self._stream_completion_events(stream, actions, verbose):
             yield event
 
-    async def _stream_completion_events(self, response: AsyncStream, verbose: bool) -> AsyncIterator[StreamEvent]:
+    async def _stream_completion_events(self, response: AsyncStream, actions: List[BaseAction], verbose: bool) -> AsyncIterator[StreamEvent]:
         """Stream a chat completion and yield events"""
         completion = Message(
             role="assistant",
@@ -160,8 +170,11 @@ class AsyncOpenAIClient(AsyncBaseClient):
             thoughts=[],
             actions=[]
         )
-        tool_call_arguments = ""
+        tool_call_arguments = ""  # Used for both function args (JSON) and custom tool input (raw string)
         current_web_search = None  # Track active web search
+
+        # Build action lookup for custom tools
+        action_lookup = {action.name: action for action in actions}
 
         # Yield message start
         yield MessageStart(role="assistant")
@@ -188,6 +201,20 @@ class AsyncOpenAIClient(AsyncBaseClient):
                         id=event.item.call_id,
                         name=event.item.name,
                         status="streaming",
+                        body={},
+                        external_id=event.item.id
+                    )
+                    completion.actions.append(action)
+                    # Yield action start event
+                    yield ActionStart(id=action.id, name=action.name)
+
+                elif event.item.type == 'custom_tool_call':
+                    # Handle custom tool calls - input will come via delta events
+                    tool_call_arguments = ""  # Reset buffer for custom tool input
+                    action = Action(
+                        id=event.item.call_id,
+                        name=event.item.name,
+                        status="streaming",  # Will be updated as input streams
                         body={},
                         external_id=event.item.id
                     )
@@ -261,6 +288,32 @@ class AsyncOpenAIClient(AsyncBaseClient):
                     body=completion.actions[-1].body
                 )
 
+            elif event.type == 'response.custom_tool_call_input.delta':
+                tool_call_arguments += event.delta
+                # Update action body - map to custom_field from decorator (e.g., "code" for python_exec)
+                base_action = action_lookup.get(completion.actions[-1].name)
+                field_name = base_action._custom_field if base_action else "input"
+                completion.actions[-1].body = {field_name: tool_call_arguments}
+                # Yield delta event
+                yield ActionDelta(
+                    id=completion.actions[-1].id,
+                    name=completion.actions[-1].name,
+                    body=completion.actions[-1].body
+                )
+
+            elif event.type == 'response.custom_tool_call_input.done':
+                # Finalize custom tool input - map to custom_field from decorator
+                completion.actions[-1].status = 'parsed'
+                base_action = action_lookup.get(completion.actions[-1].name)
+                field_name = base_action._custom_field if base_action else "input"
+                completion.actions[-1].body = {field_name: event.input}
+                # Yield action end event
+                yield ActionEnd(
+                    id=completion.actions[-1].id,
+                    name=completion.actions[-1].name,
+                    body=completion.actions[-1].body
+                )
+
             elif event.type == 'response.output_text.delta':
                 completion.content += event.delta
                 # Yield content delta event
@@ -310,12 +363,12 @@ class AsyncOpenAIClient(AsyncBaseClient):
         )),
         reraise=True
     )
-    async def _stream_with_retry(self, params: dict, verbose: bool) -> List[Message]:
+    async def _stream_with_retry(self, params: dict, actions: List[BaseAction], verbose: bool) -> List[Message]:
         """Create and consume a streaming response with retries"""
         stream = await self.client.responses.create(**params)
-        return await self._stream_completion(stream, verbose)
+        return await self._stream_completion(stream, actions, verbose)
 
-    async def _stream_completion(self, response: AsyncStream, verbose: bool) -> List[Message]:
+    async def _stream_completion(self, response: AsyncStream, actions: List[BaseAction], verbose: bool) -> List[Message]:
         """Stream a chat completion and return list of Messages (main message + web searches)"""
         completion = Message(
             role="assistant",
@@ -324,8 +377,11 @@ class AsyncOpenAIClient(AsyncBaseClient):
             thoughts=[],
             actions=[]
         )
-        tool_call_arguments = ""
+        tool_call_arguments = ""  # Used for both function args (JSON) and custom tool input (raw string)
         messages = []  # Collect all messages (web searches interleaved)
+
+        # Build action lookup for custom tools
+        action_lookup = {action.name: action for action in actions}
 
         async for event in response:
 
@@ -350,6 +406,18 @@ class AsyncOpenAIClient(AsyncBaseClient):
                         id=event.item.call_id,
                         name=event.item.name,
                         status="streaming",
+                        body={},
+                        external_id=event.item.id
+                    )
+                    completion.actions.append(action)
+
+                elif event.item.type == 'custom_tool_call':
+                    # Handle custom tool calls - input will come via delta events
+                    tool_call_arguments = ""  # Reset buffer for custom tool input
+                    action = Action(
+                        id=event.item.call_id,
+                        name=event.item.name,
+                        status="streaming",  # Will be updated as input streams
                         body={},
                         external_id=event.item.id
                     )
@@ -407,6 +475,20 @@ class AsyncOpenAIClient(AsyncBaseClient):
 
             elif event.type == 'response.function_call_arguments.done':
                 completion.actions[-1].status = 'parsed'
+
+            elif event.type == 'response.custom_tool_call_input.delta':
+                tool_call_arguments += event.delta
+                # Update action body - map to custom_field from decorator (e.g., "code" for python_exec)
+                base_action = action_lookup.get(completion.actions[-1].name)
+                field_name = base_action._custom_field if base_action else "input"
+                completion.actions[-1].body = {field_name: tool_call_arguments}
+
+            elif event.type == 'response.custom_tool_call_input.done':
+                # Finalize custom tool input - map to custom_field from decorator
+                completion.actions[-1].status = 'parsed'
+                base_action = action_lookup.get(completion.actions[-1].name)
+                field_name = base_action._custom_field if base_action else "input"
+                completion.actions[-1].body = {field_name: event.input}
 
             elif event.type == 'response.output_text.delta':
                 # Print header on first content delta

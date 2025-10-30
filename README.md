@@ -262,11 +262,11 @@ with chain.stream("Research and analyze") as events:
 Jetflow includes one useful action: **safe Python execution**.
 
 ```python
-from jetflow.actions import python_exec
+from jetflow.actions import PythonExec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
-    actions=[python_exec]
+    actions=[PythonExec]
 )
 
 resp = agent.run("Calculate compound interest: principal=10000, rate=0.05, years=10")

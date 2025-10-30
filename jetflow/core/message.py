@@ -137,13 +137,28 @@ class Message:
 
         if self.actions:
             for a in self.actions:
-                items.append({
-                    "id": a.external_id,
-                    "call_id": a.id,
-                    "name": a.name,
-                    "arguments": json.dumps(a.body),
-                    "type": "function_call",
-                })
+                # Check if this was a custom tool call (ID starts with "ctc_")
+                is_custom_tool = a.external_id and a.external_id.startswith("ctc_")
+
+                if is_custom_tool:
+                    # Custom tools: send raw input string (extract from single-field body)
+                    raw_input = next(iter(a.body.values())) if a.body else ""
+                    items.append({
+                        "id": a.external_id,
+                        "call_id": a.id,
+                        "name": a.name,
+                        "input": raw_input,
+                        "type": "custom_tool_call",
+                    })
+                else:
+                    # Regular function calls: send JSON arguments
+                    items.append({
+                        "id": a.external_id,
+                        "call_id": a.id,
+                        "name": a.name,
+                        "arguments": json.dumps(a.body),
+                        "type": "function_call",
+                    })
 
         # Web search messages (separate Message objects)
         if self.web_search:

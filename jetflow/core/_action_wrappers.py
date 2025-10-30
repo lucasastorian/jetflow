@@ -73,7 +73,7 @@ def _wrap_function_action(fn, schema, exit):
     FunctionAction.schema = schema
     FunctionAction._is_exit = exit
 
-    return FunctionAction()
+    return FunctionAction
 
 
 def _wrap_class_action(cls, schema, exit):
@@ -208,7 +208,7 @@ def _wrap_async_function_action(fn, schema, exit):
     AsyncFunctionAction.schema = schema
     AsyncFunctionAction._is_exit = exit
 
-    return AsyncFunctionAction()
+    return AsyncFunctionAction
 
 
 def _wrap_async_class_action(cls, schema, exit):

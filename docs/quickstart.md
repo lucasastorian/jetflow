@@ -146,11 +146,11 @@ response = agent.run("How many papers were published? Multiply by 2")
 Skip writing custom calculators. Use the built-in Python executor.
 
 ```python
-from jetflow.actions import python_exec
+from jetflow.actions import PythonExec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
-    actions=[python_exec]
+    actions=[PythonExec]
 )
 
 response = agent.run("Calculate compound interest: $10k principal, 5% rate, 10 years")
@@ -240,7 +240,7 @@ with agent.stream("What is 25 * 4?") as events:
 ✅ **Create agents** with `Agent(client, actions)`
 ✅ **Run queries** and get results + cost tracking
 ✅ **Debug cleanly** with full transcript access
-✅ **Use built-ins** like `python_exec` for common tasks
+✅ **Use built-ins** like `PythonExec` for common tasks
 ✅ **Go async** with `AsyncAgent` and `@async_action`
 ✅ **Stream events** with `agent.stream()` for real-time feedback
 
