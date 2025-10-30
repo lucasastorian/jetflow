@@ -3,7 +3,7 @@
 import datetime
 import json
 from contextlib import contextmanager
-from typing import List, Optional, Union, Callable, Iterator, Literal
+from typing import List, Optional, Union, Callable, Iterator, Literal, Type
 
 from pydantic import BaseModel, Field
 from jetflow.clients.base import BaseClient
@@ -24,15 +24,15 @@ class Agent:
     def __init__(
         self,
         client: BaseClient,
-        actions: List[BaseAction] = None,
+        actions: List[Union[Type[BaseAction], BaseAction]] = None,
         system_prompt: Union[str, Callable[[], str]] = "",
         max_iter: int = 20,
         require_action: bool = False,
         verbose: bool = True
     ):
         self.client = client
-        # Instantiate all action classes to ensure isolated state per agent instance
-        self.actions = [a() for a in (actions or [])]
+        # Instantiate action classes; use instances as-is for custom initialization
+        self.actions = [a() if isinstance(a, type) else a for a in (actions or [])]
         self.max_iter = max_iter
         self.require_action = require_action
         self.verbose = verbose
