@@ -1,6 +1,7 @@
 """Async OpenAI client implementation"""
 
 import os
+import httpx
 import openai
 from jiter import from_json
 from openai import AsyncStream
@@ -356,6 +357,10 @@ class AsyncOpenAIClient(AsyncBaseClient):
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1.0, min=1.0, max=10.0),
         retry=retry_if_exception_type((
+            httpx.ConnectTimeout,
+            httpx.ReadTimeout,
+            httpx.ConnectError,
+            httpx.RemoteProtocolError,
             openai.APIError,
             openai.BadRequestError,
             openai.APIConnectionError,
