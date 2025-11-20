@@ -123,6 +123,8 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
 
             if delta.content:
                 completion.content += delta.content
+                if logger:
+                    logger.log_content_delta(delta.content)
                 yield ContentDelta(delta=delta.content)
 
             if delta.tool_calls:

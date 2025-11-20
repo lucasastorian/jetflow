@@ -162,13 +162,14 @@ response = agent.run("Calculate compound interest: $10k principal, 5% rate, 10 y
 
 ## Async Support
 
-Use `AsyncAgent` and `@async_action` for async workflows.
+Use `AsyncAgent` with `@action` for async workflows. The `@action` decorator **automatically detects** async functions.
 
 ```python
-from jetflow import AsyncAgent, async_action
+from jetflow import AsyncAgent, action
 
-@async_action(schema=SearchQuery)
+@action(schema=SearchQuery)
 async def async_search(params: SearchQuery) -> str:
+    """Async function - @action auto-detects this"""
     # await your async search API
     return f"Results for '{params.query}'"
 
@@ -181,6 +182,8 @@ response = await agent.run("Find AI papers")
 ```
 
 **Same patterns, async primitives.** Use async when building web APIs or handling concurrent requests.
+
+**Note:** `AsyncAgent` can use **both sync and async actions**. Sync actions are called directly, async actions are awaited.
 
 ---
 
@@ -241,7 +244,7 @@ with agent.stream("What is 25 * 4?") as events:
 ✅ **Run queries** and get results + cost tracking
 ✅ **Debug cleanly** with full transcript access
 ✅ **Use built-ins** like `PythonExec` for common tasks
-✅ **Go async** with `AsyncAgent` and `@async_action`
+✅ **Go async** with `AsyncAgent` and `@action` (auto-detects sync/async)
 ✅ **Stream events** with `agent.stream()` for real-time feedback
 
 ---

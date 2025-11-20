@@ -227,6 +227,11 @@ class Agent:
 
             yield ActionExecutionStart(id=called_action.id, name=called_action.name, body=called_action.body)
             response = action_impl(called_action)
+
+            # Log action errors for debugging
+            if response.message.error:
+                self.logger.log_error(f"Action '{called_action.name}' failed: {response.message.content}")
+
             self.messages.append(response.message)
             if response.message.citations:
                 self.citation_manager.add_citations(response.message.citations)

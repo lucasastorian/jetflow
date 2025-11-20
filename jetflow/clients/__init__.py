@@ -18,3 +18,15 @@ try:
     __all__.extend(["AnthropicClient", "AsyncAnthropicClient"])
 except ImportError:
     pass
+
+try:
+    from jetflow.clients.grok import GrokClient, AsyncGrokClient
+    __all__.extend(["GrokClient", "AsyncGrokClient"])
+except ImportError:
+    pass
+
+try:
+    from jetflow.clients.gemini import GeminiClient, AsyncGeminiClient
+    __all__.extend(["GeminiClient", "AsyncGeminiClient"])
+except ImportError:
+    pass

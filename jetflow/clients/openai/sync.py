@@ -257,6 +257,8 @@ class OpenAIClient(BaseClient):
 
             elif event.type == 'response.output_text.delta':
                 completion.content += event.delta
+                if logger:
+                    logger.log_content_delta(event.delta)
                 yield ContentDelta(delta=event.delta)
 
             elif event.type == 'response.output_text.done':

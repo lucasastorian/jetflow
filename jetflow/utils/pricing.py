@@ -30,11 +30,50 @@ PRICING = {
             "cached_input_per_million": 0.025,
         },
     },
-    "XAI": {
-        "grok-4": {
+    "Grok": {
+        # Grok 4 fast models (2M context)
+        "grok-4-1-fast-reasoning": {
+            "input_per_million": 0.20,
+            "output_per_million": 0.50,
+        },
+        "grok-4-1-fast-non-reasoning": {
+            "input_per_million": 0.20,
+            "output_per_million": 0.50,
+        },
+        "grok-4-fast-reasoning": {
+            "input_per_million": 0.20,
+            "output_per_million": 0.50,
+        },
+        "grok-4-fast-non-reasoning": {
+            "input_per_million": 0.20,
+            "output_per_million": 0.50,
+        },
+        # Grok 4 and code models
+        "grok-4-0709": {
             "input_per_million": 3.0,
             "output_per_million": 15.0,
-            "cached_input_per_million": 0.75
+        },
+        "grok-code-fast-1": {
+            "input_per_million": 0.20,
+            "output_per_million": 1.50,
+        },
+        # Grok 3 models
+        "grok-3": {
+            "input_per_million": 3.0,
+            "output_per_million": 15.0,
+        },
+        "grok-3-mini": {
+            "input_per_million": 0.30,
+            "output_per_million": 0.50,
+        },
+        # Grok 2 models
+        "grok-2-1212": {
+            "input_per_million": 2.0,
+            "output_per_million": 10.0,
+        },
+        "grok-2-vision-1212": {
+            "input_per_million": 2.0,
+            "output_per_million": 10.0,
         },
     },
     "Groq": {
@@ -54,17 +93,42 @@ PRICING = {
             "cached_input_per_million": 50
         }
     },
-    "Google": {
-        "gemini-2.5-flash": {
-            "input_per_million": 0.30,
-            "output_per_million": 2.50,
-            "cached_input_per_million": 0.30
+    "Gemini": {
+        # Gemini 3 models
+        "gemini-3-pro-preview": {
+            "input_per_million": 2.0,      # ≤200k ctx
+            "input_per_million_long": 4.0,  # >200k ctx
+            "output_per_million": 12.0,     # ≤200k ctx
+            "output_per_million_long": 18.0, # >200k ctx
         },
+        # Gemini 2.5 models
         "gemini-2.5-pro": {
-            "input_per_million": 1.25,
-            "output_per_million": 10,
-            "cached_input_per_million": 1.25
-        }
+            "input_per_million": 1.25,      # ≤200k ctx
+            "input_per_million_long": 2.50, # >200k ctx
+            "output_per_million": 10.0,     # ≤200k ctx (text/thinking)
+            "output_per_million_long": 15.0, # >200k ctx
+        },
+        "gemini-2.5-flash": {
+            "input_per_million": 0.30,      # text/image/video
+            "input_per_million_audio": 1.0, # audio
+            "output_per_million": 2.50,     # all media including thinking
+        },
+        "gemini-2.5-flash-lite": {
+            "input_per_million": 0.10,      # text/image/video
+            "input_per_million_audio": 0.30, # audio
+            "output_per_million": 0.40,     # all media including thinking
+        },
+        # Gemini 2.0 models
+        "gemini-2.0-flash": {
+            "input_per_million": 0.10,      # text/image/video
+            "input_per_million_audio": 0.70, # audio
+            "output_per_million": 0.40,     # all media
+        },
+        "gemini-2.0-flash-exp": {
+            "input_per_million": 0.10,      # text/image/video (assuming same as 2.0-flash)
+            "input_per_million_audio": 0.70,
+            "output_per_million": 0.40,
+        },
     }
 }
 

@@ -127,10 +127,10 @@ response = await async_agent.run("query")
 
 ### @action
 
-Define a sync action.
+Universal action decorator that **automatically detects** sync vs async functions.
 
 ```python
-@action(schema: type[BaseModel], exit: bool = False)
+@action(schema: type[BaseModel], exit: bool = False, custom_field: str = None)
 def my_action(params: SchemaType) -> str:
     ...
 ```
@@ -139,17 +139,42 @@ def my_action(params: SchemaType) -> str:
 
 - `schema` - Pydantic model defining input schema
 - `exit` - Mark as exit action (default: False)
+- `custom_field` - (Optional) For OpenAI custom tools - field name for raw string input
 
-**Returns:** Wrapped action (BaseAction instance)
+**Returns:** Wrapped action (BaseAction or AsyncBaseAction, auto-detected)
 
-**Example:**
+**Sync example:**
 ```python
 class Calculate(BaseModel):
     expression: str
 
 @action(schema=Calculate)
 def calculator(params: Calculate) -> str:
+    """Sync function - @action auto-detects this"""
     return str(eval(params.expression))
+```
+
+**Async example:**
+```python
+@action(schema=Calculate)
+async def async_calculator(params: Calculate) -> str:
+    """Async function - @action auto-detects this"""
+    await asyncio.sleep(0.1)  # Simulate async I/O
+    return str(eval(params.expression))
+```
+
+**Class-based action:**
+```python
+@action(schema=Calculate)
+class Calculator:
+    """Stateful action with persistent state"""
+    def __init__(self):
+        self.history = []
+
+    def __call__(self, params: Calculate) -> str:
+        result = eval(params.expression)
+        self.history.append(result)
+        return str(result)
 ```
 
 **Return types:**
@@ -157,17 +182,7 @@ def calculator(params: Calculate) -> str:
 - `str` - Simple string response
 - `ActionResult` - Response with follow-up actions
 
-### @async_action
-
-Define an async action.
-
-```python
-@async_action(schema: type[BaseModel], exit: bool = False)
-async def my_action(params: SchemaType) -> str:
-    ...
-```
-
-Same as `@action` but for async functions.
+**Note:** `AsyncAgent` can use **both sync and async actions**. Sync actions are called directly, async actions are awaited.
 
 ---
 

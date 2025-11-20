@@ -47,7 +47,7 @@ export ANTHROPIC_API_KEY=...
 
 **📚 [Full Documentation →](https://jetflow.readthedocs.io)** | [Quickstart](https://jetflow.readthedocs.io/quickstart) | [Single Agent](https://jetflow.readthedocs.io/single-agent) | [Composition](https://jetflow.readthedocs.io/composition) | [Chains](https://jetflow.readthedocs.io/chains) | [API Reference](https://jetflow.readthedocs.io/api)
 
-**Async support:** Full async/await API available. Use `AsyncAgent`, `AsyncChain`, and `@async_action`.
+**Async support:** Full async/await API available. Use `AsyncAgent`, `AsyncChain`, and `@action` (auto-detects sync/async).
 
 ---
 
@@ -178,13 +178,14 @@ print(f"Total cost: ${resp.usage.estimated_cost:.4f}")
 
 ## Async Support
 
-Full async/await API. Same patterns, async primitives.
+Full async/await API. Same patterns, async primitives. The `@action` decorator **automatically detects** sync vs async functions.
 
 ```python
-from jetflow import AsyncAgent, AsyncChain, async_action
+from jetflow import AsyncAgent, AsyncChain, action
 
-@async_action(schema=Calculate)
+@action(schema=Calculate)
 async def async_calculator(p: Calculate) -> str:
+    """Async function - @action auto-detects this"""
     return str(eval(p.expression))
 
 agent = AsyncAgent(
@@ -196,6 +197,8 @@ resp = await agent.run("What is 25 * 4 + 10?")
 ```
 
 **Use async when:** making concurrent API calls, handling many agents in parallel, or building async web services.
+
+**Note:** `AsyncAgent` can use **both sync and async actions**. Sync actions are called directly, async actions are awaited.
 
 ---
 

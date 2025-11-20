@@ -119,13 +119,14 @@ def review_code(params: CodeReview) -> ActionResult:
 
 ## Async Agents
 
-Use `AsyncAgent` and `@async_action` for async workflows.
+Use `AsyncAgent` with `@action` for async workflows. The `@action` decorator **automatically detects** async functions.
 
 ```python
-from jetflow import AsyncAgent, async_action
+from jetflow import AsyncAgent, action
 
-@async_action(schema=SearchQuery)
+@action(schema=SearchQuery)
 async def async_search(params: SearchQuery) -> str:
+    """Async function - @action auto-detects this"""
     # await your async API
     async with httpx.AsyncClient() as client:
         resp = await client.get(f"https://api.example.com/search?q={params.query}")
@@ -145,6 +146,8 @@ response = await agent.run("Find AI papers")
 - Running multiple agents in parallel
 
 **Performance:** async enables concurrency. Handle 100 requests simultaneously instead of sequentially.
+
+**Note:** `AsyncAgent` can use **both sync and async actions**. Sync actions are called directly, async actions are awaited.
 
 ---
 

@@ -113,14 +113,15 @@ response = chain.run("Analyze Tesla Q3 earnings")
 
 ## Async Chains
 
-Use `AsyncChain` and `AsyncAgent` for async workflows.
+Use `AsyncChain` and `AsyncAgent` for async workflows. The `@action` decorator **automatically detects** async functions.
 
 ```python
-from jetflow import AsyncChain, AsyncAgent, async_action
+from jetflow import AsyncChain, AsyncAgent, action
 
 # Async search agent
-@async_action(schema=SearchQuery)
+@action(schema=SearchQuery)
 async def async_search(params: SearchQuery) -> str:
+    """Async function - @action auto-detects this"""
     async with httpx.AsyncClient() as client:
         resp = await client.get(f"https://api.example.com/search?q={params.query}")
         return resp.text
@@ -147,6 +148,8 @@ response = await chain.run("Research and analyze AI safety")
 - Building web APIs (FastAPI, Starlette)
 - Handling concurrent requests
 - Running multiple chains in parallel
+
+**Note:** `AsyncAgent` can use **both sync and async actions**. Sync actions are called directly, async actions are awaited.
 
 **Performance:** async enables concurrency. Process 100 requests simultaneously instead of sequentially.
 

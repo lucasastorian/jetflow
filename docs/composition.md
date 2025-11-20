@@ -149,14 +149,15 @@ search_agent = Agent(
 
 ## Async Composition
 
-Use `AsyncAgent` for async workflows.
+Use `AsyncAgent` for async workflows. The `@action` decorator **automatically detects** async functions.
 
 ```python
-from jetflow import AsyncAgent, async_action
+from jetflow import AsyncAgent, action
 
 # Async specialist
-@async_action(schema=SearchQuery)
+@action(schema=SearchQuery)
 async def async_web_search(params: SearchQuery) -> str:
+    """Async function - @action auto-detects this"""
     async with httpx.AsyncClient() as client:
         resp = await client.get(f"https://api.example.com/search?q={params.query}")
         return resp.text
@@ -183,6 +184,8 @@ response = await async_coordinator.run("Research AI safety")
 - Building web APIs
 - Handling concurrent requests
 - Running multiple specialists in parallel
+
+**Note:** `AsyncAgent` can use **both sync and async actions**. Sync actions are called directly, async actions are awaited.
 
 ---
 

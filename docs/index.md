@@ -65,10 +65,10 @@ Jetflow is a lightweight framework for building production-ready agentic systems
 
 ## Async Support
 
-Every pattern has full async/await support:
+Every pattern has full async/await support. The `@action` decorator **automatically detects** sync vs async functions:
 
 ```python
-from jetflow import AsyncAgent, AsyncChain, async_action
+from jetflow import AsyncAgent, AsyncChain, action
 
 # Async single agent
 agent = AsyncAgent(...)
@@ -85,6 +85,8 @@ resp = await chain.run("query")
 ```
 
 **Use async when:** building web APIs, handling concurrent requests, or running multiple agents in parallel.
+
+**Note:** `AsyncAgent` can use **both sync and async actions**. Sync actions are called directly, async actions are awaited.
 
 ---
 
