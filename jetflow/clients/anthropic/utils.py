@@ -28,7 +28,8 @@ def build_message_params(
     messages: List[Message],
     actions: List[BaseAction],
     allowed_actions: Optional[List[BaseAction]],
-    reasoning_budget: int
+    reasoning_budget: int,
+    stream: bool = True
 ) -> Dict[str, Any]:
     """Build request parameters for Anthropic Messages API"""
     formatted_messages = [message.anthropic_format() for message in messages]
@@ -41,7 +42,7 @@ def build_message_params(
         "messages": formatted_messages,
         "betas": BETAS,
         "tools": [action.anthropic_schema for action in actions],
-        "stream": True
+        "stream": stream
     }
 
     if reasoning_budget > 0 and supports_thinking(model):
@@ -68,3 +69,47 @@ def apply_usage_to_message(usage_obj, message: Message) -> None:
     """Apply usage information from Anthropic response to Message"""
     message.uncached_prompt_tokens = usage_obj.input_tokens
     message.completion_tokens = usage_obj.output_tokens
+
+
+def process_completion(response, logger) -> List[Message]:
+    """Process a non-streaming Anthropic response into a Message"""
+    from jetflow.core.message import Action, Thought
+
+    completion = Message(
+        role="assistant",
+        status="completed",
+        content="",
+        thoughts=[],
+        actions=[]
+    )
+
+    # Process content blocks
+    for block in response.content:
+        if block.type == 'thinking':
+            completion.thoughts.append(Thought(
+                id=getattr(block, 'id', ''),
+                summaries=[block.thinking]
+            ))
+            if logger:
+                logger.log_thought(block.thinking)
+
+        elif block.type == 'text':
+            completion.content += block.text
+            if logger:
+                logger.log_content_delta(block.text)
+
+        elif block.type == 'tool_use':
+            action = Action(
+                id=block.id,
+                name=block.name,
+                status="parsed",
+                body=block.input
+            )
+            completion.actions.append(action)
+
+    # Apply usage
+    if hasattr(response, 'usage') and response.usage:
+        completion.uncached_prompt_tokens = response.usage.input_tokens
+        completion.completion_tokens = response.usage.output_tokens
+
+    return [completion]

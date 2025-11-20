@@ -11,7 +11,7 @@ from jetflow.core.action import BaseAction
 from jetflow.core.message import Message, Action, Thought
 from jetflow.core.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
 from jetflow.clients.base import BaseClient
-from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, REASONING_BUDGET_MAP
+from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, process_completion, REASONING_BUDGET_MAP
 
 
 class AnthropicClient(BaseClient):
@@ -47,9 +47,10 @@ class AnthropicClient(BaseClient):
         """Non-streaming completion - single HTTP request/response"""
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
-            messages, actions, allowed_actions, self.reasoning_budget
+            messages, actions, allowed_actions, self.reasoning_budget,
+            stream=False
         )
-        return self._stream_with_retry(params, logger)
+        return self._complete_with_retry(params, logger)
 
     def stream(
         self,
@@ -182,6 +183,23 @@ class AnthropicClient(BaseClient):
 
         completion.status = 'completed'
         yield MessageEnd(message=completion)
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1.0, min=1.0, max=10.0),
+        retry=retry_if_exception_type((
+            httpx.ConnectTimeout,
+            httpx.ReadTimeout,
+            httpx.ConnectError,
+            httpx.RemoteProtocolError,
+            anthropic.APIError
+        )),
+        reraise=True
+    )
+    def _complete_with_retry(self, params: dict, logger) -> List[Message]:
+        """Non-streaming completion with retries"""
+        response = self.client.beta.messages.create(**params)
+        return process_completion(response, logger)
 
     @retry(
         stop=stop_after_attempt(3),

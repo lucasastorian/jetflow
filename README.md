@@ -96,7 +96,7 @@ print(f"Cost: ${resp.usage.estimated_cost:.4f}")
 Let a **fast** model gather facts; let a **strong** model reason. Child agents return **one formatted result** via an exit action.
 
 ```python
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from jetflow import Agent, action
 from jetflow.clients.openai import OpenAIClient
 
@@ -118,6 +118,18 @@ researcher = Agent(
     require_action=True
 )
 
+# Wrap researcher as an action
+class ResearchQuery(BaseModel):
+    """Search and summarize information"""
+    query: str = Field(description="What to research")
+
+@action(schema=ResearchQuery)
+def research(params: ResearchQuery) -> str:
+    """Calls the researcher agent and returns its findings"""
+    researcher.reset()
+    result = researcher.run(params.query)
+    return result.content
+
 # Parent agent: deep analysis over the returned note
 class FinalReport(BaseModel):
     headline: str
@@ -131,7 +143,7 @@ def Finished(report: FinalReport) -> str:
 
 analyst = Agent(
     client=OpenAIClient(model="gpt-5"),
-    actions=[researcher.to_action("research", "Search and summarize"), Finished],
+    actions=[research, Finished],
     system_prompt="Use research notes. Quantify impacts. Be precise.",
     require_action=True
 )
