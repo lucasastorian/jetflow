@@ -47,7 +47,8 @@ class OpenAIClient(BaseClient):
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         logger: 'VerboseLogger' = None,
-        tool_choice: str = None
+        tool_choice: str = None,
+        stream: bool = False,
     ) -> List[Message]:
         """Non-streaming completion - single HTTP request/response. Returns list of Messages (multiple if web searches occur)."""
         params = build_response_params(
@@ -60,7 +61,7 @@ class OpenAIClient(BaseClient):
             self.temperature,
             self.use_flex,
             self.reasoning_effort,
-            stream=False,
+            stream=stream,
             tool_choice=tool_choice
         )
 
@@ -74,7 +75,8 @@ class OpenAIClient(BaseClient):
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         logger: 'VerboseLogger' = None,
-        tool_choice: str = None
+        tool_choice: str = None,
+        stream: bool = True,
     ) -> Iterator[StreamEvent]:
         """Streaming completion - yields events in real-time"""
         params = build_response_params(
@@ -87,7 +89,7 @@ class OpenAIClient(BaseClient):
             self.temperature,
             self.use_flex,
             self.reasoning_effort,
-            stream=True,
+            stream=stream,
             tool_choice=tool_choice
         )
 

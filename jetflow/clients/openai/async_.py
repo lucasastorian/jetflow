@@ -49,7 +49,8 @@ class AsyncOpenAIClient(AsyncBaseClient):
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         logger: 'VerboseLogger' = None,
-        tool_choice: str = None
+        tool_choice: str = None,
+        stream: bool = False,
     ) -> List[Message]:
         """Non-streaming completion - single HTTP request/response. Returns list of Messages (multiple if web searches occur)."""
         params = build_response_params(
@@ -62,7 +63,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
             self.temperature,
             self.use_flex,
             self.reasoning_effort,
-            stream=False,
+            stream=stream,
             tool_choice=tool_choice
         )
 
@@ -76,7 +77,8 @@ class AsyncOpenAIClient(AsyncBaseClient):
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         logger: 'VerboseLogger' = None,
-        tool_choice: str = None
+        tool_choice: str = None,
+        stream: bool = True,
     ) -> AsyncIterator[StreamEvent]:
         """Streaming completion - yields events in real-time"""
         params = build_response_params(
@@ -89,7 +91,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
             self.temperature,
             self.use_flex,
             self.reasoning_effort,
-            stream=True,
+            stream=stream,
             tool_choice=tool_choice
         )
 

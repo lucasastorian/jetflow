@@ -21,6 +21,7 @@ class MessageEnd:
 class ContentDelta:
     """Text content chunk streamed from LLM"""
     delta: str
+    citations: dict = None  # New citations detected in this delta: {citation_id: metadata}
 
 
 @dataclass

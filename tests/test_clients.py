@@ -240,8 +240,9 @@ def test_sync_streaming(client_name, client):
     )
 
     events = []
-    for event in agent.stream(f"Analyze Nvidia's performance:\n\n{NVIDIA_INCOME_STATEMENT}"):
-        events.append(event)
+    with agent.stream(f"Analyze Nvidia's performance:\n\n{NVIDIA_INCOME_STATEMENT}") as stream:
+        for event in stream:
+            events.append(event)
 
     response = agent._build_response(success=True)
 
@@ -277,8 +278,9 @@ async def test_async_streaming(client_name, client):
     )
 
     events = []
-    async for event in agent.stream(f"Analyze Nvidia's performance:\n\n{NVIDIA_INCOME_STATEMENT}"):
-        events.append(event)
+    async with agent.stream(f"Analyze Nvidia's performance:\n\n{NVIDIA_INCOME_STATEMENT}") as stream:
+        async for event in stream:
+            events.append(event)
 
     response = agent._build_response(success=True)
 

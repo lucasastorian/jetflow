@@ -43,13 +43,14 @@ class AsyncAnthropicClient(AsyncBaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        logger: 'VerboseLogger' = None
+        logger: 'VerboseLogger' = None,
+        stream: bool = False
     ) -> List[Message]:
         """Non-streaming completion - single HTTP request/response"""
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget,
-            stream=False
+            stream=stream
         )
         return await self._complete_with_retry(params, logger)
 
@@ -60,12 +61,14 @@ class AsyncAnthropicClient(AsyncBaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        logger: 'VerboseLogger' = None
+        logger: 'VerboseLogger' = None,
+        stream: bool = True
     ) -> AsyncIterator[StreamEvent]:
         """Streaming completion - yields events in real-time"""
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
-            messages, actions, allowed_actions, self.reasoning_budget
+            messages, actions, allowed_actions, self.reasoning_budget,
+            stream=stream
         )
         async for event in self._stream_events_with_retry(params, logger):
             yield event

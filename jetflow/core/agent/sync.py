@@ -8,8 +8,8 @@ from jetflow.clients.base import BaseClient
 from jetflow.core.action import BaseAction
 from jetflow.core.message import Message, Action
 from jetflow.core.response import AgentResponse, ActionFollowUp
-from jetflow.core.events import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted
-from jetflow.core.citations import CitationManager
+from jetflow.core.events import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted, ContentDelta
+from jetflow.core.citations import CitationManager, CitationExtractor
 from jetflow.core.agent.utils import (
     validate_sync_client, prepare_sync_actions, calculate_usage,
     build_agent_response, add_messages_to_history, find_action,
@@ -47,8 +47,8 @@ class Agent:
         self._should_exit_stream = False
 
         self.exit_actions = [a for a in self.actions if getattr(a, '_is_exit', False)]
-        if self.require_action and not self.exit_actions:
-            raise ValueError("require_action=True requires at least one exit action")
+
+        self._validate_configuration()
 
     @property
     def system_prompt(self) -> str:
@@ -70,16 +70,32 @@ class Agent:
 
             return self._build_response(success=False)
 
-    def stream(self, query: Union[str, List[Message]], mode: Literal["deltas", "messages"] = "deltas") -> Iterator[StreamEvent]:
-        """Execute agent loop with streaming events: LLM call + actions until exit or max iterations"""
-        with self._timer():
-            self._add_messages_to_history(query)
+    @contextmanager
+    def stream(self, query: Union[str, List[Message]], mode: Literal["deltas", "messages"] = "deltas"):
+        """Execute agent loop with streaming events: LLM call + actions until exit or max iterations
 
-            follow_up_actions = []
-            while self.num_iter < self.max_iter:
-                should_exit = yield from self._stream_step(actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, mode=mode)
-                if should_exit:
-                    break
+        Returns a context manager that yields streaming events.
+
+        Usage:
+            with agent.stream("query") as events:
+                for event in events:
+                    if isinstance(event, ContentDelta):
+                        print(event.delta, end="")
+        """
+        def _stream_generator():
+            with self._timer():
+                self._add_messages_to_history(query)
+
+                follow_up_actions = []
+                while self.num_iter < self.max_iter:
+                    should_exit = yield from self._stream_step(actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, mode=mode)
+                    if should_exit:
+                        break
+
+        try:
+            yield _stream_generator()
+        finally:
+            pass  # Cleanup if needed
 
     def navigate_sequence(self, actions: List[BaseAction], system_prompt: str, allowed_actions: List[BaseAction] = None, depth: int = 0) -> Optional[List[BaseAction]]:
         """Navigate through action sequences with recursive forced follow-ups.
@@ -115,7 +131,14 @@ class Agent:
         if self._is_final_step() or self._approaching_context_limit(system_prompt):
             allowed_actions = self._get_final_step_allowed_actions()
 
-        completions = self.client.complete(messages=self.messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions, logger=self.logger)
+        completions = self.client.complete(
+            messages=self.messages,
+            system_prompt=system_prompt,
+            actions=actions,
+            allowed_actions=allowed_actions,
+            logger=self.logger,
+            stream=False
+        )
         self.messages.extend(completions)
         self.num_iter += 1
         return self._call_actions(completions[-1], actions)
@@ -125,6 +148,22 @@ class Agent:
         reset_agent_state(self)
 
     # Core orchestration helpers
+
+    def _validate_configuration(self):
+        """Validate agent configuration on initialization"""
+        # Cannot require actions if no actions provided
+        if self.require_action and not self.actions:
+            raise ValueError(
+                "require_action=True requires at least one action. "
+                "Either provide actions or set require_action=False."
+            )
+
+        # If require_action=True, need at least one exit action
+        if self.require_action and not self.exit_actions:
+            raise ValueError(
+                "require_action=True requires at least one exit action. "
+                "Mark an action with exit=True: @action(schema, exit=True)"
+            )
 
     def _is_final_step(self) -> bool:
         """Check if this is the final iteration"""
@@ -200,14 +239,44 @@ class Agent:
 
     def _stream_llm_call(self, system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction], mode: Literal["deltas", "messages"]):
         completion_messages = []
-        for event in self.client.stream(messages=self.messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions, logger=self.logger):
+        content_buffer = ""
+
+        # Reset streaming state for new message
+        self.citation_manager.reset_stream_state()
+
+        for event in self.client.stream(
+            messages=self.messages,
+            system_prompt=system_prompt,
+            actions=actions,
+            allowed_actions=allowed_actions,
+            logger=self.logger,
+            stream=True
+        ):
+            # Track content and check for new citations
+            if isinstance(event, ContentDelta):
+                content_buffer += event.delta
+                # Check for new citation tags in full buffer
+                new_citations = self.citation_manager.check_new_citations(content_buffer)
+                if new_citations:
+                    event.citations = new_citations
+
             if mode == "messages":
                 if isinstance(event, MessageEnd):
+                    # Add used citations to assistant message
+                    if event.message.role == "assistant":
+                        used_citations = self.citation_manager.get_used_citations(event.message.content)
+                        if used_citations:
+                            event.message.citations = used_citations
                     completion_messages.append(event.message)
                     yield event
             else:
                 yield event
                 if isinstance(event, MessageEnd):
+                    # Add used citations to assistant message
+                    if event.message.role == "assistant":
+                        used_citations = self.citation_manager.get_used_citations(event.message.content)
+                        if used_citations:
+                            event.message.citations = used_citations
                     completion_messages.append(event.message)
         return completion_messages
 

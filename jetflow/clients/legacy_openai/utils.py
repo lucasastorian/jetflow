@@ -13,7 +13,7 @@ def build_legacy_params(
     actions: List[BaseAction],
     allowed_actions: Optional[List[BaseAction]],
     reasoning_effort: Optional[Literal['minimal', 'low', 'medium', 'high']],
-    stream_flag: bool
+    stream: bool
 ) -> Dict[str, Any]:
     """Build parameters for legacy OpenAI ChatCompletions API"""
     formatted_messages = [{"role": "system", "content": system_prompt}] + [
@@ -25,11 +25,11 @@ def build_legacy_params(
         "temperature": temperature,
         "messages": formatted_messages,
         "tools": [action.openai_legacy_schema for action in actions],
-        "stream": stream_flag
+        "stream": stream
     }
 
     # Enable usage tracking in streaming mode
-    if stream_flag:
+    if stream:
         params["stream_options"] = {"include_usage": True}
 
     # Add reasoning effort for o1/o3 models

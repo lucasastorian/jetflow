@@ -22,6 +22,8 @@ class CitationManager:
 
     citations: Dict[int, dict] = field(default_factory=dict)
     _next_id: int = 1
+    _cursor: int = 0  # Byte/char cursor for streaming
+    _seen_ids: Set[int] = field(default_factory=set)
 
     def add_citations(self, new_citations: Dict[int, dict]) -> None:
         """Add citations from an action result"""
@@ -48,10 +50,38 @@ class CitationManager:
         used_ids = CitationExtractor.extract_ids(content)
         return {cid: self.citations[cid] for cid in used_ids if cid in self.citations}
 
+    def check_new_citations(self, content_buffer: str) -> Dict[int, dict]:
+        """Check for new citation tags in content buffer and return their metadata
+
+        Args:
+            content_buffer: Full content accumulated so far
+
+        Returns:
+            Dict of {citation_id: metadata} for newly detected citations
+        """
+        # Extract all citation IDs from the full buffer
+        all_ids = CitationExtractor.extract_ids(content_buffer)
+
+        # Find IDs we haven't seen before
+        new_ids = [cid for cid in all_ids if cid not in self._seen_ids]
+
+        # Mark them as seen
+        self._seen_ids.update(new_ids)
+
+        # Return metadata for new citations (use str keys for JSON compatibility)
+        return {str(cid): self.citations[cid] for cid in new_ids if cid in self.citations}
+
+    def reset_stream_state(self) -> None:
+        """Reset streaming state (cursor and seen IDs) for new message"""
+        self._cursor = 0
+        self._seen_ids.clear()
+
     def reset(self) -> None:
-        """Reset citation state"""
+        """Reset all citation state"""
         self.citations.clear()
         self._next_id = 1
+        self._cursor = 0
+        self._seen_ids.clear()
 
 
 class CitationExtractor:
@@ -89,12 +119,6 @@ class CitationExtractor:
                 unique_ids.append(id_)
 
         return unique_ids
-
-    @classmethod
-    def extract_new_citations(cls, text: str, seen_ids: Set[int]) -> List[int]:
-        """Extract citation IDs that haven't been seen before"""
-        all_ids = cls.extract_ids(text)
-        return [id_ for id_ in all_ids if id_ not in seen_ids]
 
 
 def get_citation_metadata(citation_ids: List[int], citation_manager: CitationManager) -> Dict[str, dict]:

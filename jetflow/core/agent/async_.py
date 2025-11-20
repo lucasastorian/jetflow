@@ -9,8 +9,8 @@ from jetflow.clients.base import AsyncBaseClient
 from jetflow.core.action import BaseAction, AsyncBaseAction, action
 from jetflow.core.message import Message, Action
 from jetflow.core.response import AgentResponse, ActionFollowUp
-from jetflow.core.events import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted
-from jetflow.core.citations import CitationManager
+from jetflow.core.events import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted, ContentDelta
+from jetflow.core.citations import CitationManager, CitationExtractor
 from jetflow.core.agent.utils import (
     validate_async_client, prepare_async_actions, calculate_usage,
     build_agent_response, add_messages_to_history, find_action,
@@ -57,8 +57,8 @@ class AsyncAgent:
         self._should_exit_stream = False
 
         self.exit_actions = [a for a in self.actions if getattr(a, '_is_exit', False)]
-        if self.require_action and not self.exit_actions:
-            raise ValueError("require_action=True requires at least one exit action")
+
+        self._validate_configuration()
 
     @property
     def system_prompt(self) -> str:
@@ -84,17 +84,33 @@ class AsyncAgent:
 
             return self._build_response(success=False)
 
-    async def stream(self, query: Union[str, List[Message]], mode: Literal["deltas", "messages"] = "deltas") -> AsyncIterator[StreamEvent]:
-        """Execute agent loop with streaming events: LLM call + actions until exit or max iterations"""
-        async with self._timer():
-            self._add_messages_to_history(query)
+    @asynccontextmanager
+    async def stream(self, query: Union[str, List[Message]], mode: Literal["deltas", "messages"] = "deltas"):
+        """Execute agent loop with streaming events: LLM call + actions until exit or max iterations
 
-            follow_up_actions = []
-            while self.num_iter < self.max_iter:
-                async for event in self._stream_step(actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, mode=mode):
-                    yield event
-                if self._should_exit_stream:
-                    break
+        Returns an async context manager that yields streaming events.
+
+        Usage:
+            async with agent.stream("query") as events:
+                async for event in events:
+                    if isinstance(event, ContentDelta):
+                        print(event.delta, end="")
+        """
+        async def _stream_generator():
+            async with self._timer():
+                self._add_messages_to_history(query)
+
+                follow_up_actions = []
+                while self.num_iter < self.max_iter:
+                    async for event in self._stream_step(actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, mode=mode):
+                        yield event
+                    if self._should_exit_stream:
+                        break
+
+        try:
+            yield _stream_generator()
+        finally:
+            pass  # Cleanup if needed
 
     async def navigate_sequence(
         self,
@@ -148,7 +164,14 @@ class AsyncAgent:
         if self._is_final_step() or self._approaching_context_limit(system_prompt):
             allowed_actions = self._get_final_step_allowed_actions()
 
-        completions = await self.client.complete(messages=self.messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions, logger=self.logger)
+        completions = await self.client.complete(
+            messages=self.messages,
+            system_prompt=system_prompt,
+            actions=actions,
+            allowed_actions=allowed_actions,
+            logger=self.logger,
+            stream=False
+        )
         self.messages.extend(completions)
         self.num_iter += 1
         return await self._call_actions(completions[-1], actions)
@@ -158,6 +181,22 @@ class AsyncAgent:
         reset_agent_state(self)
 
     # Core orchestration helpers
+
+    def _validate_configuration(self):
+        """Validate agent configuration on initialization"""
+        # Cannot require actions if no actions provided
+        if self.require_action and not self.actions:
+            raise ValueError(
+                "require_action=True requires at least one action. "
+                "Either provide actions or set require_action=False."
+            )
+
+        # If require_action=True, need at least one exit action
+        if self.require_action and not self.exit_actions:
+            raise ValueError(
+                "require_action=True requires at least one exit action. "
+                "Mark an action with exit=True: @action(schema, exit=True)"
+            )
 
     def _is_final_step(self) -> bool:
         """Check if this is the final iteration"""
@@ -218,14 +257,44 @@ class AsyncAgent:
             allowed_actions = self._get_final_step_allowed_actions()
 
         completion_messages = []
-        async for event in self.client.stream(messages=self.messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions, logger=self.logger):
+        content_buffer = ""
+
+        # Reset streaming state for new message
+        self.citation_manager.reset_stream_state()
+
+        async for event in self.client.stream(
+            messages=self.messages,
+            system_prompt=system_prompt,
+            actions=actions,
+            allowed_actions=allowed_actions,
+            logger=self.logger,
+            stream=True
+        ):
+            # Track content and check for new citations
+            if isinstance(event, ContentDelta):
+                content_buffer += event.delta
+                # Check for new citation tags in full buffer
+                new_citations = self.citation_manager.check_new_citations(content_buffer)
+                if new_citations:
+                    event.citations = new_citations
+
             if mode == "messages":
                 if isinstance(event, MessageEnd):
+                    # Add used citations to assistant message
+                    if event.message.role == "assistant":
+                        used_citations = self.citation_manager.get_used_citations(event.message.content)
+                        if used_citations:
+                            event.message.citations = used_citations
                     completion_messages.append(event.message)
                     yield event
             else:
                 yield event
                 if isinstance(event, MessageEnd):
+                    # Add used citations to assistant message
+                    if event.message.role == "assistant":
+                        used_citations = self.citation_manager.get_used_citations(event.message.content)
+                        if used_citations:
+                            event.message.citations = used_citations
                     completion_messages.append(event.message)
 
         self.messages.extend(completion_messages)

@@ -25,6 +25,7 @@ class BaseClient(ABC):
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
         logger: Optional['VerboseLogger'] = None,
+        stream: bool = False,
     ) -> List['Message']:
         """Non-streaming completion - single HTTP request/response.
 
@@ -33,6 +34,7 @@ class BaseClient(ABC):
 
         Args:
             logger: VerboseLogger instance for consistent logging (optional)
+            stream: Whether the underlying client request should use streaming
         """
         raise NotImplementedError
 
@@ -45,11 +47,13 @@ class BaseClient(ABC):
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
         logger: Optional['VerboseLogger'] = None,
+        stream: bool = True,
     ) -> Iterator['StreamEvent']:
         """Streaming completion - yields events in real-time (sync).
 
         Args:
             logger: VerboseLogger instance for consistent logging (optional)
+            stream: Whether the underlying client request should use streaming
         """
         raise NotImplementedError
 
@@ -69,6 +73,7 @@ class AsyncBaseClient(ABC):
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
         logger: Optional['VerboseLogger'] = None,
+        stream: bool = False,
     ) -> List['Message']:
         """Non-streaming completion - single HTTP request/response (async).
 
@@ -77,6 +82,7 @@ class AsyncBaseClient(ABC):
 
         Args:
             logger: VerboseLogger instance for consistent logging (optional)
+            stream: Whether the underlying client request should use streaming
         """
         raise NotImplementedError
 
@@ -89,10 +95,12 @@ class AsyncBaseClient(ABC):
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
         logger: Optional['VerboseLogger'] = None,
+        stream: bool = True,
     ):
         """Streaming completion - yields events in real-time (async).
 
         Args:
             logger: VerboseLogger instance for consistent logging (optional)
+            stream: Whether the underlying client request should use streaming
         """
         raise NotImplementedError
