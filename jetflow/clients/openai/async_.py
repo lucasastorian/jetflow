@@ -25,15 +25,13 @@ class AsyncOpenAIClient(AsyncBaseClient):
         temperature: float = 1.0,
         reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = 'medium',
         tier: str = "tier-3",
-        use_flex: bool = False,
-        stream: bool = True
+        use_flex: bool = False
     ):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
         self.tier = tier  # Reserved for future rate limiting
         self.use_flex = use_flex
-        self.use_streaming = stream
 
         self.client = openai.AsyncOpenAI(
             base_url="https://api.openai.com/v1",
@@ -43,7 +41,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
 
 
 
-    async def stream(
+    async def complete(
         self,
         messages: List[Message],
         system_prompt: str,
@@ -53,7 +51,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
         logger: 'VerboseLogger' = None,
         tool_choice: str = None
     ) -> List[Message]:
-        """Stream a completion with the given messages. Returns list of Messages (multiple if web searches occur)."""
+        """Non-streaming completion - single HTTP request/response. Returns list of Messages (multiple if web searches occur)."""
         params = build_response_params(
             self.model,
             system_prompt,
@@ -64,16 +62,13 @@ class AsyncOpenAIClient(AsyncBaseClient):
             self.temperature,
             self.use_flex,
             self.reasoning_effort,
-            self.use_streaming,
-            tool_choice
+            stream=False,
+            tool_choice=tool_choice
         )
 
-        if self.use_streaming:
-            return await self._stream_with_retry(params, actions, logger)
-        else:
-            return await self._complete_with_retry(params, actions, logger)
+        return await self._complete_with_retry(params, actions, logger)
 
-    async def stream_events(
+    async def stream(
         self,
         messages: List[Message],
         system_prompt: str,
@@ -83,7 +78,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
         logger: 'VerboseLogger' = None,
         tool_choice: str = None
     ) -> AsyncIterator[StreamEvent]:
-        """Stream a completion and yield events in real-time"""
+        """Streaming completion - yields events in real-time"""
         params = build_response_params(
             self.model,
             system_prompt,

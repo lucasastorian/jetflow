@@ -18,8 +18,7 @@ class GeminiClient(LegacyOpenAIClient):
         model: str = "gemini-2.5-flash",
         api_key: str = None,
         temperature: float = 1.0,
-        reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = None,
-        stream: bool = True
+        reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = None
     ):
         """
         Initialize Gemini client.
@@ -29,13 +28,11 @@ class GeminiClient(LegacyOpenAIClient):
             api_key: Google API key (defaults to GEMINI_API_KEY or GOOGLE_API_KEY env var)
             temperature: Sampling temperature
             reasoning_effort: Reasoning effort level for thinking models
-            stream: Whether to use streaming by default
         """
         super().__init__(
             model=model,
             api_key=api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY'),
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
             temperature=temperature,
-            reasoning_effort=reasoning_effort,
-            stream=stream
+            reasoning_effort=reasoning_effort
         )

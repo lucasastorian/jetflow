@@ -36,7 +36,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
             timeout=60.0
         )
 
-    async def stream(
+    async def complete(
         self,
         messages: List[Message],
         system_prompt: str,
@@ -45,13 +45,14 @@ class AsyncAnthropicClient(AsyncBaseClient):
         enable_web_search: bool = False,
         logger: 'VerboseLogger' = None
     ) -> List[Message]:
+        """Non-streaming completion - single HTTP request/response"""
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget
         )
         return await self._stream_with_retry(params, logger)
 
-    async def stream_events(
+    async def stream(
         self,
         messages: List[Message],
         system_prompt: str,
@@ -60,7 +61,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
         enable_web_search: bool = False,
         logger: 'VerboseLogger' = None
     ) -> AsyncIterator[StreamEvent]:
-        """Stream a completion and yield events in real-time"""
+        """Streaming completion - yields events in real-time"""
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget

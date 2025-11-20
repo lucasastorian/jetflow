@@ -31,13 +31,11 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         api_key: str = None,
         base_url: str = None,
         temperature: float = 1.0,
-        reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = None,
-        stream: bool = True
+        reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = None
     ):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
-        self.use_streaming = stream
 
         self.client = openai.AsyncOpenAI(
             base_url=base_url or "https://api.openai.com/v1",
@@ -46,7 +44,7 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         )
 
 
-    async def stream(
+    async def complete(
         self,
         messages: List[Message],
         system_prompt: str,
@@ -54,18 +52,15 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         allowed_actions: List[BaseAction] = None,
         logger: 'VerboseLogger' = None
     ) -> List[Message]:
-        """Stream a completion with the given messages. Returns list of Messages."""
+        """Non-streaming completion - single HTTP request/response"""
         params = build_legacy_params(
             self.model, self.temperature, system_prompt, messages, actions,
-            allowed_actions, self.reasoning_effort, self.use_streaming
+            allowed_actions, self.reasoning_effort, stream_flag=False
         )
 
-        if self.use_streaming:
-            return await self._stream_with_retry(params, logger)
-        else:
-            return await self._complete_with_retry(params, logger)
+        return await self._complete_with_retry(params, logger)
 
-    async def stream_events(
+    async def stream(
         self,
         messages: List[Message],
         system_prompt: str,
@@ -73,7 +68,7 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         allowed_actions: List[BaseAction] = None,
         logger: 'VerboseLogger' = None
     ) -> AsyncIterator[StreamEvent]:
-        """Stream a completion and yield events in real-time"""
+        """Streaming completion - yields events in real-time"""
         params = build_legacy_params(
             self.model, self.temperature, system_prompt, messages, actions,
             allowed_actions, self.reasoning_effort, stream_flag=True

@@ -25,15 +25,13 @@ class OpenAIClient(BaseClient):
         temperature: float = 1.0,
         reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = 'medium',
         tier: str = "tier-3",
-        use_flex: bool = False,
-        stream: bool = True
+        use_flex: bool = False
     ):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
         self.tier = tier
         self.use_flex = use_flex
-        self.use_streaming = stream
 
         self.client = openai.OpenAI(
             base_url="https://api.openai.com/v1",
@@ -41,7 +39,7 @@ class OpenAIClient(BaseClient):
             timeout=900.0 if use_flex else 300.0,
         )
 
-    def stream(
+    def complete(
         self,
         messages: List[Message],
         system_prompt: str,
@@ -51,7 +49,7 @@ class OpenAIClient(BaseClient):
         logger: 'VerboseLogger' = None,
         tool_choice: str = None
     ) -> List[Message]:
-        """Stream a completion with the given messages. Returns list of Messages (multiple if web searches occur)."""
+        """Non-streaming completion - single HTTP request/response. Returns list of Messages (multiple if web searches occur)."""
         params = build_response_params(
             self.model,
             system_prompt,
@@ -62,16 +60,13 @@ class OpenAIClient(BaseClient):
             self.temperature,
             self.use_flex,
             self.reasoning_effort,
-            self.use_streaming,
-            tool_choice
+            stream=False,
+            tool_choice=tool_choice
         )
 
-        if self.use_streaming:
-            return self._stream_with_retry(params, actions, logger)
-        else:
-            return self._complete_with_retry(params, actions, logger)
+        return self._complete_with_retry(params, actions, logger)
 
-    def stream_events(
+    def stream(
         self,
         messages: List[Message],
         system_prompt: str,
@@ -81,7 +76,7 @@ class OpenAIClient(BaseClient):
         logger: 'VerboseLogger' = None,
         tool_choice: str = None
     ) -> Iterator[StreamEvent]:
-        """Stream a completion and yield events in real-time"""
+        """Streaming completion - yields events in real-time"""
         params = build_response_params(
             self.model,
             system_prompt,

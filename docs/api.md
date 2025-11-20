@@ -520,7 +520,41 @@ client = AnthropicClient(
 )
 ```
 
-**Supported models:** claude-sonnet-4, claude-opus-4, etc.
+**Supported models:** claude-sonnet-4-5, claude-opus-4, etc.
+
+### GrokClient (xAI)
+
+```python
+from jetflow.clients.legacy_openai import LegacyOpenAIClient
+
+client = LegacyOpenAIClient(
+    model: str = "grok-2-1212",
+    api_key: str = None,  # Or set XAI_API_KEY
+    base_url: str = "https://api.x.ai/v1",
+    temperature: float = 1.0,
+    stream: bool = True
+)
+```
+
+**Supported models:** grok-2-1212, grok-2-vision-1212, grok-beta, etc.
+
+### GeminiClient (Google)
+
+```python
+from jetflow.clients.legacy_openai import LegacyOpenAIClient
+
+client = LegacyOpenAIClient(
+    model: str = "gemini-2.0-flash-exp",
+    api_key: str = None,  # Or set GEMINI_API_KEY or GOOGLE_API_KEY
+    base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/",
+    temperature: float = 1.0,
+    stream: bool = True
+)
+```
+
+**Supported models:** gemini-2.0-flash-exp, gemini-1.5-pro, gemini-1.5-flash, etc.
+
+**Note:** Both Grok and Gemini use the `LegacyOpenAIClient` which implements the OpenAI-compatible ChatCompletions API format.
 
 ---
 

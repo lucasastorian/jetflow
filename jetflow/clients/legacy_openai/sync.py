@@ -30,13 +30,11 @@ class LegacyOpenAIClient(BaseClient):
         api_key: str = None,
         base_url: str = None,
         temperature: float = 1.0,
-        reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = None,
-        stream: bool = True
+        reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = None
     ):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
-        self.use_streaming = stream
 
         self.client = openai.OpenAI(
             base_url=base_url or "https://api.openai.com/v1",
@@ -45,7 +43,7 @@ class LegacyOpenAIClient(BaseClient):
         )
 
 
-    def stream(
+    def complete(
         self,
         messages: List[Message],
         system_prompt: str,
@@ -53,18 +51,15 @@ class LegacyOpenAIClient(BaseClient):
         allowed_actions: List[BaseAction] = None,
         logger: 'VerboseLogger' = None
     ) -> List[Message]:
-        """Stream a completion with the given messages. Returns list of Messages."""
+        """Non-streaming completion - single HTTP request/response"""
         params = build_legacy_params(
             self.model, self.temperature, system_prompt, messages, actions,
-            allowed_actions, self.reasoning_effort, self.use_streaming
+            allowed_actions, self.reasoning_effort, stream_flag=False
         )
 
-        if self.use_streaming:
-            return self._stream_with_retry(params, logger)
-        else:
-            return self._complete_with_retry(params, logger)
+        return self._complete_with_retry(params, logger)
 
-    def stream_events(
+    def stream(
         self,
         messages: List[Message],
         system_prompt: str,
@@ -72,7 +67,7 @@ class LegacyOpenAIClient(BaseClient):
         allowed_actions: List[BaseAction] = None,
         logger: 'VerboseLogger' = None
     ) -> Iterator[StreamEvent]:
-        """Stream a completion and yield events in real-time"""
+        """Streaming completion - yields events in real-time"""
         params = build_legacy_params(
             self.model, self.temperature, system_prompt, messages, actions,
             allowed_actions, self.reasoning_effort, stream_flag=True

@@ -17,7 +17,7 @@ class BaseClient(ABC):
     model: str
 
     @abstractmethod
-    def stream(
+    def complete(
         self,
         messages: List['Message'],
         system_prompt: str,
@@ -26,7 +26,7 @@ class BaseClient(ABC):
         enable_web_search: bool = False,
         logger: Optional['VerboseLogger'] = None,
     ) -> List['Message']:
-        """Stream a completion and return list of Messages (sync).
+        """Non-streaming completion - single HTTP request/response.
 
         Returns list to support multi-message responses (e.g., web searches in OpenAI).
         Most providers will return a single-item list.
@@ -37,7 +37,7 @@ class BaseClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def stream_events(
+    def stream(
         self,
         messages: List['Message'],
         system_prompt: str,
@@ -46,7 +46,7 @@ class BaseClient(ABC):
         enable_web_search: bool = False,
         logger: Optional['VerboseLogger'] = None,
     ) -> Iterator['StreamEvent']:
-        """Stream a completion and yield events in real-time (sync)
+        """Streaming completion - yields events in real-time (sync).
 
         Args:
             logger: VerboseLogger instance for consistent logging (optional)
@@ -61,7 +61,7 @@ class AsyncBaseClient(ABC):
     model: str
 
     @abstractmethod
-    async def stream(
+    async def complete(
         self,
         messages: List['Message'],
         system_prompt: str,
@@ -70,7 +70,7 @@ class AsyncBaseClient(ABC):
         enable_web_search: bool = False,
         logger: Optional['VerboseLogger'] = None,
     ) -> List['Message']:
-        """Stream a completion and return list of Messages (async).
+        """Non-streaming completion - single HTTP request/response (async).
 
         Returns list to support multi-message responses (e.g., web searches in OpenAI).
         Most providers will return a single-item list.
@@ -81,7 +81,7 @@ class AsyncBaseClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def stream_events(
+    async def stream(
         self,
         messages: List['Message'],
         system_prompt: str,
@@ -90,7 +90,7 @@ class AsyncBaseClient(ABC):
         enable_web_search: bool = False,
         logger: Optional['VerboseLogger'] = None,
     ):
-        """Stream a completion and yield events in real-time (async)
+        """Streaming completion - yields events in real-time (async).
 
         Args:
             logger: VerboseLogger instance for consistent logging (optional)

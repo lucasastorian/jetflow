@@ -18,8 +18,7 @@ class AsyncGrokClient(AsyncLegacyOpenAIClient):
         model: str = "grok-4-fast-non-reasoning",
         api_key: str = None,
         temperature: float = 1.0,
-        reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = None,
-        stream: bool = True
+        reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = None
     ):
         """
         Initialize async Grok client.
@@ -29,13 +28,11 @@ class AsyncGrokClient(AsyncLegacyOpenAIClient):
             api_key: xAI API key (defaults to XAI_API_KEY env var)
             temperature: Sampling temperature
             reasoning_effort: Reasoning effort level for reasoning models
-            stream: Whether to use streaming by default
         """
         super().__init__(
             model=model,
             api_key=api_key or os.environ.get('XAI_API_KEY'),
             base_url="https://api.x.ai/v1",
             temperature=temperature,
-            reasoning_effort=reasoning_effort,
-            stream=stream
+            reasoning_effort=reasoning_effort
         )

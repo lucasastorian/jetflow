@@ -381,7 +381,6 @@ Same agent, different provider. **Zero code changes.**
 ```python
 # OpenAI
 from jetflow.clients.openai import OpenAIClient
-
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
     actions=[search]
@@ -389,9 +388,27 @@ agent = Agent(
 
 # Anthropic (same actions work)
 from jetflow.clients.anthropic import AnthropicClient
-
 agent = Agent(
     client=AnthropicClient(model="claude-sonnet-4-5"),
+    actions=[search]  # Same actions!
+)
+
+# Grok (xAI)
+from jetflow.clients.legacy_openai import LegacyOpenAIClient
+agent = Agent(
+    client=LegacyOpenAIClient(
+        model="grok-2-1212",
+        base_url="https://api.x.ai/v1"
+    ),
+    actions=[search]  # Same actions!
+)
+
+# Gemini (Google)
+agent = Agent(
+    client=LegacyOpenAIClient(
+        model="gemini-2.0-flash-exp",
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+    ),
     actions=[search]  # Same actions!
 )
 ```
@@ -430,7 +447,7 @@ Before shipping:
 ✅ **Error handling:** Check `response.success` and log failures
 ✅ **Cost tracking:** Store `response.usage` for accounting
 ✅ **Transcript logging:** Save `response.messages` for debugging
-✅ **Provider fallback:** Test with both OpenAI and Anthropic
+✅ **Provider fallback:** Test with multiple providers (OpenAI, Anthropic, Grok, Gemini)
 
 ---
 

@@ -187,7 +187,7 @@ resp = chain.run("Research and analyze Tesla earnings")
 | **Debugging** | Full transcript access | Black box |
 | **Composition** | Agents = tools | Complex hierarchies |
 | **Async support** | Full async/await API | Often sync-only |
-| **Provider-agnostic** | OpenAI + Anthropic | Vendor lock-in |
+| **Provider-agnostic** | OpenAI, Anthropic, Grok, Gemini | Vendor lock-in |
 
 ---
 
