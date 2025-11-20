@@ -1,23 +1,31 @@
-"""Async agent orchestration and coordination logic"""
+"""Async agent orchestration"""
 
 import datetime
-import json
-from typing import List, Optional, Union, Callable, Type
+from contextlib import asynccontextmanager
+from typing import List, Optional, Union, Callable, Type, AsyncIterator, Literal
 
 from pydantic import BaseModel, Field
-from jetflow.clients.base import AsyncBaseClient, BaseClient
+from jetflow.clients.base import AsyncBaseClient
 from jetflow.core.action import BaseAction, AsyncBaseAction, async_action
 from jetflow.core.message import Message, Action
-from jetflow.core.response import AgentResponse, ActionResponse, ActionFollowUp
-from jetflow.utils.usage import Usage
-from jetflow.utils.pricing import calculate_cost
+from jetflow.core.response import AgentResponse, ActionFollowUp
+from jetflow.core.events import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted
+from jetflow.core.citations import CitationManager
+from jetflow.core.agent.utils import (
+    validate_async_client, prepare_async_actions, calculate_usage,
+    build_agent_response, add_messages_to_history, find_action,
+    handle_no_actions, handle_action_not_found, reset_agent_state,
+    count_message_tokens
+)
 from jetflow.utils.verbose_logger import VerboseLogger
 
 
 class AsyncAgent:
-    """Async orchestrator that coordinates LLM calls and action execution"""
+    """Async agent orchestration"""
 
     max_depth: int = 10
+
+    # Public API & lifecycle
 
     def __init__(
         self,
@@ -26,68 +34,67 @@ class AsyncAgent:
         system_prompt: Union[str, Callable[[], str]] = "",
         max_iter: int = 20,
         require_action: bool = False,
-        verbose: bool = True
+        verbose: bool = True,
+        max_tokens_before_exit: int = 200000
     ):
-        if not isinstance(client, AsyncBaseClient):
-            raise TypeError(
-                f"AsyncAgent requires AsyncBaseClient, but got {type(client).__name__}. "
-                f"Use Agent with sync clients (BaseClient) instead."
-            )
+        validate_async_client(client)
 
         self.client = client
-        # Instantiate action classes; use instances as-is for custom initialization
-        self.actions = [a() if isinstance(a, type) else a for a in (actions or [])]
+        self.actions = prepare_async_actions(actions or [])
         self.max_iter = max_iter
         self.require_action = require_action
         self.verbose = verbose
+        self.max_tokens_before_exit = max_tokens_before_exit
         self.logger = VerboseLogger(verbose)
-
-        if isinstance(system_prompt, str):
-            self.system_prompt = system_prompt
-            self.system_prompt_fn = None
-        else:
-            self.system_prompt = ""
-            self.system_prompt_fn = system_prompt
+        self._system_prompt = system_prompt
 
         self.messages: List[Message] = []
         self.num_iter = 0
         self.start_time = None
         self.end_time = None
+        self.last_action_duration = 0
+        self.citation_manager = CitationManager()
+        self._should_exit_stream = False
 
         self.exit_actions = [a for a in self.actions if getattr(a, '_is_exit', False)]
-
         if self.require_action and not self.exit_actions:
             raise ValueError("require_action=True requires at least one exit action")
 
+    @property
+    def system_prompt(self) -> str:
+        return self._system_prompt() if callable(self._system_prompt) else self._system_prompt
+
     async def run(self, query: Union[str, List[Message]]) -> AgentResponse:
-        """Execute the agent with a query."""
-        self.start_time = datetime.datetime.now()
+        """Execute agent loop: LLM call + actions until exit or max iterations"""
+        async with self._timer():
+            self._add_messages_to_history(query)
 
-        if isinstance(query, str):
-            self.messages.append(Message(role="user", content=query, status="completed"))
-        else:
-            self.messages.extend(query)
+            follow_up_actions = []
+            while self.num_iter < self.max_iter:
+                new_follow_ups = await self.navigate_sequence(
+                    actions=self.actions + follow_up_actions,
+                    system_prompt=self.system_prompt,
+                    depth=0
+                )
 
-        system_prompt = self._get_system_prompt()
+                if new_follow_ups is None:
+                    return self._build_response(success=True)
 
-        dynamic_actions = []
+                follow_up_actions = new_follow_ups
 
-        while self.num_iter < self.max_iter:
-            optional_actions = await self.navigate_sequence(
-                actions=self.actions + dynamic_actions,
-                system_prompt=system_prompt,
-                depth=0
-            )
+            return self._build_response(success=False)
 
-            if optional_actions is None:
-                self.end_time = datetime.datetime.now()
-                return self._build_response(success=True)
+    async def stream(self, query: Union[str, List[Message]], mode: Literal["deltas", "messages"] = "deltas") -> AsyncIterator[StreamEvent]:
+        """Execute agent loop with streaming events: LLM call + actions until exit or max iterations"""
+        async with self._timer():
+            self._add_messages_to_history(query)
 
-            # Persist optional actions for next iteration
-            dynamic_actions = optional_actions
-
-        self.end_time = datetime.datetime.now()
-        return self._build_response(success=False)
+            follow_up_actions = []
+            while self.num_iter < self.max_iter:
+                async for event in self._stream_step(actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, mode=mode):
+                    yield event
+                if self._should_exit_stream:
+                    break
 
     async def navigate_sequence(
         self,
@@ -96,7 +103,16 @@ class AsyncAgent:
         allowed_actions: List[BaseAction] = None,
         depth: int = 0
     ) -> Optional[List[BaseAction]]:
-        """Navigate through action sequences with recursive follow-ups."""
+        """Navigate through action sequences with recursive forced follow-ups.
+
+        Executes one LLM step and processes follow-up actions:
+        - Forced follow-ups: Execute immediately in recursive call
+        - Optional follow-ups: Return to caller for next iteration
+
+        Returns:
+            None if agent should exit (no actions or exit action called)
+            List[BaseAction] of optional follow-up actions for next iteration
+        """
         if depth > self.max_depth:
             raise RuntimeError(f"Exceeded max follow-up depth {self.max_depth}")
 
@@ -109,201 +125,160 @@ class AsyncAgent:
         if follow_ups is None:
             return None
 
-        optional_actions = []
+        optional_follow_ups = []
 
         for follow_up in follow_ups:
             if follow_up.force:
-                recursive_optional = await self.navigate_sequence(
+                recursive_follow_ups = await self.navigate_sequence(
                     actions=actions + follow_up.actions,
                     system_prompt=system_prompt,
                     allowed_actions=follow_up.actions,
                     depth=depth + 1
                 )
 
-                if recursive_optional:
-                    optional_actions.extend(recursive_optional)
+                if recursive_follow_ups:
+                    optional_follow_ups.extend(recursive_follow_ups)
             else:
-                optional_actions.extend(follow_up.actions)
+                optional_follow_ups.extend(follow_up.actions)
 
-        return optional_actions
+        return optional_follow_ups
 
-    async def step(
-        self,
-        actions: List[BaseAction],
-        system_prompt: str,
-        allowed_actions: List[BaseAction] = None
-    ) -> Optional[List[ActionFollowUp]]:
-        """
-        Execute a single agent step (LLM call + action execution)."""
-        # Call LLM
-        completions = await self.client.stream(
-            messages=self.messages,
-            system_prompt=system_prompt,
-            actions=actions,
-            allowed_actions=allowed_actions,
-            enable_web_search=False,  # Can be made configurable
-            verbose=self.verbose
-        )
+    async def step(self, actions: List[BaseAction], system_prompt: str, allowed_actions: List[BaseAction] = None) -> Optional[List[ActionFollowUp]]:
+        """Execute one agent step: LLM call + action execution (non-streaming)"""
+        if self._is_final_step() or self._approaching_context_limit(system_prompt):
+            allowed_actions = self._get_final_step_allowed_actions()
 
-        # Client now returns List[Message] (main message + web searches if any)
+        completions = await self.client.stream(messages=self.messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions)
         self.messages.extend(completions)
         self.num_iter += 1
+        return await self._call_actions(completions[-1], actions)
 
-        # Only process actions from the main completion message (last one)
-        main_completion = completions[-1]
-        follow_ups = await self._call_actions(main_completion, actions)
+    def reset(self):
+        """Reset agent state for fresh execution"""
+        reset_agent_state(self)
 
-        return follow_ups
+    # Core orchestration helpers
 
-    async def _call_actions(
-        self,
-        completion: Message,
-        actions: List[BaseAction]
-    ) -> Optional[List[ActionFollowUp]]:
-        """
-        Execute actions from LLM response."""
+    def _is_final_step(self) -> bool:
+        """Check if this is the final iteration"""
+        return self.num_iter == self.max_iter - 1
+
+    def _approaching_context_limit(self, system_prompt: str) -> bool:
+        """Check if message history is approaching context window limit"""
+        token_count = count_message_tokens(self.messages, system_prompt)
+        if token_count >= self.max_tokens_before_exit:
+            self.logger.log_warning(f"Approaching context limit ({token_count} tokens). Forcing exit.")
+            return True
+        return False
+
+    def _get_final_step_allowed_actions(self) -> List[BaseAction]:
+        """Get allowed_actions for the final step"""
+        if self.require_action:
+            return self.exit_actions
+        else:
+            return []
+
+    async def _call_actions(self, completion: Message, actions: List[BaseAction]) -> Optional[List[ActionFollowUp]]:
         if not completion.actions:
-            if self.require_action:
-                error_msg = Message(
-                    role="tool",
-                    content="Error: You must call an action (require_action=True)",
-                    status="completed",
-                    error=True
-                )
-                self.messages.append(error_msg)
-                return []
-            else:
-                return None
+            return handle_no_actions(self.require_action, self.messages)
 
         follow_ups = []
 
         for called_action in completion.actions:
-            action = self._find_action(called_action.name, actions)
-
+            action = find_action(called_action.name, actions)
             if not action:
-                self._handle_action_not_found(called_action)
+                handle_action_not_found(called_action, self.actions, self.messages)
                 continue
 
-            # Check if this is a nested agent action
-            is_agent = getattr(action, '_is_agent_action', False)
-            agent_name = getattr(action, '_agent_name', called_action.name)
+            called_action.citation_start = self.citation_manager.get_next_id()
+            self.logger.log_action_start(called_action.name, called_action.body)
 
-            # LOG START
-            if is_agent:
-                instructions = called_action.body.get('instructions', '')
-                self.logger.log_handoff(agent_name, instructions)
-            else:
-                self.logger.log_action_start(called_action.name, called_action.body)
-
-            # EXECUTE ACTION
-            import time
-            start_time = time.time()
-
-            if getattr(action, '_is_exit', False):
-                # Handle both sync and async actions
-                if isinstance(action, AsyncBaseAction):
-                    response = await action(called_action)
-                else:
-                    response = action(called_action)
-                self.messages.append(response.message)
-
-                # LOG END for exit action
-                self.logger.log_action_end(summary=response.summary, content=response.message.content, error=response.message.error)
-
-                return None
-
-            # Handle both sync and async actions
             if isinstance(action, AsyncBaseAction):
                 response = await action(called_action)
             else:
                 response = action(called_action)
+
             self.messages.append(response.message)
+            if response.message.citations:
+                self.citation_manager.add_citations(response.message.citations)
 
-            duration = time.time() - start_time
+            self.logger.log_action_end(response.summary, response.message.content, response.message.error)
 
-            # LOG END
-            if is_agent:
-                self.logger.log_agent_complete(agent_name, duration)
-            else:
-                self.logger.log_action_end(summary=response.summary, content=response.message.content, error=response.message.error)
+            if getattr(action, '_is_exit', False):
+                return None
 
             if response.follow_up:
                 follow_ups.append(response.follow_up)
 
         return follow_ups if follow_ups else []
 
-    def _find_action(self, name: str, actions: List[BaseAction]) -> Optional[BaseAction]:
-        """Find action by name"""
-        return next((a for a in actions if a.name == name), None)
+    async def _stream_step(self, actions: List[BaseAction], system_prompt: str, mode: Literal["deltas", "messages"] = "deltas", allowed_actions: List[BaseAction] = None):
+        """Execute one agent step with streaming: LLM call + action execution"""
+        if self._is_final_step() or self._approaching_context_limit(system_prompt):
+            allowed_actions = self._get_final_step_allowed_actions()
 
-    def _handle_action_not_found(self, called_action: Action):
-        """Handle when LLM calls non-existent action"""
-        available_names = [a.name for a in self.actions]
-        self.messages.append(
-            Message(
-                role="tool",
-                content=f"Error: Action '{called_action.name}' is not available. Available actions: {available_names}",
-                action_id=called_action.id,
-                status="completed",
-                error=True
-            )
-        )
+        completion_messages = []
+        async for event in self.client.stream_events(messages=self.messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions):
+            if mode == "messages":
+                if isinstance(event, MessageEnd):
+                    completion_messages.append(event.message)
+                    yield event
+            else:
+                yield event
+                if isinstance(event, MessageEnd):
+                    completion_messages.append(event.message)
 
-    def _get_system_prompt(self) -> str:
-        """Get system prompt (string or callable)"""
-        if self.system_prompt_fn:
-            return self.system_prompt_fn()
-        return self.system_prompt
+        self.messages.extend(completion_messages)
+        self.num_iter += 1
+
+        main_completion = completion_messages[-1]
+
+        if not main_completion.actions:
+            follow_ups = handle_no_actions(self.require_action, self.messages)
+            if follow_ups is None:
+                self._should_exit_stream = True
+            return
+
+        async for event in self._execute_actions_streaming(main_completion.actions, actions):
+            yield event
+
+    async def _execute_actions_streaming(self, called_actions: List[Action], actions: List[BaseAction]):
+        """Execute actions and yield streaming events"""
+        for called_action in called_actions:
+            action_impl = find_action(called_action.name, actions)
+            if not action_impl:
+                handle_action_not_found(called_action, self.actions, self.messages)
+                continue
+
+            called_action.citation_start = self.citation_manager.get_next_id()
+
+            yield ActionExecutionStart(id=called_action.id, name=called_action.name, body=called_action.body)
+
+            if isinstance(action_impl, AsyncBaseAction):
+                response = await action_impl(called_action)
+            else:
+                response = action_impl(called_action)
+
+            self.messages.append(response.message)
+            if response.message.citations:
+                self.citation_manager.add_citations(response.message.citations)
+            yield ActionExecuted(message=response.message, summary=response.summary)
+
+            if getattr(action_impl, '_is_exit', False):
+                self._should_exit_stream = True
+
+    # Domain helpers
+
+    def _add_messages_to_history(self, query: Union[str, List[Message]]):
+        add_messages_to_history(self.messages, query)
 
     def _build_response(self, success: bool) -> AgentResponse:
-        """Build final response"""
-        return AgentResponse(
-            content=self.messages[-1].content if self.messages else "",
-            messages=self.messages.copy(),
-            usage=self._calculate_usage(),
-            duration=(self.end_time - self.start_time).total_seconds(),
-            iterations=self.num_iter,
-            success=success
+        return build_agent_response(
+            self.messages, self.citation_manager, self.client.provider, self.client.model,
+            self.start_time, self.end_time, success, self.num_iter
         )
 
-    def _calculate_usage(self) -> Usage:
-        """Calculate total usage from all messages"""
-        usage = Usage()
-
-        for msg in self.messages:
-            if msg.cached_prompt_tokens:
-                usage.cached_prompt_tokens += msg.cached_prompt_tokens
-            if msg.uncached_prompt_tokens:
-                usage.uncached_prompt_tokens += msg.uncached_prompt_tokens
-            if msg.thinking_tokens:
-                usage.thinking_tokens += msg.thinking_tokens
-            if msg.completion_tokens:
-                usage.completion_tokens += msg.completion_tokens
-
-        usage.prompt_tokens = usage.cached_prompt_tokens + usage.uncached_prompt_tokens
-        usage.total_tokens = (
-            usage.cached_prompt_tokens +
-            usage.uncached_prompt_tokens +
-            usage.thinking_tokens +
-            usage.completion_tokens
-        )
-
-        usage.estimated_cost = calculate_cost(
-            uncached_input_tokens=usage.uncached_prompt_tokens,
-            cached_input_tokens=usage.cached_prompt_tokens,
-            output_tokens=usage.completion_tokens + usage.thinking_tokens,
-            provider=self.client.provider,
-            model=self.client.model
-        )
-
-        return usage
-
-    def reset(self):
-        """Reset agent state"""
-        self.messages = []
-        self.num_iter = 0
-        self.start_time = None
-        self.end_time = None
+    # Infra / utilities
 
     def to_action(self, name: str, description: str) -> BaseAction:
         """
@@ -334,124 +309,32 @@ class AsyncAgent:
             ...     ]
             ... )
         """
-        # Create a simple schema for the agent action
         class AgentActionSchema(BaseModel):
             """Auto-generated schema for agent action"""
             instructions: str = Field(description="Instructions for the agent")
 
-        # Set name and description for schema
         AgentActionSchema.__name__ = name
         AgentActionSchema.__doc__ = description
 
-        # Capture agent reference
         agent_ref = self
 
-        # Create wrapper action
         @async_action(schema=AgentActionSchema)
         async def agent_action_wrapper(params: AgentActionSchema) -> str:
             """Wrapper that calls the agent"""
-            # Reset agent for fresh execution
             agent_ref.reset()
-
-            # Run with the instructions
             result = await agent_ref.run(params.instructions)
-
-            # Return the result content
             return result.content
 
-        # Override name to match user specification
         agent_action_wrapper.name = name
-
-        # Mark this as an agent action for special logging
         agent_action_wrapper._is_agent_action = True
         agent_action_wrapper._agent_name = name
 
         return agent_action_wrapper
 
-    @property
-    def is_chainable(self) -> bool:
-        """Check if this agent can be used in a chain (has exit actions and requires action)"""
-        return self.require_action and len(self.exit_actions) > 0
-
-    @property
-    def openai_schema(self) -> dict:
-        """Generate OpenAI function schema for this agent"""
-        if not self.input_schema:
-            raise ValueError("Agent must have input_schema to be used as a composable action")
-
-        schema = self.input_schema.model_json_schema()
-        return {
-            "type": "function",
-            "name": self.name,
-            "description": schema.get("description", ""),
-            "parameters": {
-                "type": "object",
-                "properties": schema.get("properties", {}),
-                "required": schema.get("required", [])
-            }
-        }
-
-    @property
-    def anthropic_schema(self) -> dict:
-        """Generate Anthropic tool schema for this agent"""
-        if not self.input_schema:
-            raise ValueError("Agent must have input_schema to be used as a composable action")
-
-        schema = self.input_schema.model_json_schema()
-        return {
-            "name": self.name,
-            "description": schema.get("description", ""),
-            "input_schema": {
-                "type": "object",
-                "properties": schema.get("properties", {}),
-                "required": schema.get("required", [])
-            }
-        }
-
-    async def __call__(self, action: Action) -> ActionResponse:
-        """Make agent callable as an action for composition"""
-        if not self.input_schema:
-            raise ValueError("Agent must have input_schema to be used as a composable action")
-
-        # Reset state for fresh execution
-        self.reset()
-
-        # Convert action body to query string
-        query = self._format_input(action.body)
-
-        # Run the agent
-        result = await self.run(query)
-
-        # Return as ActionResponse
-        return ActionResponse(
-            message=Message(
-                role="tool",
-                content=result.content,
-                action_id=action.id,
-                status="completed",
-                error=not result.success
-            )
-        )
-
-    def _format_input(self, body: dict) -> str:
-        """Convert action body dict to agent query string"""
-        # Validate against schema
-        validated = self.input_schema(**body)
-
-        # Get model fields
-        fields = list(validated.model_fields.keys())
-
-        # If no fields (empty schema), use empty string (OpenAI only)
-        if not fields:
-            return ""
-
-        # If single field, extract directly
-        if len(fields) == 1:
-            return str(getattr(validated, fields[0]))
-
-        # Multi-field: check for format() method
-        if hasattr(validated, 'format') and callable(validated.format):
-            return validated.format()
-
-        # Fallback: JSON dump
-        return json.dumps(body, indent=2)
+    @asynccontextmanager
+    async def _timer(self):
+        self.start_time = datetime.datetime.now()
+        try:
+            yield
+        finally:
+            self.end_time = datetime.datetime.now()

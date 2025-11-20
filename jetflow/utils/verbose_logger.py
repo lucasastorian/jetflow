@@ -13,14 +13,16 @@ class VerboseLogger:
     - Chain transitions (start/end)
     """
 
-    def __init__(self, verbose: bool = True):
+    def __init__(self, verbose: bool = True, max_content_display: int = 10000):
         """
         Initialize the logger.
 
         Args:
             verbose: Whether to enable logging output
+            max_content_display: Maximum characters to display for action content (default 10000)
         """
         self.verbose = verbose
+        self.max_content_display = max_content_display
         self._encoding = None  # Lazy load encoding
 
     def _c(self, text: str, color: str) -> str:
@@ -113,10 +115,10 @@ class VerboseLogger:
             if error:
                 summary = "Error"
             elif content:
-                # Truncate at 1000 chars if too long
+                # Truncate at max_content_display chars if too long
                 content_display = content
-                if len(content_display) > 1000:
-                    content_display = content_display[:1000] + "..."
+                if len(content_display) > self.max_content_display:
+                    content_display = content_display[:self.max_content_display] + "..."
 
                 # For short content, show it all; for long, show preview
                 if len(content_display) > 100:
@@ -131,10 +133,10 @@ class VerboseLogger:
 
         icon = self._c('✗', 'yellow') if error else self._c('✓', 'green')
 
-        # Show full content (truncated at 1000 chars)
+        # Show full content (truncated at max_content_display chars)
         content_display = content
-        if len(content) > 1000:
-            content_display = content[:1000] + "\n... [truncated]"
+        if len(content) > self.max_content_display:
+            content_display = content[:self.max_content_display] + "\n... [truncated]"
 
         print(f"  {icon} {content_display} | tokens={tokens}\n", flush=True)
 

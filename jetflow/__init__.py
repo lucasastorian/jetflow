@@ -10,6 +10,7 @@ from jetflow.core.action import action, async_action
 from jetflow.core.message import Message, Action, Thought
 from jetflow.core.response import AgentResponse, ActionResult, ChainResponse
 from jetflow.core.chain import Chain, AsyncChain
+from jetflow.core.citations import CitationManager, CitationExtractor
 from jetflow.core.events import (
     StreamEvent,
     MessageStart,
@@ -41,6 +42,8 @@ __all__ = [
     "ActionResult",
     "ChainResponse",
     "Usage",
+    "CitationManager",
+    "CitationExtractor",
     # Streaming events
     "StreamEvent",
     "MessageStart",

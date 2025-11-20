@@ -5,14 +5,48 @@ as actions. Users should not import from this module directly - use the public
 API in action.py instead.
 """
 
+import inspect
 from pydantic import ValidationError
 from jetflow.core.message import Message
 from jetflow.core.response import ActionResponse, ActionResult, ActionFollowUp
 
 
+def _build_response_from_result(result, action) -> ActionResponse:
+    """Build ActionResponse from action result (ActionResult or any other type)"""
+    if isinstance(result, ActionResult):
+        return ActionResponse(
+            message=Message(
+                role="tool",
+                content=result.content,
+                action_id=action.id,
+                status="completed",
+                metadata=result.metadata,
+                citations=result.citations
+            ),
+            follow_up=ActionFollowUp(
+                actions=result.follow_up_actions,
+                force=result.force_follow_up
+            ) if result.follow_up_actions else None,
+            summary=result.summary
+        )
+    else:
+        return ActionResponse(
+            message=Message(
+                role="tool",
+                content=str(result),
+                action_id=action.id,
+                status="completed"
+            )
+        )
+
+
 def _wrap_function_action(fn, schema, exit):
     """Wrap a function as a sync action"""
     from jetflow.core.action import BaseAction
+
+    # Check if function accepts citation_start parameter
+    sig = inspect.signature(fn)
+    accepts_citation_start = 'citation_start' in sig.parameters
 
     class FunctionAction(BaseAction):
         def __call__(self, action) -> ActionResponse:
@@ -30,32 +64,13 @@ def _wrap_function_action(fn, schema, exit):
                 )
 
             try:
-                result = fn(validated)
-
-                if isinstance(result, ActionResult):
-                    return ActionResponse(
-                        message=Message(
-                            role="tool",
-                            content=result.content,
-                            action_id=action.id,
-                            status="completed",
-                            metadata=result.metadata
-                        ),
-                        follow_up=ActionFollowUp(
-                            actions=result.follow_up_actions,
-                            force=result.force_follow_up
-                        ) if result.follow_up_actions else None,
-                        summary=result.summary
-                    )
+                # Only pass citation_start if function accepts it
+                if accepts_citation_start:
+                    result = fn(validated, citation_start=action.citation_start)
                 else:
-                    return ActionResponse(
-                        message=Message(
-                            role="tool",
-                            content=str(result),
-                            action_id=action.id,
-                            status="completed"
-                        )
-                    )
+                    result = fn(validated)
+
+                return _build_response_from_result(result, action)
 
             except Exception as e:
                 return ActionResponse(
@@ -80,6 +95,10 @@ def _wrap_class_action(cls, schema, exit):
     """Wrap a class as a sync action"""
     from jetflow.core.action import BaseAction
 
+    # Check if class __call__ method accepts citation_start parameter
+    sig = inspect.signature(cls.__call__)
+    accepts_citation_start = 'citation_start' in sig.parameters
+
     class ClassAction(BaseAction):
         def __init__(self, *args, **kwargs):
             self._instance = cls(*args, **kwargs)
@@ -99,32 +118,13 @@ def _wrap_class_action(cls, schema, exit):
                 )
 
             try:
-                result = self._instance(validated)
-
-                if isinstance(result, ActionResult):
-                    return ActionResponse(
-                        message=Message(
-                            role="tool",
-                            content=result.content,
-                            action_id=action.id,
-                            status="completed",
-                            metadata=result.metadata
-                        ),
-                        follow_up=ActionFollowUp(
-                            actions=result.follow_up_actions,
-                            force=result.force_follow_up
-                        ) if result.follow_up_actions else None,
-                        summary=result.summary
-                    )
+                # Only pass citation_start if class accepts it
+                if accepts_citation_start:
+                    result = self._instance(validated, citation_start=action.citation_start)
                 else:
-                    return ActionResponse(
-                        message=Message(
-                            role="tool",
-                            content=str(result),
-                            action_id=action.id,
-                            status="completed"
-                        )
-                    )
+                    result = self._instance(validated)
+
+                return _build_response_from_result(result, action)
 
             except Exception as e:
                 return ActionResponse(
@@ -149,6 +149,10 @@ def _wrap_async_function_action(fn, schema, exit):
     """Wrap a function as an async action"""
     from jetflow.core.action import AsyncBaseAction
 
+    # Check if function accepts citation_start parameter
+    sig = inspect.signature(fn)
+    accepts_citation_start = 'citation_start' in sig.parameters
+
     class AsyncFunctionAction(AsyncBaseAction):
         async def __call__(self, action) -> ActionResponse:
             try:
@@ -165,32 +169,13 @@ def _wrap_async_function_action(fn, schema, exit):
                 )
 
             try:
-                result = await fn(validated)
-
-                if isinstance(result, ActionResult):
-                    return ActionResponse(
-                        message=Message(
-                            role="tool",
-                            content=result.content,
-                            action_id=action.id,
-                            status="completed",
-                            metadata=result.metadata
-                        ),
-                        follow_up=ActionFollowUp(
-                            actions=result.follow_up_actions,
-                            force=result.force_follow_up
-                        ) if result.follow_up_actions else None,
-                        summary=result.summary
-                    )
+                # Only pass citation_start if function accepts it
+                if accepts_citation_start:
+                    result = await fn(validated, citation_start=action.citation_start)
                 else:
-                    return ActionResponse(
-                        message=Message(
-                            role="tool",
-                            content=str(result),
-                            action_id=action.id,
-                            status="completed"
-                        )
-                    )
+                    result = await fn(validated)
+
+                return _build_response_from_result(result, action)
 
             except Exception as e:
                 return ActionResponse(
@@ -215,6 +200,10 @@ def _wrap_async_class_action(cls, schema, exit):
     """Wrap a class as an async action"""
     from jetflow.core.action import AsyncBaseAction
 
+    # Check if class __call__ method accepts citation_start parameter
+    sig = inspect.signature(cls.__call__)
+    accepts_citation_start = 'citation_start' in sig.parameters
+
     class AsyncClassAction(AsyncBaseAction):
         def __init__(self, *args, **kwargs):
             self._instance = cls(*args, **kwargs)
@@ -234,32 +223,13 @@ def _wrap_async_class_action(cls, schema, exit):
                 )
 
             try:
-                result = await self._instance(validated)
-
-                if isinstance(result, ActionResult):
-                    return ActionResponse(
-                        message=Message(
-                            role="tool",
-                            content=result.content,
-                            action_id=action.id,
-                            status="completed",
-                            metadata=result.metadata
-                        ),
-                        follow_up=ActionFollowUp(
-                            actions=result.follow_up_actions,
-                            force=result.force_follow_up
-                        ) if result.follow_up_actions else None,
-                        summary=result.summary
-                    )
+                # Only pass citation_start if class accepts it
+                if accepts_citation_start:
+                    result = await self._instance(validated, citation_start=action.citation_start)
                 else:
-                    return ActionResponse(
-                        message=Message(
-                            role="tool",
-                            content=str(result),
-                            action_id=action.id,
-                            status="completed"
-                        )
-                    )
+                    result = await self._instance(validated)
+
+                return _build_response_from_result(result, action)
 
             except Exception as e:
                 return ActionResponse(

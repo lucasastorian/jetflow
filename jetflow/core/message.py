@@ -5,6 +5,12 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Literal, List
 
+try:
+    import tiktoken
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+
 
 @dataclass
 class Action:
@@ -15,6 +21,7 @@ class Action:
     body: dict
 
     external_id: str = None  # OpenAI Responses API 'id' attribute
+    citation_start: int = None  # Starting citation ID for this action (set by Agent)
 
 
 @dataclass
@@ -51,6 +58,7 @@ class Message:
     action_id: str = None
     error: bool = False
     metadata: dict = None
+    citations: dict = None  # Dict[int, dict] - citation ID → metadata
 
     # Usage tracking
     cached_prompt_tokens: int = None
@@ -63,6 +71,44 @@ class Message:
 
     # Internal
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+    @property
+    def tokens(self) -> int:
+        """Count tokens in this message.
+
+        Uses tiktoken if available, otherwise estimates ~4 characters per token.
+
+        Returns:
+            Estimated token count
+        """
+        total = 4  # Base tokens per message (role, formatting, etc.)
+
+        if TIKTOKEN_AVAILABLE:
+            try:
+                encoding = tiktoken.get_encoding("cl100k_base")
+
+                if self.content:
+                    total += len(encoding.encode(self.content))
+
+                if self.actions:
+                    for action in self.actions:
+                        total += len(encoding.encode(action.name))
+                        total += len(encoding.encode(str(action.body)))
+
+                return total
+            except Exception:
+                pass  # Fall through to character-based estimation
+
+        # Fallback: estimate ~4 characters per token
+        if self.content:
+            total += len(self.content) // 4
+
+        if self.actions:
+            for action in self.actions:
+                total += len(action.name) // 4
+                total += len(str(action.body)) // 4
+
+        return total
 
     def anthropic_format(self) -> dict:
         """Convert Message to Anthropic format"""
@@ -110,6 +156,9 @@ class Message:
     def openai_format(self) -> List[dict]:
         """Formats the message as a list of items for the OpenAI Responses API."""
         if self.role == "tool":
+            # Ensure action_id is set; if None, use a placeholder or raise error
+            if self.action_id is None:
+                raise ValueError(f"Tool message missing action_id. Message content: {self.content[:100]}")
             return [{"call_id": self.action_id, "output": self.content, "type": "function_call_output"}]
 
         if self.role != "assistant":

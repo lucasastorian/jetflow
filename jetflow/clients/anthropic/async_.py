@@ -12,13 +12,12 @@ from jetflow.core.action import BaseAction
 from jetflow.core.message import Message, Action, Thought
 from jetflow.core.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
 from jetflow.clients.base import AsyncBaseClient
+from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, REASONING_BUDGET_MAP
 
 
 class AsyncAnthropicClient(AsyncBaseClient):
     provider: str = "Anthropic"
     max_tokens: int = 16384
-    betas: List[str] = ["interleaved-thinking-2025-05-14"]
-    supports_thinking: List[str] = ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-sonnet-4-1']
 
     def __init__(
         self,
@@ -30,21 +29,12 @@ class AsyncAnthropicClient(AsyncBaseClient):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
-        self.reasoning_budget = {
-            "low": 1024,
-            "medium": 2048,
-            "high": 4096,
-            "none": 0
-        }[self.reasoning_effort]
+        self.reasoning_budget = REASONING_BUDGET_MAP[self.reasoning_effort]
 
         self.client = anthropic.AsyncAnthropic(
             api_key=api_key or os.environ.get('ANTHROPIC_API_KEY'),
             timeout=60.0
         )
-
-    def _supports_thinking(self) -> bool:
-        """Check if the model supports extended thinking"""
-        return any(self.model.startswith(prefix) for prefix in self.supports_thinking)
 
     async def stream(
         self,
@@ -55,30 +45,10 @@ class AsyncAnthropicClient(AsyncBaseClient):
         enable_web_search: bool = False,
         verbose: bool = True
     ) -> List[Message]:
-        """Stream a completion with the given messages"""
-        formatted_messages = [message.anthropic_format() for message in messages]
-
-        params = {
-            "model": self.model,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "system": system_prompt,
-            "messages": formatted_messages,
-            "betas": self.betas,
-            "tools": [action.anthropic_schema for action in actions],
-            "stream": True
-        }
-
-        if self.reasoning_budget > 0 and self._supports_thinking():
-            params['thinking'] = {
-                "type": "enabled",
-                "budget_tokens": self.reasoning_budget
-            }
-
-        if allowed_actions:
-            params["tools"] = [action.anthropic_schema for action in allowed_actions]
-            params['tool_choice'] = {"type": "tool"}
-
+        params = build_message_params(
+            self.model, self.temperature, self.max_tokens, system_prompt,
+            messages, actions, allowed_actions, self.reasoning_budget
+        )
         return await self._stream_with_retry(params, verbose)
 
     async def stream_events(
@@ -91,29 +61,10 @@ class AsyncAnthropicClient(AsyncBaseClient):
         verbose: bool = True
     ) -> AsyncIterator[StreamEvent]:
         """Stream a completion and yield events in real-time"""
-        formatted_messages = [message.anthropic_format() for message in messages]
-
-        params = {
-            "model": self.model,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "system": system_prompt,
-            "messages": formatted_messages,
-            "betas": self.betas,
-            "tools": [action.anthropic_schema for action in actions],
-            "stream": True
-        }
-
-        if self.reasoning_budget > 0 and self._supports_thinking():
-            params['thinking'] = {
-                "type": "enabled",
-                "budget_tokens": self.reasoning_budget
-            }
-
-        if allowed_actions:
-            params["tools"] = [action.anthropic_schema for action in allowed_actions]
-            params['tool_choice'] = {"type": "tool"}
-
+        params = build_message_params(
+            self.model, self.temperature, self.max_tokens, system_prompt,
+            messages, actions, allowed_actions, self.reasoning_budget
+        )
         async for event in self._stream_events_with_retry(params, verbose):
             yield event
 
@@ -146,7 +97,6 @@ class AsyncAnthropicClient(AsyncBaseClient):
         )
         tool_call_arguments = ""
 
-        # Yield message start
         yield MessageStart(role="assistant")
 
         async for event in response:
@@ -158,7 +108,6 @@ class AsyncAnthropicClient(AsyncBaseClient):
                 if event.content_block.type == 'thinking':
                     thought = Thought(id="", summaries=[""])
                     completion.thoughts.append(thought)
-                    # Yield thought start event (ID will be set later via signature_delta)
                     yield ThoughtStart(id="")
 
                 elif event.content_block.type == 'text':
@@ -173,13 +122,11 @@ class AsyncAnthropicClient(AsyncBaseClient):
                         body={}
                     )
                     completion.actions.append(action)
-                    # Yield action start event
                     yield ActionStart(id=action.id, name=action.name)
 
             elif event.type == 'content_block_delta':
                 if event.delta.type == 'thinking_delta':
                     completion.thoughts[-1].summaries[0] += event.delta.thinking
-                    # Yield thought delta event
                     yield ThoughtDelta(
                         id=completion.thoughts[-1].id or "",
                         delta=event.delta.thinking
@@ -202,7 +149,6 @@ class AsyncAnthropicClient(AsyncBaseClient):
                         continue
 
                     completion.actions[-1].body = body_json
-                    # Yield action delta event
                     yield ActionDelta(
                         id=completion.actions[-1].id,
                         name=completion.actions[-1].name,
@@ -211,18 +157,15 @@ class AsyncAnthropicClient(AsyncBaseClient):
 
                 elif event.delta.type == 'text_delta':
                     completion.content += event.delta.text
-                    # Yield content delta event
                     yield ContentDelta(delta=event.delta.text)
 
             elif event.type == 'content_block_stop':
-                # If a thought was just completed, yield ThoughtEnd
                 if completion.thoughts and completion.thoughts[-1].summaries:
                     yield ThoughtEnd(
                         id=completion.thoughts[-1].id,
                         thought=completion.thoughts[-1].summaries[0]
                     )
 
-                # If an action was just completed, yield ActionEnd
                 if completion.actions and completion.actions[-1].status == 'streaming':
                     completion.actions[-1].status = 'parsed'
                     yield ActionEnd(
@@ -232,16 +175,12 @@ class AsyncAnthropicClient(AsyncBaseClient):
                     )
 
             elif event.type == 'message_delta':
-                usage = event.usage
-                completion.uncached_prompt_tokens = usage.input_tokens
-                completion.completion_tokens = usage.output_tokens
+                apply_usage_to_message(event.usage, completion)
 
             elif event.type == 'message_stop':
                 pass
 
         completion.status = 'completed'
-
-        # Yield message end event
         yield MessageEnd(message=completion)
 
     @retry(
@@ -330,10 +269,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
                     print("\n\n")
 
             elif event.type == 'message_delta':
-                usage = event.usage
-                completion.uncached_prompt_tokens = usage.input_tokens
-                completion.completion_tokens = usage.output_tokens
-
+                apply_usage_to_message(event.usage, completion)
                 if completion.actions:
                     completion.actions[-1].status = 'parsed'
 
@@ -341,6 +277,4 @@ class AsyncAnthropicClient(AsyncBaseClient):
                 pass
 
         completion.status = 'completed'
-
-        # Anthropic doesn't support server-side web searches, so always return single message
         return [completion]

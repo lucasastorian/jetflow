@@ -32,6 +32,7 @@ class ActionResult:
     force_follow_up: bool = False
     metadata: dict = None
     summary: str = None
+    citations: dict = None  # Dict[int, dict] - citation ID → metadata
 
 
 @dataclass
