@@ -28,6 +28,10 @@ def build_legacy_params(
         "stream": stream_flag
     }
 
+    # Enable usage tracking in streaming mode
+    if stream_flag:
+        params["stream_options"] = {"include_usage": True}
+
     # Add reasoning effort for o1/o3 models
     if reasoning_effort:
         params["reasoning_effort"] = reasoning_effort

@@ -112,6 +112,10 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         yield MessageStart(role="assistant")
 
         async for chunk in response:
+            # Check for usage first (comes in a chunk without choices)
+            if chunk.usage:
+                apply_legacy_usage(chunk.usage, completion)
+
             if not chunk.choices:
                 continue
 
@@ -155,9 +159,6 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
 
                     except ValueError:
                         continue
-
-            if chunk.usage:
-                apply_legacy_usage(chunk.usage, completion)
 
         for action in completion.actions:
             if action.status == "streaming":

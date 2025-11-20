@@ -68,6 +68,12 @@ class VerboseLogger:
             return
         print(f"\n{self._c('Assistant:', 'cyan')}\n{content}\n", flush=True)
 
+    def log_content_delta(self, delta: str):
+        """Log streaming content delta (no prefix, no newline)"""
+        if not self.verbose:
+            return
+        print(delta, end='', flush=True)
+
     def num_tokens(self, content: str) -> int:
         """
         Count tokens in content using tiktoken with cl100k_base encoding.

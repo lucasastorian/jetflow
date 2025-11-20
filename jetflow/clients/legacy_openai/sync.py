@@ -109,6 +109,10 @@ class LegacyOpenAIClient(BaseClient):
         yield MessageStart(role="assistant")
 
         for chunk in response:
+            # Check for usage first (comes in a chunk without choices)
+            if chunk.usage:
+                apply_legacy_usage(chunk.usage, completion)
+
             if not chunk.choices:
                 continue
 
@@ -152,9 +156,6 @@ class LegacyOpenAIClient(BaseClient):
 
                     except ValueError:
                         continue
-
-            if chunk.usage:
-                apply_legacy_usage(chunk.usage, completion)
 
         for action in completion.actions:
             if action.status == "streaming":
