@@ -154,6 +154,8 @@ class AnthropicClient(BaseClient):
 
                 elif event.delta.type == 'text_delta':
                     completion.content += event.delta.text
+                    if logger:
+                        logger.log_content_delta(event.delta.text)
                     yield ContentDelta(delta=event.delta.text)
 
             elif event.type == 'content_block_stop':

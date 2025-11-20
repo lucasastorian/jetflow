@@ -29,7 +29,7 @@ A lightweight, developer-first agent toolkit for real applications. LLM-agnostic
 | Abstraction | Low-level, code-first | High-level roles/crews | Many abstractions (chains/graphs) |
 | Architecture | Explicit tools + short loops | Multi-agent by default | Varies by components |
 | Setup/Debug | Minutes; small surface; full transcript | Heavier config/orchestration | Larger surface; callbacks/tools |
-| LLM support | Vendor-neutral (OpenAI, Anthropic, pluggable) | Provider adapters | Large ecosystem |
+| LLM support | Vendor-neutral (OpenAI, Anthropic, Grok, Gemini) | Provider adapters | Large ecosystem |
 | Orchestration | Single, multi-agent, sequential agent chains | Teams/crews | Chains, agents, graphs |
 
 ## Install
@@ -37,12 +37,16 @@ A lightweight, developer-first agent toolkit for real applications. LLM-agnostic
 ```bash
 pip install jetflow[openai]      # OpenAI
 pip install jetflow[anthropic]   # Anthropic
-pip install jetflow[all]         # Both
+pip install jetflow[grok]        # Grok (xAI)
+pip install jetflow[gemini]      # Gemini (Google)
+pip install jetflow[all]         # All providers
 ```
 
 ```bash
 export OPENAI_API_KEY=...
 export ANTHROPIC_API_KEY=...
+export XAI_API_KEY=...           # For Grok
+export GEMINI_API_KEY=...        # For Gemini (or GOOGLE_API_KEY)
 ```
 
 **📚 [Full Documentation →](https://jetflow.readthedocs.io)** | [Quickstart](https://jetflow.readthedocs.io/quickstart) | [Single Agent](https://jetflow.readthedocs.io/single-agent) | [Composition](https://jetflow.readthedocs.io/composition) | [Chains](https://jetflow.readthedocs.io/chains) | [API Reference](https://jetflow.readthedocs.io/api)
@@ -246,7 +250,7 @@ with chain.stream("Research and analyze") as events:
 * **Deterministic endings.** Use `require_action=True` + a `format()` exit to get one reliable result.
 * **Real observability.** Full transcript + token and dollar accounting.
 * **Composability that sticks.** Treat agents as tools; add chains when you need shared context.
-* **Provider-agnostic.** OpenAI + Anthropic with matching streaming semantics.
+* **Provider-agnostic.** OpenAI, Anthropic, Grok (xAI), and Gemini (Google) with matching streaming semantics.
 
 ---
 

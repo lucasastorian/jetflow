@@ -25,7 +25,7 @@ Agent(
 
 **Parameters:**
 
-- `client` - LLM client (OpenAIClient, AnthropicClient, etc.)
+- `client` - LLM client (OpenAIClient, AnthropicClient, GrokClient, GeminiClient, etc.)
 - `actions` - List of actions available to agent
 - `input_schema` - (Optional) Pydantic schema for composable agents
 - `system_prompt` - System instructions (string or callable)

@@ -19,15 +19,74 @@ PRICING = {
         },
     },
     "OpenAI": {
+        # GPT-5 family (cached input = 10% of input price)
+        "gpt-5.1": {
+            "input_per_million": 1.25,
+            "output_per_million": 10.0,
+            "cached_input_per_million": 0.125,
+        },
         "gpt-5": {
             "input_per_million": 1.25,
-            "output_per_million": 10,
+            "output_per_million": 10.0,
             "cached_input_per_million": 0.125,
         },
         "gpt-5-mini": {
             "input_per_million": 0.25,
             "output_per_million": 2.0,
             "cached_input_per_million": 0.025,
+        },
+        "gpt-5-nano": {
+            "input_per_million": 0.05,
+            "output_per_million": 0.40,
+            "cached_input_per_million": 0.005,
+        },
+        # GPT-4.x family (cached input = 25% of input price)
+        "gpt-4.1": {
+            "input_per_million": 2.0,
+            "output_per_million": 8.0,
+            "cached_input_per_million": 0.50,
+        },
+        "gpt-4.1-mini": {
+            "input_per_million": 0.40,
+            "output_per_million": 1.60,
+            "cached_input_per_million": 0.10,
+        },
+        # GPT-4o family (cached input = 50% of input price)
+        "gpt-4o": {
+            "input_per_million": 2.50,
+            "output_per_million": 10.0,
+            "cached_input_per_million": 1.25,
+        },
+        "gpt-4o-mini": {
+            "input_per_million": 0.15,
+            "output_per_million": 0.60,
+            "cached_input_per_million": 0.075,
+        },
+        # o-series reasoning models
+        "o1": {
+            "input_per_million": 15.0,
+            "output_per_million": 60.0,
+            "cached_input_per_million": 7.50,
+        },
+        "o1-mini": {
+            "input_per_million": 1.10,
+            "output_per_million": 4.40,
+            "cached_input_per_million": 0.55,
+        },
+        "o3": {
+            "input_per_million": 2.0,
+            "output_per_million": 8.0,
+            "cached_input_per_million": 0.50,
+        },
+        "o3-mini": {
+            "input_per_million": 1.10,
+            "output_per_million": 4.40,
+            "cached_input_per_million": 0.55,
+        },
+        "o4-mini": {
+            "input_per_million": 1.10,
+            "output_per_million": 4.40,
+            "cached_input_per_million": 0.275,
         },
     },
     "Grok": {

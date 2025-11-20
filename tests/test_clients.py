@@ -5,16 +5,21 @@ Tests all combinations:
 - Anthropic (claude-haiku-4-5): sync/async × streaming/non-streaming
 - OpenAI (gpt-5-mini): sync/async × streaming/non-streaming
 - LegacyOpenAI (gpt-4o-mini): sync/async × streaming/non-streaming
+- Grok (grok-4-fast-non-reasoning): sync/async × streaming/non-streaming [if XAI_API_KEY set]
+- Gemini (gemini-2.5-flash): sync/async × streaming/non-streaming [if GEMINI_API_KEY or GOOGLE_API_KEY set]
 
 Dataset: Nvidia Income Statement (FY 2022-2025)
 """
 
 import asyncio
+import os
 from dotenv import load_dotenv
 from jetflow import Agent, AsyncAgent, action, StreamEvent, MessageEnd, ActionExecuted
 from jetflow.clients.anthropic import AnthropicClient, AsyncAnthropicClient
 from jetflow.clients.openai import OpenAIClient, AsyncOpenAIClient
 from jetflow.clients.legacy_openai import LegacyOpenAIClient, AsyncLegacyOpenAIClient
+from jetflow.clients.grok import GrokClient, AsyncGrokClient
+from jetflow.clients.gemini import GeminiClient, AsyncGeminiClient
 from jetflow.core.response import ActionResult
 from pydantic import BaseModel, Field
 
@@ -133,6 +138,22 @@ CLIENTS = [
     },
 ]
 
+# Add Grok if API key is available
+if os.getenv("XAI_API_KEY"):
+    CLIENTS.append({
+        "name": "Grok",
+        "sync_client": GrokClient(model="grok-4-fast-non-reasoning"),
+        "async_client": AsyncGrokClient(model="grok-4-fast-non-reasoning"),
+    })
+
+# Add Gemini if API key is available
+if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+    CLIENTS.append({
+        "name": "Gemini",
+        "sync_client": GeminiClient(model="gemini-2.5-flash"),
+        "async_client": AsyncGeminiClient(model="gemini-2.5-flash"),
+    })
+
 
 # ============================================================================
 # Test Functions
@@ -231,7 +252,10 @@ def test_sync_streaming(client_name, client):
     message_end_events = [e for e in events if isinstance(e, MessageEnd)]
     assert len(message_end_events) > 0, "Should have MessageEnd events"
 
-    print(f"✓ {client_name} sync streaming: {len(events)} events, {len(message_end_events)} MessageEnd")
+    # Count actions (informational, not required)
+    action_executed_events = [e for e in events if isinstance(e, ActionExecuted)]
+
+    print(f"✓ {client_name} sync streaming: {len(events)} events, {len(message_end_events)} MessageEnd, {len(action_executed_events)} actions")
     print(f"✅ PASSED\n")
     return response
 
@@ -265,7 +289,61 @@ async def test_async_streaming(client_name, client):
     message_end_events = [e for e in events if isinstance(e, MessageEnd)]
     assert len(message_end_events) > 0, "Should have MessageEnd events"
 
-    print(f"✓ {client_name} async streaming: {len(events)} events, {len(message_end_events)} MessageEnd")
+    # Count actions (informational, not required)
+    action_executed_events = [e for e in events if isinstance(e, ActionExecuted)]
+
+    print(f"✓ {client_name} async streaming: {len(events)} events, {len(message_end_events)} MessageEnd, {len(action_executed_events)} actions")
+    print(f"✅ PASSED\n")
+    return response
+
+
+def test_require_action(client_name, client):
+    """Test that require_action=True forces action execution"""
+    print("=" * 80)
+    print(f"TEST: {client_name} - REQUIRE ACTION")
+    print("=" * 80)
+
+    # Create a submit_answer exit action
+    class SubmitAnswerParams(BaseModel):
+        """Submit the final answer with calculated metrics"""
+        answer: str = Field(description="Complete answer with all calculated metrics")
+
+    @action(schema=SubmitAnswerParams, exit=True)
+    def submit_answer(params: SubmitAnswerParams) -> ActionResult:
+        return ActionResult(content=f"Answer submitted: {params.answer}")
+
+    agent = Agent(
+        client=client,
+        system_prompt="""You are a financial analyst. You MUST:
+1. Use calculate_growth_metrics to calculate revenue growth from 2024 to 2025
+2. Use calculate_growth_metrics to calculate net income growth from 2024 to 2025
+3. Use submit_answer to provide your final answer
+
+You must call all three actions in order.""",
+        actions=[calculate_growth_metrics, submit_answer],
+        require_action=True,  # Force action usage
+        max_iter=10,
+        verbose=True
+    )
+
+    response = agent.run(f"Analyze Nvidia's performance:\n\n{NVIDIA_INCOME_STATEMENT}")
+
+    # Assertions
+    assert response.success, f"{client_name} require_action should complete successfully"
+    assert response.iterations >= 2, f"Should have multiple iterations (>=2), got {response.iterations}"
+
+    # Check that actions were called
+    action_calls = []
+    for msg in response.messages:
+        if msg.role == "assistant" and msg.actions:
+            for act in msg.actions:
+                action_calls.append(act.name)
+
+    assert len(action_calls) >= 2, f"Should call at least 2 actions with require_action=True, got {len(action_calls)}: {action_calls}"
+    assert "SubmitAnswerParams" in action_calls, f"Should call submit_answer (exit action), got: {action_calls}"
+
+    print(f"✓ {client_name} require_action: {response.iterations} iterations, {len(action_calls)} actions called")
+    print(f"  Actions: {action_calls}")
     print(f"✅ PASSED\n")
     return response
 
@@ -274,13 +352,23 @@ async def test_async_streaming(client_name, client):
 # Main
 # ============================================================================
 
-async def main():
+async def main(clients_filter=None):
     """Run all client tests"""
     print("\n" + "🧪 UNIFIED CLIENT TEST SUITE" + "\n")
 
+    # Filter clients if specified
+    clients_to_test = CLIENTS
+    if clients_filter:
+        clients_filter_lower = [c.lower() for c in clients_filter]
+        clients_to_test = [c for c in CLIENTS if c["name"].lower() in clients_filter_lower]
+        if not clients_to_test:
+            print(f"❌ No clients matched filter: {clients_filter}")
+            print(f"Available clients: {[c['name'] for c in CLIENTS]}")
+            return {}
+
     results = {}
 
-    for client_config in CLIENTS:
+    for client_config in clients_to_test:
         name = client_config["name"]
         print(f"\n{'='*80}")
         print(f"TESTING: {name}")
@@ -307,8 +395,18 @@ async def main():
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run client tests")
+    parser.add_argument(
+        "--clients",
+        nargs="+",
+        help="Specific clients to test (e.g., Anthropic OpenAI Grok Gemini). If not specified, all clients are tested."
+    )
+    args = parser.parse_args()
+
     try:
-        results = asyncio.run(main())
+        results = asyncio.run(main(clients_filter=args.clients))
 
         print("=" * 80)
         print("FINAL RESULTS")

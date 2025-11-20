@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jetflow"
-version = "1.0.4"
+version = "1.0.5"
 description = "Lightweight, production-ready framework for building agentic workflows with LLMs"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -28,11 +28,15 @@ classifiers = [
 dependencies = [
     "pydantic>=2.0",
     "httpx>=0.24.0",
+    "tiktoken>=0.5.0",
 ]
 
 [project.optional-dependencies]
 openai = ["openai>=1.0.0", "jiter>=0.5.0", "tenacity>=8.0.0"]
 anthropic = ["anthropic>=0.18.0", "jiter>=0.5.0", "tenacity>=8.0.0"]
+# Convenience aliases (use OpenAI SDK)
+grok = ["openai>=1.0.0", "jiter>=0.5.0", "tenacity>=8.0.0"]
+gemini = ["openai>=1.0.0", "jiter>=0.5.0", "tenacity>=8.0.0"]
 exec = ["numpy>=2.3.0", "pandas>=2.3.0"]
 all = [
     "openai>=1.0.0",

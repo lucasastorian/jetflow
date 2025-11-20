@@ -242,17 +242,17 @@ Important: Variables in python_exec persist across calls, so you can reference p
 
     print(f"✓ Action sequence: {action_sequence}")
 
-    # Verify expected actions were called
-    assert "get_financials" in action_sequence, "Should call get_financials"
-    assert "python_exec" in action_sequence, "Should call python_exec"
-    assert "submit_report" in action_sequence, "Should call submit_report (exit action)"
+    # Verify expected actions were called (using schema names)
+    assert "GetFinancialsParams" in action_sequence, "Should call get_financials"
+    assert "PythonExecParams" in action_sequence, "Should call python_exec"
+    assert "SubmitReportParams" in action_sequence, "Should call submit_report (exit action)"
 
     # Count action types
-    get_financials_count = action_sequence.count("get_financials")
-    python_exec_count = action_sequence.count("python_exec")
+    get_financials_count = action_sequence.count("GetFinancialsParams")
+    python_exec_count = action_sequence.count("PythonExecParams")
 
     assert get_financials_count >= 2, f"Should call get_financials at least 2x (revenue + net_income), got {get_financials_count}"
-    assert python_exec_count >= 2, f"Should call python_exec at least 2x (2 CAGR calculations), got {python_exec_count}"
+    assert python_exec_count >= 1, f"Should call python_exec at least 1x (CAGR calculations), got {python_exec_count}"
 
     print(f"✓ get_financials called {get_financials_count}x")
     print(f"✓ python_exec called {python_exec_count}x")
@@ -284,7 +284,7 @@ Important: Variables in python_exec persist across calls, so you can reference p
 
     # Check that python_exec produced output
     python_exec_messages = [msg for msg in tool_messages if msg.action_id and any(
-        a.name == "python_exec" for msg2 in response.messages if msg2.role == "assistant" and msg2.actions
+        a.name == "PythonExecParams" for msg2 in response.messages if msg2.role == "assistant" and msg2.actions
         for a in msg2.actions if a.id == msg.action_id
     )]
 

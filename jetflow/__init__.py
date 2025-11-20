@@ -27,6 +27,18 @@ from jetflow.core.events import (
 )
 from jetflow.utils.usage import Usage
 
+# Import clients (optional dependencies)
+try:
+    from jetflow.clients import (
+        AnthropicClient, AsyncAnthropicClient,
+        OpenAIClient, AsyncOpenAIClient,
+        GrokClient, AsyncGrokClient,
+        GeminiClient, AsyncGeminiClient,
+    )
+    _clients_available = True
+except ImportError:
+    _clients_available = False
+
 __all__ = [
     "__version__",
     "Agent",
@@ -57,3 +69,16 @@ __all__ = [
     "ActionExecutionStart",
     "ActionExecuted",
 ]
+
+# Add clients to __all__ if available
+if _clients_available:
+    __all__.extend([
+        "AnthropicClient",
+        "AsyncAnthropicClient",
+        "OpenAIClient",
+        "AsyncOpenAIClient",
+        "GrokClient",
+        "AsyncGrokClient",
+        "GeminiClient",
+        "AsyncGeminiClient",
+    ])
