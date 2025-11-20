@@ -42,13 +42,13 @@ class AnthropicClient(BaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        verbose: bool = True
+        logger: 'VerboseLogger' = None
     ) -> List[Message]:
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget
         )
-        return self._stream_with_retry(params, verbose)
+        return self._stream_with_retry(params, logger)
 
     def stream_events(
         self,
@@ -57,14 +57,14 @@ class AnthropicClient(BaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        verbose: bool = True
+        logger: 'VerboseLogger' = None
     ) -> Iterator[StreamEvent]:
         """Stream a completion and yield events in real-time"""
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget
         )
-        yield from self._stream_events_with_retry(params, verbose)
+        yield from self._stream_events_with_retry(params, logger)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -78,12 +78,12 @@ class AnthropicClient(BaseClient):
         )),
         reraise=True
     )
-    def _stream_events_with_retry(self, params: dict, verbose: bool) -> Iterator[StreamEvent]:
+    def _stream_events_with_retry(self, params: dict, logger) -> Iterator[StreamEvent]:
         """Create and consume a streaming response with retries, yielding events"""
         response = self.client.beta.messages.create(**params)
-        yield from self._stream_completion_events(response, verbose)
+        yield from self._stream_completion_events(response, logger)
 
-    def _stream_completion_events(self, response, verbose: bool) -> Iterator[StreamEvent]:
+    def _stream_completion_events(self, response, logger) -> Iterator[StreamEvent]:
         """Stream a chat completion and yield events"""
         completion = Message(
             role="assistant",
@@ -192,11 +192,11 @@ class AnthropicClient(BaseClient):
         )),
         reraise=True
     )
-    def _stream_with_retry(self, params: dict, verbose: bool) -> List[Message]:
+    def _stream_with_retry(self, params: dict, logger) -> List[Message]:
         response = self.client.beta.messages.create(**params)
-        return self._stream_completion(response, verbose)
+        return self._stream_completion(response, logger)
 
-    def _stream_completion(self, response, verbose: bool) -> List[Message]:
+    def _stream_completion(self, response, logger) -> List[Message]:
         completion = Message(
             role="assistant",
             status="in_progress",
@@ -214,8 +214,6 @@ class AnthropicClient(BaseClient):
             elif event.type == 'content_block_start':
                 if event.content_block.type == 'thinking':
                     completion.thoughts.append(Thought(id="", summaries=[""]))
-                    if verbose:
-                        print("Thinking: \n\n", sep="", end="")
 
                 elif event.content_block.type == 'text':
                     pass
@@ -233,8 +231,8 @@ class AnthropicClient(BaseClient):
             elif event.type == 'content_block_delta':
                 if event.delta.type == 'thinking_delta':
                     completion.thoughts[-1].summaries[0] += event.delta.thinking
-                    if verbose:
-                        print(event.delta.thinking, sep="", end="")
+                    if logger:
+                        logger.log_thought(event.delta.thinking)
 
                 elif event.delta.type == 'signature_delta':
                     completion.thoughts[-1].id += event.delta.signature
@@ -256,8 +254,8 @@ class AnthropicClient(BaseClient):
 
                 elif event.delta.type == 'text_delta':
                     completion.content += event.delta.text
-                    if verbose:
-                        print(event.delta.text, sep="", end="")
+                    if logger:
+                        logger.log_content(event.delta.text)
 
             elif event.type == 'content_block_stop':
                 pass

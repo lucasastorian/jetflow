@@ -32,10 +32,41 @@ class VerboseLogger:
             'green': '\033[92m',
             'magenta': '\033[95m',
             'yellow': '\033[93m',
+            'red': '\033[91m',
             'dim': '\033[2m',
             'reset': '\033[0m'
         }
         return f"{colors.get(color, '')}{text}{colors['reset']}"
+
+    def log_info(self, message: str):
+        """Log informational message"""
+        if not self.verbose:
+            return
+        print(f"{self._c('ℹ', 'cyan')} {message}", flush=True)
+
+    def log_warning(self, message: str):
+        """Log warning message"""
+        if not self.verbose:
+            return
+        print(f"{self._c('⚠', 'yellow')} {message}", flush=True)
+
+    def log_error(self, message: str):
+        """Log error message"""
+        if not self.verbose:
+            return
+        print(f"{self._c('✗', 'red')} {message}", flush=True)
+
+    def log_thought(self, content: str):
+        """Log LLM thinking/reasoning content"""
+        if not self.verbose:
+            return
+        print(f"\n{self._c('💭 Thinking:', 'magenta')}\n{content}\n", flush=True)
+
+    def log_content(self, content: str):
+        """Log LLM text content/response"""
+        if not self.verbose:
+            return
+        print(f"\n{self._c('Assistant:', 'cyan')}\n{content}\n", flush=True)
 
     def num_tokens(self, content: str) -> int:
         """

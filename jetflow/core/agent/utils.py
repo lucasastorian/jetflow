@@ -32,7 +32,7 @@ def prepare_sync_actions(actions: List[Union[Type[BaseAction], BaseAction]]) -> 
     instances = [a() if isinstance(a, type) else a for a in actions]
     for action in instances:
         if isinstance(action, AsyncBaseAction):
-            raise TypeError(f"Agent requires sync actions, got {type(action).__name__}. Use @action (not @async_action) or AsyncAgent instead.")
+            raise TypeError(f"Agent requires sync actions, got {type(action).__name__}. Use @action with sync functions/classes, or use AsyncAgent for async actions.")
     return instances
 
 

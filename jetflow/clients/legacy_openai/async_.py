@@ -19,7 +19,7 @@ from jetflow.core.action import BaseAction
 from jetflow.core.message import Message, Action
 from jetflow.core.events import MessageStart, MessageEnd, ContentDelta, ActionStart, ActionDelta, ActionEnd, StreamEvent
 from jetflow.clients.base import AsyncBaseClient
-from jetflow.clients.legacy_openai.utils import build_legacy_params, apply_legacy_usage, color_text
+from jetflow.clients.legacy_openai.utils import build_legacy_params, apply_legacy_usage
 
 
 class AsyncLegacyOpenAIClient(AsyncBaseClient):
@@ -52,7 +52,7 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         system_prompt: str,
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
-        verbose: bool = True
+        logger: 'VerboseLogger' = None
     ) -> List[Message]:
         """Stream a completion with the given messages. Returns list of Messages."""
         params = build_legacy_params(
@@ -61,9 +61,9 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         )
 
         if self.use_streaming:
-            return await self._stream_with_retry(params, verbose)
+            return await self._stream_with_retry(params, logger)
         else:
-            return await self._complete_with_retry(params, verbose)
+            return await self._complete_with_retry(params, logger)
 
     async def stream_events(
         self,
@@ -71,7 +71,7 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         system_prompt: str,
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
-        verbose: bool = True
+        logger: 'VerboseLogger' = None
     ) -> AsyncIterator[StreamEvent]:
         """Stream a completion and yield events in real-time"""
         params = build_legacy_params(
@@ -79,7 +79,7 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
             allowed_actions, self.reasoning_effort, stream_flag=True
         )
 
-        async for event in self._stream_events_with_retry(params, verbose):
+        async for event in self._stream_events_with_retry(params, logger):
             yield event
 
     @retry(
@@ -93,13 +93,13 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         )),
         reraise=True
     )
-    async def _stream_events_with_retry(self, params: dict, verbose: bool) -> AsyncIterator[StreamEvent]:
+    async def _stream_events_with_retry(self, params: dict, logger) -> AsyncIterator[StreamEvent]:
         """Create and consume a streaming response with retries, yielding events"""
         stream = await self.client.chat.completions.create(**params)
-        async for event in self._stream_completion_events(stream, verbose):
+        async for event in self._stream_completion_events(stream, logger):
             yield event
 
-    async def _stream_completion_events(self, response: AsyncStream, verbose: bool) -> AsyncIterator[StreamEvent]:
+    async def _stream_completion_events(self, response: AsyncStream, logger) -> AsyncIterator[StreamEvent]:
         """Stream a chat completion and yield events"""
         completion = Message(
             role="assistant",
@@ -178,16 +178,16 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         )),
         reraise=True
     )
-    async def _stream_with_retry(self, params: dict, verbose: bool) -> List[Message]:
+    async def _stream_with_retry(self, params: dict, logger) -> List[Message]:
         """Create and consume a streaming response with retries"""
         stream = await self.client.chat.completions.create(**params)
-        return await self._stream_completion(stream, verbose)
+        return await self._stream_completion(stream, logger)
 
-    async def _stream_completion(self, response: AsyncStream, verbose: bool) -> List[Message]:
+    async def _stream_completion(self, response: AsyncStream, logger) -> List[Message]:
         """Stream a chat completion and return final Message"""
         completion = None
 
-        async for event in self._stream_completion_events(response, verbose):
+        async for event in self._stream_completion_events(response, logger):
             if isinstance(event, MessageEnd):
                 completion = event.message
 
@@ -205,12 +205,12 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         )),
         reraise=True
     )
-    async def _complete_with_retry(self, params: dict, verbose: bool) -> List[Message]:
+    async def _complete_with_retry(self, params: dict, logger) -> List[Message]:
         """Create and consume a non-streaming response with retries"""
         response = await self.client.chat.completions.create(**params)
-        return self._parse_non_streaming_response(response, verbose)
+        return self._parse_non_streaming_response(response, logger)
 
-    def _parse_non_streaming_response(self, response, verbose: bool) -> List[Message]:
+    def _parse_non_streaming_response(self, response, logger) -> List[Message]:
         """Parse a non-streaming ChatCompletion response into Message objects"""
         completion = Message(
             role="assistant",
@@ -224,9 +224,8 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
 
         if message.content:
             completion.content = message.content
-            if verbose:
-                print(color_text('Assistant:', 'cyan') + "\n\n", sep="", end="")
-                print(completion.content + "\n\n", sep="", end="")
+            if logger:
+                logger.log_content(completion.content)
 
         if message.tool_calls:
             for tool_call in message.tool_calls:
@@ -242,9 +241,6 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
                     body=body
                 )
                 completion.actions.append(action)
-
-                if verbose:
-                    print(f"{color_text('Action:', 'cyan')} {tool_call.function.name}\n")
 
         if response.usage:
             apply_legacy_usage(response.usage, completion)

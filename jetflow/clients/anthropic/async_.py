@@ -43,13 +43,13 @@ class AsyncAnthropicClient(AsyncBaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        verbose: bool = True
+        logger: 'VerboseLogger' = None
     ) -> List[Message]:
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget
         )
-        return await self._stream_with_retry(params, verbose)
+        return await self._stream_with_retry(params, logger)
 
     async def stream_events(
         self,
@@ -58,14 +58,14 @@ class AsyncAnthropicClient(AsyncBaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        verbose: bool = True
+        logger: 'VerboseLogger' = None
     ) -> AsyncIterator[StreamEvent]:
         """Stream a completion and yield events in real-time"""
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget
         )
-        async for event in self._stream_events_with_retry(params, verbose):
+        async for event in self._stream_events_with_retry(params, logger):
             yield event
 
     @retry(
@@ -80,13 +80,13 @@ class AsyncAnthropicClient(AsyncBaseClient):
         )),
         reraise=True
     )
-    async def _stream_events_with_retry(self, params: dict, verbose: bool) -> AsyncIterator[StreamEvent]:
+    async def _stream_events_with_retry(self, params: dict, logger) -> AsyncIterator[StreamEvent]:
         """Create and consume a streaming response with retries, yielding events"""
         response = await self.client.beta.messages.create(**params)
-        async for event in self._stream_completion_events(response, verbose):
+        async for event in self._stream_completion_events(response, logger):
             yield event
 
-    async def _stream_completion_events(self, response: AsyncStream, verbose: bool) -> AsyncIterator[StreamEvent]:
+    async def _stream_completion_events(self, response: AsyncStream, logger) -> AsyncIterator[StreamEvent]:
         """Stream a chat completion and yield events"""
         completion = Message(
             role="assistant",
@@ -195,12 +195,12 @@ class AsyncAnthropicClient(AsyncBaseClient):
         )),
         reraise=True
     )
-    async def _stream_with_retry(self, params: dict, verbose: bool) -> List[Message]:
+    async def _stream_with_retry(self, params: dict, logger) -> List[Message]:
         """Create and consume a streaming response with retries"""
         response = await self.client.beta.messages.create(**params)
-        return await self._stream_completion(response, verbose)
+        return await self._stream_completion(response, logger)
 
-    async def _stream_completion(self, response: AsyncStream, verbose: bool) -> List[Message]:
+    async def _stream_completion(self, response: AsyncStream, logger) -> List[Message]:
         """Stream an Anthropic completion and return final Message"""
         completion = Message(
             role="assistant",
@@ -219,8 +219,6 @@ class AsyncAnthropicClient(AsyncBaseClient):
             elif event.type == 'content_block_start':
                 if event.content_block.type == 'thinking':
                     completion.thoughts.append(Thought(id="", summaries=[""]))
-                    if verbose:
-                        print("Thinking: \n\n", sep="", end="")
 
                 elif event.content_block.type == 'text':
                     pass
@@ -238,8 +236,8 @@ class AsyncAnthropicClient(AsyncBaseClient):
             elif event.type == 'content_block_delta':
                 if event.delta.type == 'thinking_delta':
                     completion.thoughts[-1].summaries[0] += event.delta.thinking
-                    if verbose:
-                        print(event.delta.thinking, sep="", end="")
+                    if logger:
+                        logger.log_thought(event.delta.thinking)
 
                 elif event.delta.type == 'signature_delta':
                     completion.thoughts[-1].id += event.delta.signature
@@ -261,12 +259,11 @@ class AsyncAnthropicClient(AsyncBaseClient):
 
                 elif event.delta.type == 'text_delta':
                     completion.content += event.delta.text
-                    if verbose:
-                        print(event.delta.text, sep="", end="")
+                    if logger:
+                        logger.log_content(event.delta.text)
 
             elif event.type == 'content_block_stop':
-                if verbose and completion.thoughts and completion.thoughts[-1].summaries:
-                    print("\n\n")
+                pass
 
             elif event.type == 'message_delta':
                 apply_usage_to_message(event.usage, completion)

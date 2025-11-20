@@ -57,8 +57,20 @@ class ActionSchemaMixin:
 
     @property
     def openai_legacy_schema(self) -> dict:
-        """Legacy ChatCompletions format (same as openai_schema)"""
-        return self.openai_schema
+        """Legacy ChatCompletions format - wraps function schema in 'function' key"""
+        schema = self.schema.model_json_schema()
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": schema.get("description", ""),
+                "parameters": {
+                    "type": "object",
+                    "properties": schema.get("properties", {}),
+                    "required": schema.get("required", [])
+                }
+            }
+        }
 
 
 class BaseAction(ActionSchemaMixin, ABC):
@@ -108,25 +120,38 @@ def _validate_custom_field(schema: type[BaseModel], custom_field: str):
 
 
 def action(schema: type[BaseModel], exit: bool = False, custom_field: str = None):
-    """Decorator for sync actions
+    """Decorator for actions (auto-detects sync vs async)
 
     Args:
         schema: Pydantic model defining the action parameters
         exit: Whether this action exits the agent loop
         custom_field: Field name to use for OpenAI custom tools (raw string, no JSON escaping).
                      Only works with single-field Pydantic models where custom_field is the only field.
+
+    This decorator automatically detects whether the action is sync or async:
+    - For functions: checks if it's a coroutine function
+    - For classes: checks if __call__ is a coroutine function
     """
-    from jetflow.core._action_wrappers import _wrap_function_action, _wrap_class_action
+    import asyncio
+    from jetflow.core._action_wrappers import (
+        _wrap_function_action, _wrap_class_action,
+        _wrap_async_function_action, _wrap_async_class_action
+    )
 
     # Validate custom_field configuration
     if custom_field is not None:
         _validate_custom_field(schema, custom_field)
 
     def decorator(target):
+        # Determine if target is sync or async
         if isinstance(target, type):
-            wrapper = _wrap_class_action(target, schema, exit)
+            # Class-based action: check if __call__ is async
+            is_async = asyncio.iscoroutinefunction(target.__call__)
+            wrapper = _wrap_async_class_action(target, schema, exit) if is_async else _wrap_class_action(target, schema, exit)
         else:
-            wrapper = _wrap_function_action(target, schema, exit)
+            # Function-based action: check if function is async
+            is_async = asyncio.iscoroutinefunction(target)
+            wrapper = _wrap_async_function_action(target, schema, exit) if is_async else _wrap_function_action(target, schema, exit)
 
         # Set custom tool properties
         wrapper._use_custom = (custom_field is not None)
@@ -135,29 +160,3 @@ def action(schema: type[BaseModel], exit: bool = False, custom_field: str = None
     return decorator
 
 
-def async_action(schema: type[BaseModel], exit: bool = False, custom_field: str = None):
-    """Decorator for async actions
-
-    Args:
-        schema: Pydantic model defining the action parameters
-        exit: Whether this action exits the agent loop
-        custom_field: Field name to use for OpenAI custom tools (raw string, no JSON escaping).
-                     Only works with single-field Pydantic models where custom_field is the only field.
-    """
-    from jetflow.core._action_wrappers import _wrap_async_function_action, _wrap_async_class_action
-
-    # Validate custom_field configuration
-    if custom_field is not None:
-        _validate_custom_field(schema, custom_field)
-
-    def decorator(target):
-        if isinstance(target, type):
-            wrapper = _wrap_async_class_action(target, schema, exit)
-        else:
-            wrapper = _wrap_async_function_action(target, schema, exit)
-
-        # Set custom tool properties
-        wrapper._use_custom = (custom_field is not None)
-        wrapper._custom_field = custom_field
-        return wrapper
-    return decorator

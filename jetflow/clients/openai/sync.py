@@ -11,7 +11,7 @@ from jetflow.core.action import BaseAction
 from jetflow.core.message import Message, Action, Thought, WebSearch
 from jetflow.core.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
 from jetflow.clients.base import BaseClient
-from jetflow.clients.openai.utils import build_response_params, apply_usage_to_message, color_text
+from jetflow.clients.openai.utils import build_response_params, apply_usage_to_message
 
 
 class OpenAIClient(BaseClient):
@@ -48,7 +48,7 @@ class OpenAIClient(BaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        verbose: bool = True,
+        logger: 'VerboseLogger' = None,
         tool_choice: str = None
     ) -> List[Message]:
         """Stream a completion with the given messages. Returns list of Messages (multiple if web searches occur)."""
@@ -67,9 +67,9 @@ class OpenAIClient(BaseClient):
         )
 
         if self.use_streaming:
-            return self._stream_with_retry(params, actions, verbose)
+            return self._stream_with_retry(params, actions, logger)
         else:
-            return self._complete_with_retry(params, actions, verbose)
+            return self._complete_with_retry(params, actions, logger)
 
     def stream_events(
         self,
@@ -78,7 +78,7 @@ class OpenAIClient(BaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        verbose: bool = True,
+        logger: 'VerboseLogger' = None,
         tool_choice: str = None
     ) -> Iterator[StreamEvent]:
         """Stream a completion and yield events in real-time"""
@@ -96,7 +96,7 @@ class OpenAIClient(BaseClient):
             tool_choice=tool_choice
         )
 
-        yield from self._stream_events_with_retry(params, actions, verbose)
+        yield from self._stream_events_with_retry(params, actions, logger)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -113,13 +113,13 @@ class OpenAIClient(BaseClient):
         )),
         reraise=True
     )
-    def _stream_events_with_retry(self, params: dict, actions: List[BaseAction], verbose: bool) -> Iterator[StreamEvent]:
+    def _stream_events_with_retry(self, params: dict, actions: List[BaseAction], logger) -> Iterator[StreamEvent]:
         """Create and consume a streaming response with retries, yielding events"""
         stream = self.client.responses.create(**params)
-        yield from self._stream_completion_events(stream, actions, verbose)
+        yield from self._stream_completion_events(stream, actions, logger)
 
     @staticmethod
-    def _stream_completion_events(response, actions: List[BaseAction], verbose: bool) -> Iterator[StreamEvent]:
+    def _stream_completion_events(response, actions: List[BaseAction], logger) -> Iterator[StreamEvent]:
         """Stream a chat completion and yield events"""
         completion = Message(
             role="assistant",
@@ -176,8 +176,6 @@ class OpenAIClient(BaseClient):
 
                 elif event.item.type == 'message':
                     completion.external_id = event.item.id
-                    if verbose:
-                        print("", flush=True)  # Add separator before response
 
                 elif event.item.type == 'web_search_call':
                         current_web_search = Message(
@@ -262,8 +260,7 @@ class OpenAIClient(BaseClient):
                 yield ContentDelta(delta=event.delta)
 
             elif event.type == 'response.output_text.done':
-                if verbose and completion.content:
-                    print("\n\n", sep="", end="")
+                pass
 
             elif event.type == 'response.content_part.done':
                 pass
@@ -297,17 +294,17 @@ class OpenAIClient(BaseClient):
         )),
         reraise=True
     )
-    def _stream_with_retry(self, params: dict, actions: List[BaseAction], verbose: bool) -> List[Message]:
+    def _stream_with_retry(self, params: dict, actions: List[BaseAction], logger) -> List[Message]:
         """Create and consume a streaming response with retries"""
         stream = self.client.responses.create(**params)
-        return self._stream_completion(stream, actions, verbose)
+        return self._stream_completion(stream, actions, logger)
 
-    def _stream_completion(self, response, actions: List[BaseAction], verbose: bool) -> List[Message]:
+    def _stream_completion(self, response, actions: List[BaseAction], logger) -> List[Message]:
         """Stream a chat completion and return list of Messages (main message + web searches)"""
         messages = []
         completion = None
 
-        for event in self._stream_completion_events(response, actions, verbose):
+        for event in self._stream_completion_events(response, actions, logger):
             if isinstance(event, MessageEnd):
                 if event.message.web_search:
                     messages.append(event.message)
@@ -336,12 +333,12 @@ class OpenAIClient(BaseClient):
         )),
         reraise=True
     )
-    def _complete_with_retry(self, params: dict, actions: List[BaseAction], verbose: bool) -> List[Message]:
+    def _complete_with_retry(self, params: dict, actions: List[BaseAction], logger) -> List[Message]:
         """Create and consume a non-streaming response with retries"""
         response = self.client.responses.create(**params)
-        return self._parse_non_streaming_response(response, actions, verbose)
+        return self._parse_non_streaming_response(response, actions, logger)
 
-    def _parse_non_streaming_response(self, response, actions: List[BaseAction], verbose: bool) -> List[Message]:
+    def _parse_non_streaming_response(self, response, actions: List[BaseAction], logger) -> List[Message]:
         """Parse a non-streaming response into Message objects"""
         completion = Message(
             role="assistant",
@@ -363,11 +360,9 @@ class OpenAIClient(BaseClient):
                 )
                 completion.thoughts.append(thought)
 
-                if verbose and thought.summaries:
-                    print(color_text("Thinking:", "yellow") + "\n")
+                if logger and thought.summaries:
                     for summary in thought.summaries:
-                        print(f"- {summary}\n")
-                    print()
+                        logger.log_thought(summary)
 
             elif item.type == 'function_call':
                 try:
@@ -384,9 +379,6 @@ class OpenAIClient(BaseClient):
                 )
                 completion.actions.append(action)
 
-                if verbose:
-                    print(f"{color_text('Action:', 'cyan')} {item.name}\n")
-
             elif item.type == 'custom_tool_call':
                 base_action = action_lookup.get(item.name)
                 field_name = base_action._custom_field if base_action else "input"
@@ -401,9 +393,6 @@ class OpenAIClient(BaseClient):
                 )
                 completion.actions.append(action)
 
-                if verbose:
-                    print(f"{color_text('Action:', 'cyan')} {item.name}\n")
-
             elif item.type == 'web_search_call':
                 web_search_msg = Message(
                     role="assistant",
@@ -415,23 +404,16 @@ class OpenAIClient(BaseClient):
                 )
                 messages.append(web_search_msg)
 
-                if verbose:
-                    print(f"Searched Web: {item.action.query}\n")
-
             elif item.type == 'message':
                 completion.external_id = item.id
                 for content_item in item.content:
                     completion.content += content_item.text
 
-                if verbose and completion.content:
-                    print(color_text('Assistant:', 'cyan') + "\n")
-                    print(completion.content + "\n\n")
+                if logger and completion.content:
+                    logger.log_content(completion.content)
 
         if response.usage:
             apply_usage_to_message(response.usage, completion)
-
-        if verbose:
-            print(f"\nParsed: {len(completion.thoughts)} thoughts, {len(completion.actions)} actions, {len(messages)} web searches\n")
 
         if not messages:
             return [completion]

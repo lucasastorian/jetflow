@@ -6,7 +6,7 @@ from typing import List, Optional, Union, Callable, Type, AsyncIterator, Literal
 
 from pydantic import BaseModel, Field
 from jetflow.clients.base import AsyncBaseClient
-from jetflow.core.action import BaseAction, AsyncBaseAction, async_action
+from jetflow.core.action import BaseAction, AsyncBaseAction, action
 from jetflow.core.message import Message, Action
 from jetflow.core.response import AgentResponse, ActionFollowUp
 from jetflow.core.events import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted
@@ -148,7 +148,7 @@ class AsyncAgent:
         if self._is_final_step() or self._approaching_context_limit(system_prompt):
             allowed_actions = self._get_final_step_allowed_actions()
 
-        completions = await self.client.stream(messages=self.messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions)
+        completions = await self.client.stream(messages=self.messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions, logger=self.logger)
         self.messages.extend(completions)
         self.num_iter += 1
         return await self._call_actions(completions[-1], actions)
@@ -218,7 +218,7 @@ class AsyncAgent:
             allowed_actions = self._get_final_step_allowed_actions()
 
         completion_messages = []
-        async for event in self.client.stream_events(messages=self.messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions):
+        async for event in self.client.stream_events(messages=self.messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions, logger=self.logger):
             if mode == "messages":
                 if isinstance(event, MessageEnd):
                     completion_messages.append(event.message)
@@ -318,7 +318,7 @@ class AsyncAgent:
 
         agent_ref = self
 
-        @async_action(schema=AgentActionSchema)
+        @action(schema=AgentActionSchema)
         async def agent_action_wrapper(params: AgentActionSchema) -> str:
             """Wrapper that calls the agent"""
             agent_ref.reset()
