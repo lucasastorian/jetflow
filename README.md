@@ -223,33 +223,38 @@ resp = await agent.run("What is 25 * 4 + 10?")
 Stream events in real-time as the agent executes. Perfect for UI updates, progress bars, and live feedback.
 
 ```python
-from jetflow import ContentDelta, ActionStart, ActionEnd, MessageEnd
+from jetflow import AgentResponse, ContentDelta, ActionExecutionStart, ActionExecuted, MessageEnd
 
-with agent.stream("What is 25 * 4 + 10?") as events:
-    for event in events:
-        if isinstance(event, ContentDelta):
-            print(event.delta, end="", flush=True)  # Stream text as it arrives
+response = None
+for event in agent.stream("What is 25 * 4 + 10?"):
+    if isinstance(event, AgentResponse):
+        response = event  # Final event with full results
 
-        elif isinstance(event, ActionStart):
-            print(f"\n[Calling {event.name}...]")
+    elif isinstance(event, ContentDelta):
+        print(event.delta, end="", flush=True)  # Stream text as it arrives
 
-        elif isinstance(event, ActionEnd):
-            print(f"✓ {event.name}({event.body})")
+    elif isinstance(event, ActionExecutionStart):
+        print(f"\n[Calling {event.name}...]")
 
-        elif isinstance(event, MessageEnd):
-            final = event.message  # Complete message with all content
+    elif isinstance(event, ActionExecuted):
+        print(f"✓ {event.name}")
+
+    elif isinstance(event, MessageEnd):
+        final = event.message  # Complete message with all content
 ```
 
-**Two modes:**
-- **`mode="deltas"`** (default): Stream granular events (ContentDelta, ActionStart, ActionDelta, ActionEnd)
-- **`mode="messages"`**: Stream only complete Message objects (MessageEnd events)
+**Event flow:**
+- Yields streaming events (`MessageStart`, `ContentDelta`, `ActionExecutionStart`, `ActionExecuted`, `MessageEnd`)
+- Final event is always `AgentResponse` with full results
 
 **Works for chains too:**
 ```python
-with chain.stream("Research and analyze") as events:
-    for event in events:
-        if isinstance(event, ContentDelta):
-            print(event.delta, end="")
+response = None
+for event in chain.stream("Research and analyze"):
+    if isinstance(event, AgentResponse):
+        response = event
+    elif isinstance(event, ContentDelta):
+        print(event.delta, end="")
 ```
 
 → **[Learn more: Streaming Guide](https://jetflow.readthedocs.io/streaming)**

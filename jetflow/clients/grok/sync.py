@@ -15,7 +15,7 @@ class GrokClient(LegacyOpenAIClient):
 
     def __init__(
         self,
-        model: str = "grok-4-fast-non-reasoning",
+        model: str = "grok-4-1-fast-non-reasoning",
         api_key: str = None,
         temperature: float = 1.0,
         reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = None
@@ -24,7 +24,7 @@ class GrokClient(LegacyOpenAIClient):
         Initialize Grok client.
 
         Args:
-            model: Grok model to use (default: grok-4-fast-non-reasoning)
+            model: Grok model to use (default: grok-4-1-fast-non-reasoning)
             api_key: xAI API key (defaults to XAI_API_KEY env var)
             temperature: Sampling temperature
             reasoning_effort: Reasoning effort level for reasoning models

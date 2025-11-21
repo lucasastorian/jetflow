@@ -22,7 +22,7 @@ def test_error_logging():
     """Test that validation and execution errors are logged"""
 
     agent = Agent(
-        client=LegacyOpenAIClient(model="gpt-4o-mini"),
+        client=LegacyOpenAIClient(model="gpt-5-mini"),
         actions=[divide],
         verbose=True
     )

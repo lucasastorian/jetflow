@@ -165,6 +165,8 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
                 yield ActionEnd(id=action.id, name=action.name, body=action.body)
 
         completion.status = 'completed'
+        # NOTE: MessageEnd must ALWAYS be emitted as final event - agent assumes this
+        # If stream fails before this point, agent will raise IndexError on completion_messages[-1]
         yield MessageEnd(message=completion)
 
     @retry(

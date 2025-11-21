@@ -10,6 +10,7 @@ from jetflow.core.response import AgentResponse, ActionFollowUp
 from jetflow.core.citations import CitationManager
 from jetflow.utils.usage import Usage
 from jetflow.utils.pricing import calculate_cost
+from jetflow.utils.timer import Timer
 
 try:
     import tiktoken
@@ -18,26 +19,68 @@ except ImportError:
     TIKTOKEN_AVAILABLE = False
 
 
-def validate_sync_client(client: BaseClient):
-    if isinstance(client, AsyncBaseClient):
-        raise TypeError("Agent requires BaseClient, got AsyncBaseClient. Use AsyncAgent instead.")
+def validate_client(client: BaseClient, is_async: bool):
+    """Validate client type matches agent type.
+
+    Args:
+        client: Client instance to validate
+        is_async: True for AsyncAgent, False for Agent
+
+    Raises:
+        TypeError: If client type doesn't match agent type
+    """
+    if is_async:
+        if not isinstance(client, AsyncBaseClient):
+            raise TypeError("AsyncAgent requires AsyncBaseClient, got BaseClient. Use Agent instead.")
+    else:
+        if isinstance(client, AsyncBaseClient):
+            raise TypeError("Agent requires BaseClient, got AsyncBaseClient. Use AsyncAgent instead.")
 
 
-def validate_async_client(client: AsyncBaseClient):
-    if not isinstance(client, AsyncBaseClient):
-        raise TypeError("AsyncAgent requires AsyncBaseClient, got BaseClient. Use Agent instead.")
+def prepare_and_validate_actions(
+    actions: List[Union[Type[BaseAction], Type[AsyncBaseAction], BaseAction, AsyncBaseAction]],
+    require_action: bool,
+    is_async: bool
+) -> List[Union[BaseAction, AsyncBaseAction]]:
+    """Prepare action instances and validate configuration.
 
+    Args:
+        actions: List of action classes or instances
+        require_action: Whether agent requires action calls
+        is_async: True for AsyncAgent, False for Agent
 
-def prepare_sync_actions(actions: List[Union[Type[BaseAction], BaseAction]]) -> List[BaseAction]:
+    Returns:
+        List of prepared action instances
+
+    Raises:
+        TypeError: If action type doesn't match agent type
+        ValueError: If configuration is invalid
+    """
     instances = [a() if isinstance(a, type) else a for a in actions]
-    for action in instances:
-        if isinstance(action, AsyncBaseAction):
-            raise TypeError(f"Agent requires sync actions, got {type(action).__name__}. Use @action with sync functions/classes, or use AsyncAgent for async actions.")
+
+    if not is_async:
+        for action in instances:
+            if isinstance(action, AsyncBaseAction):
+                raise TypeError(
+                    f"Agent requires sync actions, got {type(action).__name__}. "
+                    "Use @action with sync functions/classes, or use AsyncAgent for async actions."
+                )
+
+    if require_action and not instances:
+        raise ValueError(
+            "require_action=True requires at least one action. "
+            "Either provide actions or set require_action=False."
+        )
+
+    if require_action:
+        exit_actions = [a for a in instances if getattr(a, '_is_exit', False)]
+        if not exit_actions:
+            raise ValueError(
+                "require_action=True requires at least one exit action. "
+                "Mark an action with exit=True: @action(schema, exit=True)"
+            )
+
     return instances
-
-
-def prepare_async_actions(actions: List[Union[Type[BaseAction], Type[AsyncBaseAction], BaseAction, AsyncBaseAction]]) -> List[Union[BaseAction, AsyncBaseAction]]:
-    return [a() if isinstance(a, type) else a for a in actions]
 
 
 def calculate_usage(messages: List[Message], provider: str, model: str) -> Usage:
@@ -61,43 +104,32 @@ def calculate_usage(messages: List[Message], provider: str, model: str) -> Usage
     return usage
 
 
-def build_agent_response(
-    messages: List[Message],
-    citation_manager: CitationManager,
-    client_provider: str,
-    client_model: str,
-    start_time: datetime.datetime,
-    end_time: datetime.datetime,
-    success: bool,
-    iterations: int
-) -> AgentResponse:
+def _build_response(agent, timer: Timer, success: bool) -> AgentResponse:
     """Build agent response with citations and usage calculation"""
-    # Ensure end_time is set (may be None if called before context manager exit)
-    if end_time is None:
-        end_time = datetime.datetime.now()
+    end_time = timer.end_time if timer.end_time is not None else datetime.datetime.now()
 
-    if not messages:
+    if not agent.messages:
         return AgentResponse(
             content="",
             messages=[],
-            usage=calculate_usage([], client_provider, client_model),
+            usage=calculate_usage([], agent.client.provider, agent.client.model),
             duration=0.0,
-            iterations=iterations,
+            iterations=agent.num_iter,
             success=success
         )
 
-    last_message = messages[-1]
+    last_message = agent.messages[-1]
     if last_message.role == 'assistant':
-        used_citations = citation_manager.get_used_citations(last_message.content)
+        used_citations = agent.citation_manager.get_used_citations(last_message.content)
         if used_citations:
             last_message.citations = used_citations
 
     return AgentResponse(
         content=last_message.content,
-        messages=messages.copy(),
-        usage=calculate_usage(messages, client_provider, client_model),
-        duration=(end_time - start_time).total_seconds(),
-        iterations=iterations,
+        messages=agent.messages.copy(),
+        usage=calculate_usage(agent.messages, agent.client.provider, agent.client.model),
+        duration=(end_time - timer.start_time).total_seconds(),
+        iterations=agent.num_iter,
         success=success
     )
 
@@ -115,7 +147,7 @@ def find_action(name: str, actions: List[BaseAction]) -> Optional[BaseAction]:
     return next((a for a in actions if a.name == name), None)
 
 
-def handle_no_actions(require_action: bool, messages: List[Message]) -> Optional[List[ActionFollowUp]]:
+def handle_no_actions(require_action: bool, messages: List[Message], logger=None) -> Optional[List[ActionFollowUp]]:
     """Handle when LLM doesn't call any actions.
 
     Returns:
@@ -123,7 +155,10 @@ def handle_no_actions(require_action: bool, messages: List[Message]) -> Optional
         [] if actions required (continue with error message)
     """
     if require_action:
-        logging.warning("LLM did not call any action, but require_action=True. Sending error message to LLM.")
+        if logger:
+            logger.log_warning("LLM did not call any action, but require_action=True. Sending error message to LLM.")
+        else:
+            logging.warning("LLM did not call any action, but require_action=True. Sending error message to LLM.")
 
         # Send as user message, not tool response (LLM didn't make a tool call to respond to)
         messages.append(Message(
@@ -135,15 +170,20 @@ def handle_no_actions(require_action: bool, messages: List[Message]) -> Optional
     return None
 
 
-def handle_action_not_found(called_action: Action, actions: List[BaseAction], messages: List[Message]):
+def handle_action_not_found(called_action: Action, actions: List[BaseAction], messages: List[Message], logger=None):
     """Handle when LLM calls non-existent action"""
     available_names = [a.name for a in actions]
 
-    logging.warning(
+    message = (
         f"LLM called non-existent action '{called_action.name}'. "
         f"Available actions: {available_names}. "
         f"Action body: {called_action.body}"
     )
+
+    if logger:
+        logger.log_warning(message)
+    else:
+        logging.warning(message)
 
     messages.append(Message(
         role="tool",
@@ -158,11 +198,8 @@ def reset_agent_state(agent_instance):
     """Reset core agent state for fresh execution"""
     agent_instance.messages = []
     agent_instance.num_iter = 0
-    agent_instance.start_time = None
-    agent_instance.end_time = None
-    agent_instance.last_action_duration = 0
-    agent_instance.citation_manager.reset()
-    agent_instance._should_exit_stream = False
+    if hasattr(agent_instance, 'citation_manager'):
+        agent_instance.citation_manager.reset()
 
 
 def count_message_tokens(messages: List[Message], system_prompt: str) -> int:

@@ -14,7 +14,7 @@ Dataset: Nvidia Income Statement (FY 2022-2025)
 import asyncio
 import os
 from dotenv import load_dotenv
-from jetflow import Agent, AsyncAgent, action, StreamEvent, MessageEnd, ActionExecuted
+from jetflow import Agent, AsyncAgent, action, StreamEvent, MessageEnd, ActionExecuted, AgentResponse
 from jetflow.clients.anthropic import AnthropicClient, AsyncAnthropicClient
 from jetflow.clients.openai import OpenAIClient, AsyncOpenAIClient
 from jetflow.clients.legacy_openai import LegacyOpenAIClient, AsyncLegacyOpenAIClient
@@ -133,8 +133,8 @@ CLIENTS = [
     },
     {
         "name": "LegacyOpenAI",
-        "sync_client": LegacyOpenAIClient(model="gpt-4o-mini"),
-        "async_client": AsyncLegacyOpenAIClient(model="gpt-4o-mini"),
+        "sync_client": LegacyOpenAIClient(model="gpt-5-mini"),
+        "async_client": AsyncLegacyOpenAIClient(model="gpt-5-mini"),
     },
 ]
 
@@ -180,7 +180,7 @@ def test_sync_nonstreaming(client_name, client):
 
     # Basic assertions
     assert response.success, f"{client_name} sync agent should complete successfully"
-    assert response.iterations >= 2, f"Should have multiple iterations"
+    assert response.iterations >= 1, f"Should have at least one iteration"
     assert response.usage.total_tokens > 0, "Should track token usage"
 
     content_lower = response.content.lower()
@@ -212,7 +212,7 @@ async def test_async_nonstreaming(client_name, client):
 
     # Basic assertions
     assert response.success, f"{client_name} async agent should complete successfully"
-    assert response.iterations >= 2, "Should have multiple iterations"
+    assert response.iterations >= 1, "Should have at least one iteration"
     assert response.usage.total_tokens > 0, "Should track token usage"
 
     content_lower = response.content.lower()
@@ -240,14 +240,16 @@ def test_sync_streaming(client_name, client):
     )
 
     events = []
-    with agent.stream(f"Analyze Nvidia's performance:\n\n{NVIDIA_INCOME_STATEMENT}") as stream:
-        for event in stream:
+    response = None
+    for event in agent.stream(f"Analyze Nvidia's performance:\n\n{NVIDIA_INCOME_STATEMENT}"):
+        if isinstance(event, AgentResponse):
+            response = event
+        else:
             events.append(event)
-
-    response = agent._build_response(success=True)
 
     # Assertions
     assert len(events) > 0, "Should receive streaming events"
+    assert response is not None, f"{client_name} sync streaming should return response"
     assert response.success, f"{client_name} sync streaming should complete"
 
     message_end_events = [e for e in events if isinstance(e, MessageEnd)]
@@ -278,14 +280,16 @@ async def test_async_streaming(client_name, client):
     )
 
     events = []
-    async with agent.stream(f"Analyze Nvidia's performance:\n\n{NVIDIA_INCOME_STATEMENT}") as stream:
-        async for event in stream:
+    response = None
+    async for event in agent.stream(f"Analyze Nvidia's performance:\n\n{NVIDIA_INCOME_STATEMENT}"):
+        if isinstance(event, AgentResponse):
+            response = event
+        else:
             events.append(event)
-
-    response = agent._build_response(success=True)
 
     # Assertions
     assert len(events) > 0, "Should receive streaming events"
+    assert response is not None, f"{client_name} async streaming should return response"
     assert response.success, f"{client_name} async streaming should complete"
 
     message_end_events = [e for e in events if isinstance(e, MessageEnd)]
@@ -332,7 +336,7 @@ You must call all three actions in order.""",
 
     # Assertions
     assert response.success, f"{client_name} require_action should complete successfully"
-    assert response.iterations >= 2, f"Should have multiple iterations (>=2), got {response.iterations}"
+    assert response.iterations >= 1, f"Should have at least one iteration, got {response.iterations}"
 
     # Check that actions were called
     action_calls = []

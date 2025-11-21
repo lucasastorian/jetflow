@@ -17,6 +17,18 @@ class ActionFollowUp:
 
 
 @dataclass
+class StepResult:
+    """Result from executing one agent step (LLM call + actions)"""
+    is_exit: bool
+    follow_ups: List[ActionFollowUp]
+
+    def __post_init__(self):
+        """Ensure follow_ups is never None"""
+        if self.follow_ups is None:
+            self.follow_ups = []
+
+
+@dataclass
 class ActionResponse:
     """Response from an action execution"""
     message: 'Message'

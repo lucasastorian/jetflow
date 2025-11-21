@@ -1,9 +1,10 @@
 """Verbose logging utilities for agents and chains"""
 
 import tiktoken
+from jetflow.utils.base_logger import BaseLogger
 
 
-class VerboseLogger:
+class VerboseLogger(BaseLogger):
     """
     Handles verbose logging for agents and chains.
 

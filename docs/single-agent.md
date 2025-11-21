@@ -158,21 +158,24 @@ Stream events in real-time as your agent executes. Perfect for UI updates, progr
 ### Basic Streaming
 
 ```python
-from jetflow import ContentDelta, ActionStart, ActionEnd, MessageEnd
+from jetflow import AgentResponse, ContentDelta, ActionExecutionStart, ActionExecuted, MessageEnd
 
-with agent.stream("What is 25 * 4?") as events:
-    for event in events:
-        if isinstance(event, ContentDelta):
-            print(event.delta, end="", flush=True)
+response = None
+for event in agent.stream("What is 25 * 4?"):
+    if isinstance(event, AgentResponse):
+        response = event
 
-        elif isinstance(event, ActionStart):
-            print(f"\n[Calling {event.name}...]")
+    elif isinstance(event, ContentDelta):
+        print(event.delta, end="", flush=True)
 
-        elif isinstance(event, ActionEnd):
-            print(f"✓ {event.name}({event.body})")
+    elif isinstance(event, ActionExecutionStart):
+        print(f"\n[Calling {event.name}...]")
 
-        elif isinstance(event, MessageEnd):
-            final_message = event.message
+    elif isinstance(event, ActionExecuted):
+        print(f"✓ {event.name}")
+
+    elif isinstance(event, MessageEnd):
+        final_message = event.message
 ```
 
 ### Event Types
@@ -191,30 +194,23 @@ class ContentDelta:
     delta: str
 ```
 
-**ActionStart** - Tool call begins
+**ActionExecutionStart** - Tool call begins
 ```python
 @dataclass
-class ActionStart:
+class ActionExecutionStart:
     id: str
     name: str
+    body: dict
 ```
 
-**ActionDelta** - Partially parsed tool args (as JSON streams)
+**ActionExecuted** - Tool execution completes
 ```python
 @dataclass
-class ActionDelta:
-    id: str
-    name: str
-    body: dict  # Incrementally parsed
-```
-
-**ActionEnd** - Tool call completes
-```python
-@dataclass
-class ActionEnd:
-    id: str
-    name: str
-    body: dict  # Final parsed body
+class ActionExecuted:
+    message: Message  # Tool result message
+    summary: str      # Action summary
+    follow_up: Optional[ActionFollowUp]
+    is_exit: bool     # Whether this was an exit action
 ```
 
 **MessageEnd** - Complete message with all content
@@ -224,20 +220,22 @@ class MessageEnd:
     message: Message
 ```
 
-### Streaming Modes
+### Event Flow
 
-**Deltas mode (default):** Stream all granular events
+The stream yields events in this order:
 ```python
-with agent.stream("query") as events:
-    # Yields: MessageStart, ContentDelta, ActionStart, ActionDelta, ActionEnd, MessageEnd
+for event in agent.stream("query"):
+    # Yields: MessageStart, ContentDelta, ActionExecutionStart, ActionExecuted, MessageEnd, AgentResponse (final)
+    pass
 ```
 
-**Messages mode:** Stream only complete messages
+**AgentResponse** is always the final event yielded:
 ```python
-with agent.stream("query", mode="messages") as events:
-    for event in events:
-        # Only MessageEnd events
-        save_to_db(event.message)
+response = None
+for event in agent.stream("query"):
+    if isinstance(event, AgentResponse):
+        response = event  # Last event
+        break
 ```
 
 ### Real-World Examples
@@ -246,37 +244,40 @@ with agent.stream("query", mode="messages") as events:
 ```python
 actions_completed = 0
 
-with agent.stream("Complex task") as events:
-    for event in events:
-        if isinstance(event, ActionStart):
-            print("⏳", end="", flush=True)
-        elif isinstance(event, ActionEnd):
-            actions_completed += 1
-            print(f"\r✅ {actions_completed}", end="", flush=True)
+for event in agent.stream("Complex task"):
+    if isinstance(event, ActionExecutionStart):
+        print("⏳", end="", flush=True)
+    elif isinstance(event, ActionExecuted):
+        actions_completed += 1
+        print(f"\r✅ {actions_completed}", end="", flush=True)
 ```
 
 **UI Updates:**
 ```python
-with agent.stream("Analyze data") as events:
-    for event in events:
-        if isinstance(event, ContentDelta):
-            text_widget.append(event.delta)
-        elif isinstance(event, ActionStart):
-            spinner.show(f"Running {event.name}...")
-        elif isinstance(event, ActionEnd):
-            spinner.hide()
+for event in agent.stream("Analyze data"):
+    if isinstance(event, ContentDelta):
+        text_widget.append(event.delta)
+    elif isinstance(event, ActionExecutionStart):
+        spinner.show(f"Running {event.name}...")
+    elif isinstance(event, ActionExecuted):
+        spinner.hide()
 ```
 
-**Incremental Action Parsing:**
+**Async Streaming:**
 ```python
-with agent.stream("Calculate something") as events:
-    for event in events:
-        if isinstance(event, ActionDelta):
-            # Show partially parsed args as JSON streams
-            print(f"Parsing: {event.body}", end="\r")
-        elif isinstance(event, ActionEnd):
-            # Final parsed args
-            print(f"\nFinal: {event.body}")
+from jetflow import AsyncAgent
+
+async_agent = AsyncAgent(
+    client=OpenAIClient(model="gpt-5"),
+    actions=[search]
+)
+
+response = None
+async for event in async_agent.stream("query"):
+    if isinstance(event, AgentResponse):
+        response = event
+    elif isinstance(event, ContentDelta):
+        print(event.delta, end="", flush=True)
 ```
 
 ---
@@ -394,11 +395,10 @@ agent = Agent(
 )
 
 # Grok (xAI)
-from jetflow.clients.legacy_openai import LegacyOpenAIClient
+from jetflow.clients import GrokClient
 agent = Agent(
-    client=LegacyOpenAIClient(
-        model="grok-2-1212",
-        base_url="https://api.x.ai/v1"
+    client=GrokClient(
+        model="grok-4-1-fast-reasoning"  # or "grok-4-1-fast-non-reasoning"
     ),
     actions=[search]  # Same actions!
 )

@@ -1,7 +1,11 @@
 """Streaming event types for real-time agent execution"""
 
 from dataclasses import dataclass
-from typing import Literal, Union
+from typing import Literal, Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from jetflow.core.response import ActionFollowUp
+
 from jetflow.core.message import Message
 
 
@@ -80,6 +84,8 @@ class ActionExecuted:
     """Action execution completes with result"""
     message: Message  # The tool response message (role="tool")
     summary: str = None  # Optional summary for display/logging
+    follow_up: 'ActionFollowUp' = None  # Follow-up actions from this execution
+    is_exit: bool = False  # Whether this was an exit action
 
 
 # Union type for all streaming events

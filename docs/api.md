@@ -525,18 +525,22 @@ client = AnthropicClient(
 ### GrokClient (xAI)
 
 ```python
-from jetflow.clients.legacy_openai import LegacyOpenAIClient
+from jetflow.clients import GrokClient
 
-client = LegacyOpenAIClient(
-    model: str = "grok-2-1212",
+client = GrokClient(
+    model: str = "grok-4-1-fast-non-reasoning",  # or "grok-4-1-fast-reasoning"
     api_key: str = None,  # Or set XAI_API_KEY
-    base_url: str = "https://api.x.ai/v1",
     temperature: float = 1.0,
-    stream: bool = True
+    reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = None
 )
 ```
 
-**Supported models:** grok-2-1212, grok-2-vision-1212, grok-beta, etc.
+**Supported models:**
+- `grok-4-1-fast-reasoning` - Grok 4.1 fast with reasoning capabilities
+- `grok-4-1-fast-non-reasoning` - Grok 4.1 fast without reasoning (default)
+- `grok-2-1212` - Grok 2 (December 2024)
+- `grok-2-vision-1212` - Grok 2 with vision
+- `grok-beta` - Latest beta model
 
 ### GeminiClient (Google)
 

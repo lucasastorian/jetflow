@@ -9,7 +9,7 @@ Tests the streaming citation flow:
 """
 
 from dotenv import load_dotenv
-from jetflow import AsyncAgent, ContentDelta, MessageEnd, ActionExecuted
+from jetflow import AsyncAgent, ContentDelta, MessageEnd, ActionExecuted, AgentResponse
 from jetflow.clients.anthropic import AsyncAnthropicClient
 from jetflow.core.action import action
 from jetflow.core.response import ActionResult
@@ -109,33 +109,35 @@ After providing your summary with citations, submit your final answer.""",
     action_citations = []
     final_citations = None
     full_content = ""
+    response = None
 
     print("STREAMING EVENTS:")
     print("-" * 80)
 
-    async with agent.stream("What was Tesla's Q4 2024 revenue?") as events:
-        async for event in events:
-            if isinstance(event, ContentDelta):
-                content_deltas.append(event)
-                full_content += event.delta
-                print(f"[ContentDelta] {repr(event.delta)}", end="")
+    async for event in agent.stream("What was Tesla's Q4 2024 revenue?"):
+        if isinstance(event, AgentResponse):
+            response = event
+        elif isinstance(event, ContentDelta):
+            content_deltas.append(event)
+            full_content += event.delta
+            print(f"[ContentDelta] {repr(event.delta)}", end="")
 
-                # Check for citations in this delta
-                if event.citations:
-                    citation_deltas.append(event)
-                    print(f"\n  📚 Citations detected: {list(event.citations.keys())}")
-                    for cid, metadata in event.citations.items():
-                        print(f"      [{cid}] {metadata.get('source', 'Unknown')}")
+            # Check for citations in this delta
+            if event.citations:
+                citation_deltas.append(event)
+                print(f"\n  📚 Citations detected: {list(event.citations.keys())}")
+                for cid, metadata in event.citations.items():
+                    print(f"      [{cid}] {metadata.get('source', 'Unknown')}")
 
-            elif isinstance(event, ActionExecuted):
-                if event.message.citations:
-                    action_citations.append(event.message.citations)
-                    print(f"\n\n[ActionExecuted] {len(event.message.citations)} citations returned")
+        elif isinstance(event, ActionExecuted):
+            if event.message.citations:
+                action_citations.append(event.message.citations)
+                print(f"\n\n[ActionExecuted] {len(event.message.citations)} citations returned")
 
-            elif isinstance(event, MessageEnd):
-                if event.message.role == "assistant" and event.message.citations:
-                    final_citations = event.message.citations
-                    print(f"\n\n[MessageEnd] {len(event.message.citations)} citations used in final response")
+        elif isinstance(event, MessageEnd):
+            if event.message.role == "assistant" and event.message.citations:
+                final_citations = event.message.citations
+                print(f"\n\n[MessageEnd] {len(event.message.citations)} citations used in final response")
 
     print("\n" + "-" * 80)
     print()
