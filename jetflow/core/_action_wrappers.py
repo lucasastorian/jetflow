@@ -41,7 +41,11 @@ def _build_response_from_result(result, action) -> ActionResponse:
 
 
 def _wrap_function_action(fn, schema, exit):
-    """Wrap a function as a sync action"""
+    """Wrap a function as a sync action
+
+    Returns:
+        Type[BaseAction]: A BaseAction subclass (not an instance)
+    """
     from jetflow.core.action import BaseAction
 
     # Check if function accepts citation_start parameter
@@ -83,7 +87,7 @@ def _wrap_function_action(fn, schema, exit):
                     )
                 )
 
-    # Set class attributes after class definition to avoid scoping issues
+    # Set class attributes after class definition
     FunctionAction.name = schema.__name__
     FunctionAction.schema = schema
     FunctionAction._is_exit = exit
@@ -92,7 +96,11 @@ def _wrap_function_action(fn, schema, exit):
 
 
 def _wrap_class_action(cls, schema, exit):
-    """Wrap a class as a sync action"""
+    """Wrap a class as a sync action
+
+    Returns:
+        Type[BaseAction]: A BaseAction subclass (not an instance)
+    """
     from jetflow.core.action import BaseAction
 
     # Check if class __call__ method accepts citation_start parameter
@@ -137,7 +145,7 @@ def _wrap_class_action(cls, schema, exit):
                     )
                 )
 
-    # Set class attributes after class definition to avoid scoping issues
+    # Set class attributes after class definition
     ClassAction.name = schema.__name__
     ClassAction.schema = schema
     ClassAction._is_exit = exit
@@ -146,7 +154,11 @@ def _wrap_class_action(cls, schema, exit):
 
 
 def _wrap_async_function_action(fn, schema, exit):
-    """Wrap a function as an async action"""
+    """Wrap a function as an async action
+
+    Returns:
+        Type[AsyncBaseAction]: An AsyncBaseAction subclass (not an instance)
+    """
     from jetflow.core.action import AsyncBaseAction
 
     # Check if function accepts citation_start parameter
@@ -188,7 +200,7 @@ def _wrap_async_function_action(fn, schema, exit):
                     )
                 )
 
-    # Set class attributes after class definition to avoid scoping issues
+    # Set class attributes after class definition
     AsyncFunctionAction.name = schema.__name__
     AsyncFunctionAction.schema = schema
     AsyncFunctionAction._is_exit = exit
@@ -197,7 +209,11 @@ def _wrap_async_function_action(fn, schema, exit):
 
 
 def _wrap_async_class_action(cls, schema, exit):
-    """Wrap a class as an async action"""
+    """Wrap a class as an async action
+
+    Returns:
+        Type[AsyncBaseAction]: An AsyncBaseAction subclass (not an instance)
+    """
     from jetflow.core.action import AsyncBaseAction
 
     # Check if class __call__ method accepts citation_start parameter
@@ -242,7 +258,7 @@ def _wrap_async_class_action(cls, schema, exit):
                     )
                 )
 
-    # Set class attributes after class definition to avoid scoping issues
+    # Set class attributes after class definition
     AsyncClassAction.name = schema.__name__
     AsyncClassAction.schema = schema
     AsyncClassAction._is_exit = exit

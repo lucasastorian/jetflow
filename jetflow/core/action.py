@@ -1,12 +1,16 @@
 """Action decorator and base action implementations"""
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar, Union, Callable, Type, overload
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from jetflow.core.message import Action, Message
     from jetflow.core.response import ActionResponse
+
+# Type variables for the decorator
+F = TypeVar('F', bound=Callable)
+C = TypeVar('C', bound=Type)
 
 
 class ActionSchemaMixin:
@@ -119,7 +123,25 @@ def _validate_custom_field(schema: type[BaseModel], custom_field: str):
         )
 
 
-def action(schema: type[BaseModel], exit: bool = False, custom_field: str = None):
+@overload
+def action(
+    schema: type[BaseModel],
+    exit: bool = False,
+    custom_field: str = None
+) -> Callable[[F], Type[BaseAction]]: ...
+
+@overload
+def action(
+    schema: type[BaseModel],
+    exit: bool = False,
+    custom_field: str = None
+) -> Callable[[C], Type[BaseAction]]: ...
+
+def action(
+    schema: type[BaseModel],
+    exit: bool = False,
+    custom_field: str = None
+) -> Callable[[Union[F, C]], Type[Union[BaseAction, AsyncBaseAction]]]:
     """Decorator for actions (auto-detects sync vs async)
 
     Args:
@@ -128,9 +150,19 @@ def action(schema: type[BaseModel], exit: bool = False, custom_field: str = None
         custom_field: Field name to use for OpenAI custom tools (raw string, no JSON escaping).
                      Only works with single-field Pydantic models where custom_field is the only field.
 
+    Returns:
+        A decorator that transforms a function or class into a BaseAction or AsyncBaseAction subclass
+
     This decorator automatically detects whether the action is sync or async:
     - For functions: checks if it's a coroutine function
     - For classes: checks if __call__ is a coroutine function
+
+    Example:
+        @action(schema=SearchQuery)
+        def search(params: SearchQuery) -> str:
+            return "results"
+
+        # 'search' is now a Type[BaseAction], not a function
     """
     import asyncio
     from jetflow.core._action_wrappers import (
@@ -142,7 +174,7 @@ def action(schema: type[BaseModel], exit: bool = False, custom_field: str = None
     if custom_field is not None:
         _validate_custom_field(schema, custom_field)
 
-    def decorator(target):
+    def decorator(target: Union[F, C]) -> Type[Union[BaseAction, AsyncBaseAction]]:
         # Determine if target is sync or async
         if isinstance(target, type):
             # Class-based action: check if __call__ is async
