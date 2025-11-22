@@ -1,22 +1,21 @@
 """Lightweight snapshot of agent state available to actions."""
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Dict, Optional
 
-from jetflow.citations.manager import CitationManager
 from jetflow.models import Message
 
 
 @dataclass
 class AgentState:
-    """Minimal, read-oriented state that actions can opt into.
+    """Minimal, read-only state snapshot that actions can opt into.
 
-    Exposes the message history and citation manager so actions can
+    Exposes the message history and accumulated citations so actions can
     inspect prior tool outputs or resolve citation metadata.
     """
 
     messages: List[Message]
-    citation_manager: CitationManager
+    citations: Dict[int, dict]  # Read-only snapshot: {id: metadata}
 
     def last_tool_message(self) -> Optional[Message]:
         """Return the most recent tool message, if any."""
@@ -24,3 +23,7 @@ class AgentState:
             if message.role == "tool":
                 return message
         return None
+
+    def get_citation(self, citation_id: int) -> Optional[dict]:
+        """Look up metadata for a citation ID."""
+        return self.citations.get(citation_id)

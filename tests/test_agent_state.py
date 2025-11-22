@@ -301,7 +301,7 @@ if __name__ == "__main__":
         print("  ✓ Sync actions can opt-in to AgentState via `state: AgentState` parameter")
         print("  ✓ Async actions can opt-in to AgentState via `state: AgentState` parameter")
         print("  ✓ Actions without state parameter still work (backward compatible)")
-        print("  ✓ AgentState provides access to messages and citation_manager")
+        print("  ✓ AgentState provides access to messages and citations (read-only)")
         print("  ✓ Actions can read metadata from prior tool messages")
 
     except AssertionError as e:

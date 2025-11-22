@@ -285,7 +285,7 @@ class Agent:
 
         This is the ONLY implementation of action execution - shared by both paths.
         """
-        state = AgentState(messages=self.messages, citation_manager=self.citation_manager)
+        state = AgentState(messages=self.messages, citations=dict(self.citation_manager.citations))
 
         for called_action in called_actions:
             action_impl = find_action(called_action.name, actions)
