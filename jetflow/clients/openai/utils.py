@@ -39,7 +39,6 @@ def build_response_params(
         "model": model,
         "instructions": system_prompt,
         "input": items,
-        "tools": [action.openai_schema for action in actions],
         "temperature": temperature,
         "stream": stream
     }
@@ -52,28 +51,34 @@ def build_response_params(
     if supports_thinking(model):
         params["reasoning"] = {"effort": reasoning_effort, "summary": "auto"}
 
+    # Build tools list - only include if we have actions or web search
+    tools = [action.openai_schema for action in actions]
     if enable_web_search:
-        params['tools'].append({"type": "web_search"})
+        tools.append({"type": "web_search"})
 
-    # Handle tool_choice based on allowed_actions
-    if allowed_actions is not None:
-        if len(allowed_actions) == 0:
-            params['tool_choice'] = "none"
-        elif len(allowed_actions) == 1:
-            params['tool_choice'] = {"type": "function", "name": allowed_actions[0].name}
-        else:
-            params['tool_choice'] = {
-                "type": "allowed_tools",
-                "mode": "auto",
-                "tools": [
-                    {"type": "function", "name": action.name}
-                    for action in allowed_actions
-                ]
-            }
+    # Only add tools and tool_choice if we have tools
+    if tools:
+        params['tools'] = tools
 
-    # Allow explicit tool_choice override if needed
-    if tool_choice:
-        params['tool_choice'] = tool_choice
+        # Handle tool_choice based on allowed_actions
+        if allowed_actions is not None:
+            if len(allowed_actions) == 0:
+                params['tool_choice'] = "none"
+            elif len(allowed_actions) == 1:
+                params['tool_choice'] = {"type": "function", "name": allowed_actions[0].name}
+            else:
+                params['tool_choice'] = {
+                    "type": "allowed_tools",
+                    "mode": "auto",
+                    "tools": [
+                        {"type": "function", "name": action.name}
+                        for action in allowed_actions
+                    ]
+                }
+
+        # Allow explicit tool_choice override if needed
+        if tool_choice:
+            params['tool_choice'] = tool_choice
 
     return params
 

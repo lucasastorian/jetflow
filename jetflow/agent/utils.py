@@ -134,12 +134,34 @@ def _build_response(agent, timer: Timer, success: bool) -> AgentResponse:
     )
 
 
-def add_messages_to_history(messages: List[Message], query: Union[str, List[Message]]):
-    """Add query messages to message history"""
+def load_citations_from_messages(messages: List[Message], citation_manager: CitationManager) -> None:
+    """Load citations from existing messages into citation manager.
+
+    Scans all messages for citations and adds them to the manager.
+    This ensures citation state is consistent when initializing an agent
+    with existing message history.
+    """
+    for msg in messages:
+        if msg.citations:
+            citation_manager.add_citations(msg.citations)
+
+
+def add_messages_to_history(
+    messages: List[Message],
+    query: Union[str, List[Message]],
+    citation_manager: CitationManager = None
+):
+    """Add query messages to message history.
+
+    If citation_manager is provided, also loads any citations from the messages.
+    """
     if isinstance(query, str):
         messages.append(Message(role="user", content=query, status="completed"))
     else:
         messages.extend(query)
+        # Load citations from existing messages if citation_manager provided
+        if citation_manager is not None:
+            load_citations_from_messages(query, citation_manager)
 
 
 def find_action(name: str, actions: List[BaseAction]) -> Optional[BaseAction]:

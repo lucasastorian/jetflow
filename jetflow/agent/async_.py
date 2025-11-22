@@ -352,7 +352,7 @@ class AsyncAgent:
         reset_agent_state(self)
 
     def _add_messages_to_history(self, query: Union[str, List[Message]]):
-        add_messages_to_history(self.messages, query)
+        add_messages_to_history(self.messages, query, self.citation_manager)
 
     def _is_final_step(self) -> bool:
         """Check if this is the final iteration"""

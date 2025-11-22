@@ -26,15 +26,18 @@ class CitationManager:
     _seen_ids: Set[int] = field(default_factory=set)
 
     def add_citations(self, new_citations: Dict[int, dict]) -> None:
-        """Add citations from an action result"""
+        """Add citations from an action result. Keys are coerced to int."""
         if not new_citations:
             return
 
-        self.citations.update(new_citations)
+        # Coerce keys to int for consistency
+        for key, value in new_citations.items():
+            int_key = int(key)
+            self.citations[int_key] = value
 
         # Update next ID to be max(current citations) + 1
-        if new_citations:
-            max_id = max(new_citations.keys())
+        if self.citations:
+            max_id = max(self.citations.keys())
             self._next_id = max(self._next_id, max_id + 1)
 
     def get_next_id(self) -> int:
@@ -68,8 +71,8 @@ class CitationManager:
         # Mark them as seen
         self._seen_ids.update(new_ids)
 
-        # Return metadata for new citations (use str keys for JSON compatibility)
-        return {str(cid): self.citations[cid] for cid in new_ids if cid in self.citations}
+        # Return metadata for new citations (int keys)
+        return {cid: self.citations[cid] for cid in new_ids if cid in self.citations}
 
     def reset_stream_state(self) -> None:
         """Reset streaming state (cursor and seen IDs) for new message"""
@@ -121,11 +124,11 @@ class CitationExtractor:
         return unique_ids
 
 
-def get_citation_metadata(citation_ids: List[int], citation_manager: CitationManager) -> Dict[str, dict]:
-    """Look up metadata for multiple citation IDs (returns str keys for JSON compat)"""
+def get_citation_metadata(citation_ids: List[int], citation_manager: CitationManager) -> Dict[int, dict]:
+    """Look up metadata for multiple citation IDs (int keys)"""
     metadata = {}
     for cid in citation_ids:
         citation = citation_manager.get_citation(cid)
         if citation:
-            metadata[str(cid)] = citation
+            metadata[cid] = citation
     return metadata
