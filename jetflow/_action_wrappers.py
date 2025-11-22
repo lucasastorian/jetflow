@@ -7,6 +7,7 @@ API in action.py instead.
 
 import inspect
 from pydantic import ValidationError
+from jetflow.agent.state import AgentState
 from jetflow.models.message import Message
 from jetflow.models.response import ActionResponse, ActionResult, ActionFollowUp
 
@@ -51,9 +52,10 @@ def _wrap_function_action(fn, schema, exit):
     # Check if function accepts citation_start parameter
     sig = inspect.signature(fn)
     accepts_citation_start = 'citation_start' in sig.parameters
+    accepts_state = 'state' in sig.parameters
 
     class FunctionAction(BaseAction):
-        def __call__(self, action) -> ActionResponse:
+        def __call__(self, action, state: AgentState = None) -> ActionResponse:
             try:
                 validated = self.schema(**action.body)
             except ValidationError as e:
@@ -68,11 +70,13 @@ def _wrap_function_action(fn, schema, exit):
                 )
 
             try:
-                # Only pass citation_start if function accepts it
+                kwargs = {}
                 if accepts_citation_start:
-                    result = fn(validated, citation_start=action.citation_start)
-                else:
-                    result = fn(validated)
+                    kwargs['citation_start'] = action.citation_start
+                if accepts_state:
+                    kwargs['state'] = state
+
+                result = fn(validated, **kwargs)
 
                 return _build_response_from_result(result, action)
 
@@ -106,12 +110,13 @@ def _wrap_class_action(cls, schema, exit):
     # Check if class __call__ method accepts citation_start parameter
     sig = inspect.signature(cls.__call__)
     accepts_citation_start = 'citation_start' in sig.parameters
+    accepts_state = 'state' in sig.parameters
 
     class ClassAction(BaseAction):
         def __init__(self, *args, **kwargs):
             self._instance = cls(*args, **kwargs)
 
-        def __call__(self, action) -> ActionResponse:
+        def __call__(self, action, state: AgentState = None) -> ActionResponse:
             try:
                 validated = self.schema(**action.body)
             except ValidationError as e:
@@ -126,11 +131,13 @@ def _wrap_class_action(cls, schema, exit):
                 )
 
             try:
-                # Only pass citation_start if class accepts it
+                kwargs = {}
                 if accepts_citation_start:
-                    result = self._instance(validated, citation_start=action.citation_start)
-                else:
-                    result = self._instance(validated)
+                    kwargs['citation_start'] = action.citation_start
+                if accepts_state:
+                    kwargs['state'] = state
+
+                result = self._instance(validated, **kwargs)
 
                 return _build_response_from_result(result, action)
 
@@ -164,9 +171,10 @@ def _wrap_async_function_action(fn, schema, exit):
     # Check if function accepts citation_start parameter
     sig = inspect.signature(fn)
     accepts_citation_start = 'citation_start' in sig.parameters
+    accepts_state = 'state' in sig.parameters
 
     class AsyncFunctionAction(AsyncBaseAction):
-        async def __call__(self, action) -> ActionResponse:
+        async def __call__(self, action, state: AgentState = None) -> ActionResponse:
             try:
                 validated = self.schema(**action.body)
             except ValidationError as e:
@@ -181,11 +189,13 @@ def _wrap_async_function_action(fn, schema, exit):
                 )
 
             try:
-                # Only pass citation_start if function accepts it
+                kwargs = {}
                 if accepts_citation_start:
-                    result = await fn(validated, citation_start=action.citation_start)
-                else:
-                    result = await fn(validated)
+                    kwargs['citation_start'] = action.citation_start
+                if accepts_state:
+                    kwargs['state'] = state
+
+                result = await fn(validated, **kwargs)
 
                 return _build_response_from_result(result, action)
 
@@ -219,12 +229,13 @@ def _wrap_async_class_action(cls, schema, exit):
     # Check if class __call__ method accepts citation_start parameter
     sig = inspect.signature(cls.__call__)
     accepts_citation_start = 'citation_start' in sig.parameters
+    accepts_state = 'state' in sig.parameters
 
     class AsyncClassAction(AsyncBaseAction):
         def __init__(self, *args, **kwargs):
             self._instance = cls(*args, **kwargs)
 
-        async def __call__(self, action) -> ActionResponse:
+        async def __call__(self, action, state: AgentState = None) -> ActionResponse:
             try:
                 validated = self.schema(**action.body)
             except ValidationError as e:
@@ -239,11 +250,13 @@ def _wrap_async_class_action(cls, schema, exit):
                 )
 
             try:
-                # Only pass citation_start if class accepts it
+                kwargs = {}
                 if accepts_citation_start:
-                    result = await self._instance(validated, citation_start=action.citation_start)
-                else:
-                    result = await self._instance(validated)
+                    kwargs['citation_start'] = action.citation_start
+                if accepts_state:
+                    kwargs['state'] = state
+
+                result = await self._instance(validated, **kwargs)
 
                 return _build_response_from_result(result, action)
 

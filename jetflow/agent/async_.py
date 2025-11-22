@@ -7,6 +7,7 @@ from jetflow.action import BaseAction, AsyncBaseAction, action
 from jetflow.models import Message, Action
 from jetflow.models import AgentResponse, ActionFollowUp, StepResult
 from jetflow.models import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted, ContentDelta
+from jetflow.agent.state import AgentState
 from jetflow.agent.utils import (
     validate_client, prepare_and_validate_actions,
     _build_response, add_messages_to_history, find_action,
@@ -286,6 +287,8 @@ class AsyncAgent:
 
         This is the ONLY implementation of action execution - shared by both paths.
         """
+        state = AgentState(messages=self.messages, citation_manager=self.citation_manager)
+
         for called_action in called_actions:
             action_impl = find_action(called_action.name, actions)
             if not action_impl:
@@ -298,9 +301,9 @@ class AsyncAgent:
             yield ActionExecutionStart(id=called_action.id, name=called_action.name, body=called_action.body)
 
             if isinstance(action_impl, AsyncBaseAction):
-                response = await action_impl(called_action)
+                response = await action_impl(called_action, state=state)
             else:
-                response = action_impl(called_action)
+                response = action_impl(called_action, state=state)
 
             if response.message.error:
                 self.logger.log_error(f"Action '{called_action.name}' failed: {response.message.content}")
