@@ -1,8 +1,8 @@
 """Anthropic client utilities"""
 
 from typing import List, Optional, Dict, Any, Literal
-from jetflow.core.action import BaseAction
-from jetflow.core.message import Message
+from jetflow.action import BaseAction
+from jetflow.models.message import Message
 
 
 BETAS = ["interleaved-thinking-2025-05-14"]
@@ -73,7 +73,7 @@ def apply_usage_to_message(usage_obj, message: Message) -> None:
 
 def process_completion(response, logger) -> List[Message]:
     """Process a non-streaming Anthropic response into a Message"""
-    from jetflow.core.message import Action, Thought
+    from jetflow.models.message import Action, Thought
 
     completion = Message(
         role="assistant",

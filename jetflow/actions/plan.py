@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 from typing import List
-from jetflow.core.action import action
+from jetflow.action import action
 
 
 class PlanSchema(BaseModel):

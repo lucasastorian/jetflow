@@ -1,8 +1,8 @@
 """Shared OpenAI client utilities for both sync and async implementations"""
 
 from typing import List, Literal
-from jetflow.core.action import BaseAction
-from jetflow.core.message import Message
+from jetflow.action import BaseAction
+from jetflow.models.message import Message
 
 
 def supports_thinking(model: str) -> bool:

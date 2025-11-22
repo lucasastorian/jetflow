@@ -4,9 +4,9 @@ from abc import ABC, abstractmethod
 from typing import List, Iterator, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from jetflow.core.message import Message
-    from jetflow.core.action import BaseAction
-    from jetflow.core.events import StreamEvent
+    from jetflow.models.message import Message
+    from jetflow.action import BaseAction
+    from jetflow.models.events import StreamEvent
     from jetflow.utils.verbose_logger import VerboseLogger
 
 

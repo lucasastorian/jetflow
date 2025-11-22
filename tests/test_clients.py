@@ -20,7 +20,7 @@ from jetflow.clients.openai import OpenAIClient, AsyncOpenAIClient
 from jetflow.clients.legacy_openai import LegacyOpenAIClient, AsyncLegacyOpenAIClient
 from jetflow.clients.grok import GrokClient, AsyncGrokClient
 from jetflow.clients.gemini import GeminiClient, AsyncGeminiClient
-from jetflow.core.response import ActionResult
+from jetflow.models.response import ActionResult
 from pydantic import BaseModel, Field
 
 load_dotenv()

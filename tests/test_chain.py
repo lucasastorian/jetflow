@@ -12,7 +12,7 @@ import asyncio
 from dotenv import load_dotenv
 from jetflow import Agent, AsyncAgent, Chain, AsyncChain, action
 from jetflow.clients.anthropic import AnthropicClient, AsyncAnthropicClient
-from jetflow.core.response import ActionResult
+from jetflow.models.response import ActionResult
 from pydantic import BaseModel, Field
 
 load_dotenv()

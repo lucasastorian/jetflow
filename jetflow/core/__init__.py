@@ -1,24 +1,9 @@
-"""Core agent coordination logic"""
+"""Core module - backwards compatibility stub
 
-from jetflow.core.agent import Agent, AsyncAgent
-from jetflow.core.action import action, BaseAction
-from jetflow.core.message import Message, Action, Thought
-from jetflow.core.response import AgentResponse, ActionResponse, ActionResult, ActionFollowUp, ChainResponse
-from jetflow.core.chain import Chain, AsyncChain
+This module exists for backwards compatibility.
+Import from jetflow directly instead.
+"""
 
-__all__ = [
-    "Agent",
-    "AsyncAgent",
-    "action",
-    "BaseAction",
-    "Message",
-    "Action",
-    "Thought",
-    "AgentResponse",
-    "ActionResponse",
-    "ActionResult",
-    "ActionFollowUp",
-    "ChainResponse",
-    "Chain",
-    "AsyncChain",
-]
+# Don't re-export anything to avoid circular imports
+# Code should import from jetflow directly now
+__all__ = []

@@ -7,8 +7,8 @@ API in action.py instead.
 
 import inspect
 from pydantic import ValidationError
-from jetflow.core.message import Message
-from jetflow.core.response import ActionResponse, ActionResult, ActionFollowUp
+from jetflow.models.message import Message
+from jetflow.models.response import ActionResponse, ActionResult, ActionFollowUp
 
 
 def _build_response_from_result(result, action) -> ActionResponse:
@@ -46,7 +46,7 @@ def _wrap_function_action(fn, schema, exit):
     Returns:
         Type[BaseAction]: A BaseAction subclass (not an instance)
     """
-    from jetflow.core.action import BaseAction
+    from jetflow.action import BaseAction
 
     # Check if function accepts citation_start parameter
     sig = inspect.signature(fn)
@@ -101,7 +101,7 @@ def _wrap_class_action(cls, schema, exit):
     Returns:
         Type[BaseAction]: A BaseAction subclass (not an instance)
     """
-    from jetflow.core.action import BaseAction
+    from jetflow.action import BaseAction
 
     # Check if class __call__ method accepts citation_start parameter
     sig = inspect.signature(cls.__call__)
@@ -159,7 +159,7 @@ def _wrap_async_function_action(fn, schema, exit):
     Returns:
         Type[AsyncBaseAction]: An AsyncBaseAction subclass (not an instance)
     """
-    from jetflow.core.action import AsyncBaseAction
+    from jetflow.action import AsyncBaseAction
 
     # Check if function accepts citation_start parameter
     sig = inspect.signature(fn)
@@ -214,7 +214,7 @@ def _wrap_async_class_action(cls, schema, exit):
     Returns:
         Type[AsyncBaseAction]: An AsyncBaseAction subclass (not an instance)
     """
-    from jetflow.core.action import AsyncBaseAction
+    from jetflow.action import AsyncBaseAction
 
     # Check if class __call__ method accepts citation_start parameter
     sig = inspect.signature(cls.__call__)

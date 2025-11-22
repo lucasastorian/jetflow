@@ -4,10 +4,10 @@ import datetime
 import logging
 from typing import List, Union, Type, Optional
 from jetflow.clients.base import BaseClient, AsyncBaseClient
-from jetflow.core.action import BaseAction, AsyncBaseAction
-from jetflow.core.message import Message, Action
-from jetflow.core.response import AgentResponse, ActionFollowUp
-from jetflow.core.citations import CitationManager
+from jetflow.action import BaseAction, AsyncBaseAction
+from jetflow.models import Message, Action
+from jetflow.models import AgentResponse, ActionFollowUp
+from jetflow.citations import CitationManager
 from jetflow.utils.usage import Usage
 from jetflow.utils.pricing import calculate_cost
 from jetflow.utils.timer import Timer

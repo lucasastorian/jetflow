@@ -8,9 +8,9 @@ from anthropic import AsyncStream
 from typing import Literal, List, AsyncIterator
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from jetflow.core.action import BaseAction
-from jetflow.core.message import Message, Action, Thought
-from jetflow.core.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
+from jetflow.action import BaseAction
+from jetflow.models.message import Message, Action, Thought
+from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
 from jetflow.clients.base import AsyncBaseClient
 from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, process_completion, REASONING_BUDGET_MAP
 

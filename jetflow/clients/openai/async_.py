@@ -8,9 +8,9 @@ from openai import AsyncStream
 from typing import Literal, List, AsyncIterator
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from jetflow.core.action import BaseAction
-from jetflow.core.message import Message, Action, Thought, WebSearch
-from jetflow.core.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
+from jetflow.action import BaseAction
+from jetflow.models.message import Message, Action, Thought, WebSearch
+from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
 from jetflow.clients.base import AsyncBaseClient
 from jetflow.clients.openai.utils import build_response_params, apply_usage_to_message
 
@@ -264,8 +264,38 @@ class AsyncOpenAIClient(AsyncBaseClient):
                 pass
 
             elif event.type == 'response.output_item.done':
+                if event.item.type == 'function_call':
+                    # Parse final arguments
+                    try:
+                        body = from_json(event.item.arguments.encode()) if event.item.arguments else {}
+                    except Exception:
+                        body = {}
 
-                if event.item.type == 'web_search_call':
+                    # Find or create the action
+                    action = None
+                    for a in completion.actions:
+                        if a.id == event.item.call_id:
+                            action = a
+                            break
+
+                    if action is None:
+                        # Action wasn't created by output_item.added - create it now
+                        action = Action(
+                            id=event.item.call_id,
+                            name=event.item.name,
+                            status="streaming",
+                            body={},
+                            external_id=event.item.id if hasattr(event.item, 'id') else None
+                        )
+                        completion.actions.append(action)
+                        yield ActionStart(id=action.id, name=action.name)
+
+                    # Always update with final body and emit ActionEnd
+                    action.body = body
+                    action.status = 'parsed'
+                    yield ActionEnd(id=action.id, name=action.name, body=body)
+
+                elif event.item.type == 'web_search_call':
                     current_web_search.web_search.query = event.item.action.query
                     yield MessageEnd(message=current_web_search)
                     current_web_search = None

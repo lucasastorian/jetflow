@@ -1,8 +1,8 @@
 """Legacy OpenAI client utilities"""
 
 from typing import List, Dict, Any, Literal, Optional
-from jetflow.core.action import BaseAction
-from jetflow.core.message import Message
+from jetflow.action import BaseAction
+from jetflow.models.message import Message
 
 
 def build_legacy_params(

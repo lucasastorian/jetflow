@@ -14,9 +14,9 @@ from jiter import from_json
 from typing import Literal, List, Iterator
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from jetflow.core.action import BaseAction
-from jetflow.core.message import Message, Action
-from jetflow.core.events import MessageStart, MessageEnd, ContentDelta, ActionStart, ActionDelta, ActionEnd, StreamEvent
+from jetflow.action import BaseAction
+from jetflow.models.message import Message, Action
+from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ActionStart, ActionDelta, ActionEnd, StreamEvent
 from jetflow.clients.base import BaseClient
 from jetflow.clients.legacy_openai.utils import build_legacy_params, apply_legacy_usage
 

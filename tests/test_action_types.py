@@ -14,9 +14,9 @@ import asyncio
 from dotenv import load_dotenv
 from jetflow import Agent, AsyncAgent, action
 from jetflow.clients.anthropic import AnthropicClient, AsyncAnthropicClient
-from jetflow.core.action import BaseAction, AsyncBaseAction
-from jetflow.core.message import Action
-from jetflow.core.response import ActionResult, ActionResponse
+from jetflow.action import BaseAction, AsyncBaseAction
+from jetflow.models.message import Action
+from jetflow.models.response import ActionResult, ActionResponse
 from pydantic import BaseModel, Field
 
 load_dotenv()

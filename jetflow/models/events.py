@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import Literal, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from jetflow.core.response import ActionFollowUp
+    from jetflow.models.response import ActionFollowUp
 
-from jetflow.core.message import Message
+from jetflow.models.message import Message
 
 
 @dataclass

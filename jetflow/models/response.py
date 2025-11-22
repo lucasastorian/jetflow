@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from typing import Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from jetflow.core.message import Message
-    from jetflow.core.action import BaseAction
+    from jetflow.models.message import Message
+    from jetflow.action import BaseAction
     from jetflow.utils.usage import Usage
 
 

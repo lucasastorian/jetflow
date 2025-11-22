@@ -11,8 +11,8 @@ Tests the streaming citation flow:
 from dotenv import load_dotenv
 from jetflow import AsyncAgent, ContentDelta, MessageEnd, ActionExecuted, AgentResponse
 from jetflow.clients.anthropic import AsyncAnthropicClient
-from jetflow.core.action import action
-from jetflow.core.response import ActionResult
+from jetflow.action import action
+from jetflow.models.response import ActionResult
 from pydantic import BaseModel, Field
 import asyncio
 

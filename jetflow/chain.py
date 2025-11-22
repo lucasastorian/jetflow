@@ -4,10 +4,10 @@ import datetime
 from contextlib import contextmanager
 from typing import List, Union, Iterator, Literal
 
-from jetflow.core.agent import Agent, AsyncAgent
-from jetflow.core.message import Message
-from jetflow.core.response import ChainResponse
-from jetflow.core.events import StreamEvent, MessageEnd
+from jetflow.agent import Agent, AsyncAgent
+from jetflow.models import Message
+from jetflow.models.response import ChainResponse
+from jetflow.models import StreamEvent, MessageEnd
 from jetflow.utils.usage import Usage
 from jetflow.utils.verbose_logger import VerboseLogger
 

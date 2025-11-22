@@ -18,7 +18,7 @@ except ImportError:
     pd = None
     HAS_NUMPY_PANDAS = False
 
-from jetflow.core.action import action
+from jetflow.action import action
 from jetflow.actions.python_exec.utils import (
     preprocess_code,
     format_syntax_error,

@@ -16,12 +16,12 @@ import inspect
 from typing import List, Iterator, AsyncIterator, Optional, TYPE_CHECKING
 
 from jetflow.clients.base import BaseClient, AsyncBaseClient
-from jetflow.core.citations import CitationManager
-from jetflow.core.events import StreamEvent, ContentDelta, MessageEnd
+from jetflow.citations.manager import CitationManager
+from jetflow.models.events import StreamEvent, ContentDelta, MessageEnd
 
 if TYPE_CHECKING:
-    from jetflow.core.message import Message
-    from jetflow.core.action import BaseAction
+    from jetflow.models.message import Message
+    from jetflow.action import BaseAction
     from jetflow.utils.base_logger import BaseLogger
 
 

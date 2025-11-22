@@ -1,14 +1,13 @@
-"""Sync agent orchestration"""
+"""Async agent orchestration"""
 
-from typing import List, Optional, Union, Callable, Iterator, Type
-
-from jetflow.clients.base import BaseClient
-from jetflow.clients.citation_middleware import SyncCitationMiddleware
-from jetflow.core.action import BaseAction
-from jetflow.core.message import Message, Action
-from jetflow.core.response import AgentResponse, ActionFollowUp, StepResult
-from jetflow.core.events import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted, ContentDelta
-from jetflow.core.agent.utils import (
+from typing import List, Optional, Union, Callable, Type, AsyncIterator
+from jetflow.clients.base import AsyncBaseClient
+from jetflow.citations import CitationMiddleware
+from jetflow.action import BaseAction, AsyncBaseAction, action
+from jetflow.models import Message, Action
+from jetflow.models import AgentResponse, ActionFollowUp, StepResult
+from jetflow.models import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted, ContentDelta
+from jetflow.agent.utils import (
     validate_client, prepare_and_validate_actions,
     _build_response, add_messages_to_history, find_action,
     handle_no_actions, handle_action_not_found, reset_agent_state,
@@ -19,15 +18,15 @@ from jetflow.utils.verbose_logger import VerboseLogger
 from jetflow.utils.timer import Timer
 
 
-class Agent:
-    """Sync agent orchestration"""
+class AsyncAgent:
+    """Async agent orchestration"""
 
     max_depth: int = 10
 
     def __init__(
         self,
-        client: BaseClient,
-        actions: List[Union[Type[BaseAction], BaseAction]] = None,
+        client: AsyncBaseClient,
+        actions: List[Union[Type[BaseAction], Type[AsyncBaseAction], BaseAction, AsyncBaseAction]] = None,
         system_prompt: Union[str, Callable[[], str]] = "",
         max_iter: int = 20,
         require_action: bool = False,
@@ -35,12 +34,12 @@ class Agent:
         verbose: bool = True,
         max_tokens_before_exit: int = 200000
     ):
-        validate_client(client, is_async=False)
+        validate_client(client, is_async=True)
 
         actions = actions or []
-        self.actions = prepare_and_validate_actions(actions, require_action, is_async=False)
+        self.actions = prepare_and_validate_actions(actions, require_action, is_async=True)
 
-        self.client = SyncCitationMiddleware(client)
+        self.client = CitationMiddleware(client)
         self.citation_manager = self.client.citation_manager
 
         self.max_iter = max_iter
@@ -53,14 +52,14 @@ class Agent:
         self.messages: List[Message] = []
         self.num_iter = 0
 
-    def run(self, query: Union[str, List[Message]]) -> AgentResponse:
+    async def run(self, query: Union[str, List[Message]]) -> AgentResponse:
         """Execute agent loop: LLM call + actions until exit or max iterations"""
-        with Timer.measure() as timer:
+        async with Timer.measure_async() as timer:
             self._add_messages_to_history(query)
 
             follow_up_actions = []
             while self.num_iter < self.max_iter:
-                result = self._navigate_sequence_non_streaming(
+                result = await self._navigate_sequence_non_streaming(
                     actions=self.actions + follow_up_actions,
                     system_prompt=self.system_prompt,
                     depth=0
@@ -73,27 +72,27 @@ class Agent:
 
             return self._build_final_response(timer, success=False)
 
-    def stream(self, query: Union[str, List[Message]]) -> Iterator[Union[StreamEvent, AgentResponse]]:
+    async def stream(self, query: Union[str, List[Message]]) -> AsyncIterator[Union[StreamEvent, AgentResponse]]:
         """Execute agent loop with streaming events: LLM call + actions until exit or max iterations
 
         Yields streaming events, then yields AgentResponse as final item.
 
         Usage:
             response = None
-            for event in agent.stream("query"):
+            async for event in agent.stream("query"):
                 if isinstance(event, AgentResponse):
                     response = event
                 elif isinstance(event, ContentDelta):
                     print(event.delta, end="")
         """
-        with Timer.measure() as timer:
+        async with Timer.measure_async() as timer:
             self._add_messages_to_history(query)
 
             follow_up_actions = []
             while self.num_iter < self.max_iter:
                 result = None
 
-                for event in self._navigate_sequence_streaming(
+                async for event in self._navigate_sequence_streaming(
                     actions=self.actions + follow_up_actions,
                     system_prompt=self.system_prompt,
                     depth=0
@@ -111,18 +110,18 @@ class Agent:
 
             yield self._build_final_response(timer, success=False)
 
-    def _navigate_sequence_non_streaming(
+    async def _navigate_sequence_non_streaming(
         self,
-        actions: List[BaseAction],
+        actions: List[Union[BaseAction, AsyncBaseAction]],
         system_prompt: str,
-        allowed_actions: List[BaseAction] = None,
+        allowed_actions: List[Union[BaseAction, AsyncBaseAction]] = None,
         depth: int = 0
     ) -> StepResult:
         """Non-streaming navigate sequence"""
         if depth > self.max_depth:
             raise RuntimeError(f"Exceeded max follow-up depth {self.max_depth}")
 
-        follow_ups = self._step(actions, system_prompt, allowed_actions)
+        follow_ups = await self._step(actions, system_prompt, allowed_actions)
         is_exit = (follow_ups is None)
 
         if is_exit:
@@ -131,7 +130,7 @@ class Agent:
         optional_follow_ups = []
         for follow_up in follow_ups:
             if follow_up.force:
-                rec_result = self._navigate_sequence_non_streaming(
+                rec_result = await self._navigate_sequence_non_streaming(
                     actions=actions + follow_up.actions,
                     system_prompt=system_prompt,
                     allowed_actions=follow_up.actions,
@@ -145,20 +144,20 @@ class Agent:
 
         return StepResult(is_exit=False, follow_ups=optional_follow_ups)
 
-    def _navigate_sequence_streaming(
+    async def _navigate_sequence_streaming(
         self,
-        actions: List[BaseAction],
+        actions: List[Union[BaseAction, AsyncBaseAction]],
         system_prompt: str,
-        allowed_actions: List[BaseAction] = None,
+        allowed_actions: List[Union[BaseAction, AsyncBaseAction]] = None,
         depth: int = 0
-    ) -> Iterator[Union[StreamEvent, StepResult]]:
+    ):
         """Streaming navigate sequence"""
         if depth > self.max_depth:
             raise RuntimeError(f"Exceeded max follow-up depth {self.max_depth}")
 
         result = None
 
-        for event in self._step_streaming(actions, system_prompt, allowed_actions):
+        async for event in self._step_streaming(actions, system_prompt, allowed_actions):
             if isinstance(event, StepResult):
                 result = event
             else:
@@ -173,7 +172,7 @@ class Agent:
             if follow_up.force:
                 rec_result = None
 
-                for event in self._navigate_sequence_streaming(
+                async for event in self._navigate_sequence_streaming(
                     actions=actions + follow_up.actions,
                     system_prompt=system_prompt,
                     allowed_actions=follow_up.actions,
@@ -193,11 +192,11 @@ class Agent:
 
         yield StepResult(is_exit=False, follow_ups=optional_follow_ups)
 
-    def _step(
+    async def _step(
         self,
-        actions: List[BaseAction],
+        actions: List[Union[BaseAction, AsyncBaseAction]],
         system_prompt: str,
-        allowed_actions: List[BaseAction] = None
+        allowed_actions: List[Union[BaseAction, AsyncBaseAction]] = None
     ) -> Optional[List[ActionFollowUp]]:
         """Execute one step: LLM call + actions (non-streaming, uses client.complete())
 
@@ -208,7 +207,7 @@ class Agent:
         if self._is_final_step() or self._approaching_context_limit(system_prompt):
             allowed_actions = self._get_final_step_allowed_actions()
 
-        completions = self.client.complete(
+        completions = await self.client.complete(
             messages=self.messages,
             system_prompt=system_prompt,
             actions=actions,
@@ -225,14 +224,14 @@ class Agent:
         if not main_completion.actions:
             return handle_no_actions(self.require_action, self.messages, self.logger)
 
-        return self._consume_action_events(main_completion.actions, actions)
+        return await self._consume_action_events(main_completion.actions, actions)
 
-    def _step_streaming(
+    async def _step_streaming(
         self,
-        actions: List[BaseAction],
+        actions: List[Union[BaseAction, AsyncBaseAction]],
         system_prompt: str,
-        allowed_actions: List[BaseAction] = None
-    ) -> Iterator[Union[StreamEvent, StepResult]]:
+        allowed_actions: List[Union[BaseAction, AsyncBaseAction]] = None
+    ) -> AsyncIterator[Union[StreamEvent, StepResult]]:
         """Execute one step: LLM call + actions (streaming, uses client.stream())
 
         Yields streaming events, then yields StepResult as final item.
@@ -241,7 +240,7 @@ class Agent:
             allowed_actions = self._get_final_step_allowed_actions()
 
         completion_messages = []
-        for event in self.client.stream(
+        async for event in self.client.stream(
             messages=self.messages,
             system_prompt=system_prompt,
             actions=actions,
@@ -263,9 +262,8 @@ class Agent:
             yield StepResult(is_exit=(follow_ups is None), follow_ups=follow_ups or [])
             return
 
-        # Forward action events and aggregate follow-ups
         follow_ups = []
-        for event in self._execute_actions(main_completion.actions, actions):
+        async for event in self._execute_actions(main_completion.actions, actions):
             yield event
             if isinstance(event, ActionExecuted):
                 if event.is_exit:
@@ -276,7 +274,11 @@ class Agent:
 
         yield StepResult(is_exit=False, follow_ups=follow_ups)
 
-    def _execute_actions(self, called_actions: List[Action], actions: List[BaseAction]) -> Iterator[StreamEvent]:
+    async def _execute_actions(
+        self,
+        called_actions: List[Action],
+        actions: List[Union[BaseAction, AsyncBaseAction]]
+    ) -> AsyncIterator[StreamEvent]:
         """Execute actions and yield streaming events with metadata
 
         Yields ActionExecutionStart and ActionExecuted events.
@@ -295,7 +297,10 @@ class Agent:
 
             yield ActionExecutionStart(id=called_action.id, name=called_action.name, body=called_action.body)
 
-            response = action_impl(called_action)
+            if isinstance(action_impl, AsyncBaseAction):
+                response = await action_impl(called_action)
+            else:
+                response = action_impl(called_action)
 
             if response.message.error:
                 self.logger.log_error(f"Action '{called_action.name}' failed: {response.message.content}")
@@ -318,10 +323,10 @@ class Agent:
             if is_exit:
                 return
 
-    def _consume_action_events(
+    async def _consume_action_events(
         self,
         called_actions: List[Action],
-        actions: List[BaseAction]
+        actions: List[Union[BaseAction, AsyncBaseAction]]
     ) -> Optional[List[ActionFollowUp]]:
         """Consume action execution events and aggregate follow-ups (non-streaming)
 
@@ -330,7 +335,7 @@ class Agent:
             List[ActionFollowUp] otherwise (empty list if no follow-ups)
         """
         follow_ups = []
-        for event in self._execute_actions(called_actions, actions):
+        async for event in self._execute_actions(called_actions, actions):
             if isinstance(event, ActionExecuted):
                 if event.is_exit:
                     return None

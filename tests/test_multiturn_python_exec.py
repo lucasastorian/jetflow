@@ -17,8 +17,8 @@ This validates:
 from dotenv import load_dotenv
 from jetflow import Agent
 from jetflow.clients.anthropic import AnthropicClient
-from jetflow.core.action import action
-from jetflow.core.response import ActionResult
+from jetflow.action import action
+from jetflow.models.response import ActionResult
 from pydantic import BaseModel, Field
 import sys
 from io import StringIO

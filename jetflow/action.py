@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, TypeVar, Union, Callable, Type, overload
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from jetflow.core.message import Action, Message
-    from jetflow.core.response import ActionResponse
+    from jetflow.models.message import Action, Message
+    from jetflow.models.response import ActionResponse
 
 # Type variables for the decorator
 F = TypeVar('F', bound=Callable)
@@ -165,7 +165,7 @@ def action(
         # 'search' is now a Type[BaseAction], not a function
     """
     import asyncio
-    from jetflow.core._action_wrappers import (
+    from jetflow._action_wrappers import (
         _wrap_function_action, _wrap_class_action,
         _wrap_async_function_action, _wrap_async_class_action
     )
