@@ -16,18 +16,19 @@ def build_gemini_config(
     actions: List[BaseAction],
     thinking_budget: int = -1,
     allowed_actions: List[BaseAction] = None,
-    require_action: bool = False,
+    require_action: bool = None,
 ) -> types.GenerateContentConfig:
     """Build Gemini GenerateContentConfig from parameters
 
-    allowed_actions behavior:
-    - None: AUTO mode (model decides whether to call functions)
+    allowed_actions behavior (takes precedence over require_action):
+    - None: Use require_action logic
     - []: NONE mode (function calling disabled)
     - [action1, action2]: ANY mode with allowed_function_names restricted
 
     require_action behavior:
-    - False: Use allowed_actions logic above
-    - True: Force ANY mode (model MUST call a function)
+    - True: ANY mode (model MUST call a function)
+    - False: NONE mode (model CANNOT call functions)
+    - None: AUTO mode (model decides)
     """
     tools = None
     tool_config = None
@@ -52,12 +53,17 @@ def build_gemini_config(
                         allowed_function_names=allowed_names
                     )
                 )
-        elif require_action:
-            # No restrictions but must call a function
+        elif require_action is True:
+            # Must call a function
             tool_config = types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(mode="ANY")
             )
-        # If allowed_actions is None and require_action is False, defaults to AUTO
+        elif require_action is False:
+            # Cannot call functions - force text response
+            tool_config = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(mode="NONE")
+            )
+        # If require_action is None, defaults to AUTO
 
     thinking_config = None
     if thinking_budget != 0:

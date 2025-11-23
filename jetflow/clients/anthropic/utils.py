@@ -29,14 +29,14 @@ def build_message_params(
     actions: List[BaseAction],
     allowed_actions: Optional[List[BaseAction]],
     reasoning_budget: int,
-    require_action: bool = False,
+    require_action: bool = None,
     stream: bool = True
 ) -> Dict[str, Any]:
     """Build request parameters for Anthropic Messages API
 
     Args:
         allowed_actions: Restrict which actions can be called (None = all, [] = none)
-        require_action: Force the model to call an action (tool_choice="any")
+        require_action: True=force call, False=disable calls, None=auto
     """
     formatted_messages = [message.anthropic_format() for message in messages]
 
@@ -76,9 +76,13 @@ def build_message_params(
             # Multiple allowed actions = force one of them
             params['tool_choice'] = {"type": "any"}
             params['tools'] = [action.anthropic_schema for action in allowed_actions]
-    elif require_action and not thinking_enabled:
+    elif require_action is True and not thinking_enabled:
         # No restrictions but must call a function (only without thinking)
         params['tool_choice'] = {"type": "any"}
+    elif require_action is False:
+        # Disable function calling
+        params['tool_choice'] = {"type": "none"}
+    # If require_action is None, defaults to auto
 
     return params
 

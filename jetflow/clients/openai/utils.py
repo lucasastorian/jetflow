@@ -18,7 +18,7 @@ def build_response_params(
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        require_action: bool = None,
         temperature: float = 1.0,
         use_flex: bool = False,
         reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = 'medium',
@@ -28,7 +28,7 @@ def build_response_params(
 
     Args:
         allowed_actions: Restrict which actions can be called (None = all, [] = none)
-        require_action: Force the model to call an action (tool_choice="required")
+        require_action: True=force call, False=disable calls, None=auto
     """
     items = [item for message in messages for item in message.openai_format()]
 
@@ -75,9 +75,13 @@ def build_response_params(
                         for action in allowed_actions
                     ]
                 }
-        elif require_action:
+        elif require_action is True:
             # No restrictions but must call a function
             params['tool_choice'] = "required"
+        elif require_action is False:
+            # Disable function calling
+            params['tool_choice'] = "none"
+        # If require_action is None, defaults to auto
 
     return params
 

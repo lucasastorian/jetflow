@@ -13,14 +13,14 @@ def build_legacy_params(
     actions: List[BaseAction],
     allowed_actions: Optional[List[BaseAction]],
     reasoning_effort: Optional[Literal['minimal', 'low', 'medium', 'high']],
-    require_action: bool = False,
+    require_action: bool = None,
     stream: bool = True
 ) -> Dict[str, Any]:
     """Build parameters for legacy OpenAI ChatCompletions API
 
     Args:
         allowed_actions: Restrict which actions can be called (None = all, [] = none)
-        require_action: Force the model to call an action (tool_choice="required")
+        require_action: True=force call, False=disable calls, None=auto
     """
     formatted_messages = [{"role": "system", "content": system_prompt}] + [
         message.legacy_openai_format() for message in messages
@@ -63,9 +63,13 @@ def build_legacy_params(
                     for action in allowed_actions
                 ]
             }
-    elif require_action:
+    elif require_action is True:
         # No restrictions but must call a function
         params['tool_choice'] = "required"
+    elif require_action is False:
+        # Disable function calling
+        params['tool_choice'] = "none"
+    # If require_action is None, defaults to auto
 
     return params
 

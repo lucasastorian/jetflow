@@ -26,8 +26,10 @@ class Agent:
     max_depth: int = 10
 
     def __init__(self, client: BaseClient, actions: List[Union[Type[BaseAction], BaseAction]] = None,
-                 system_prompt: Union[str, Callable[[], str]] = "", max_iter: int = 20, require_action: bool = False,
+                 system_prompt: Union[str, Callable[[], str]] = "", max_iter: int = 20, require_action: bool = None,
                  logger: BaseLogger = None, verbose: bool = True, max_tokens_before_exit: int = 200000):
+        if max_iter < 1:
+            raise ValueError("max_iter must be >= 1")
         validate_client(client, is_async=False)
 
         actions = actions or []
@@ -287,7 +289,9 @@ class Agent:
         add_messages_to_history(self.messages, query, self.citation_manager)
 
     def _is_final_step(self) -> bool:
-        return self.num_iter == self.max_iter - 1
+        # Only treat as final step if we've done at least one iteration
+        # This allows max_iter=1 to have a full first iteration with functions
+        return self.num_iter == self.max_iter - 1 and self.num_iter > 0
 
     def _approaching_context_limit(self, system_prompt: str) -> bool:
         token_count = count_message_tokens(self.messages, system_prompt)
@@ -297,8 +301,10 @@ class Agent:
         return False
 
     def _get_final_step_allowed_actions(self) -> List[BaseAction]:
-        if self.require_action:
+        if self.require_action is True:
+            # Force exit via exit actions only
             return [a for a in self.actions if getattr(a, '_is_exit', False)]
+        # require_action=False or None: return [] to force mode=NONE (text response)
         return []
 
     def _build_final_response(self, timer: Timer, success: bool) -> AgentResponse:

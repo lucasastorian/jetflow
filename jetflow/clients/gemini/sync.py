@@ -156,9 +156,21 @@ class GeminiClient(BaseClient):
                     finish_reason = candidate.finish_reason
 
             if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
+                # Log any malformed function call details from empty chunks
+                if logger and chunk.candidates and finish_reason and 'MALFORMED' in str(finish_reason):
+                    candidate = chunk.candidates[0]
+                    logger.log_warning(f"Malformed chunk details - content: {candidate.content}")
                 continue
 
             for part in chunk.candidates[0].content.parts:
+                # Log any function call attempts for debugging
+                if hasattr(part, 'function_call') and part.function_call and logger:
+                    try:
+                        fc = part.function_call
+                        logger.log_info(f"Function call detected: {fc.name}({dict(fc.args) if fc.args else {}})")
+                    except Exception as e:
+                        logger.log_warning(f"Malformed function call part: {part}, error: {e}")
+
                 if part.thought and part.text:
                     # Thinking content - id will be set when we see function_call signature
                     thought = Thought(id="", summaries=[part.text], provider="gemini")
@@ -211,10 +223,13 @@ class GeminiClient(BaseClient):
                 if hasattr(chunk.usage_metadata, 'thoughts_token_count'):
                     completion.thinking_tokens = chunk.usage_metadata.thoughts_token_count
 
-        # Log warning if stream ended without producing content or actions
+        # Log warning if stream ended abnormally
+        if finish_reason and str(finish_reason) not in ('FinishReason.STOP', 'STOP'):
+            if logger:
+                logger.log_warning(f"Gemini stream ended with finish_reason: {finish_reason}")
+
         if logger and not completion.content and not completion.actions:
-            reason_str = str(finish_reason) if finish_reason else "unknown"
-            logger.log_warning(f"Gemini stream ended without content or actions. finish_reason: {reason_str}")
+            logger.log_warning(f"Gemini produced no content or actions (only {len(completion.thoughts)} thoughts)")
 
         completion.status = "completed"
         yield MessageEnd(message=completion)
