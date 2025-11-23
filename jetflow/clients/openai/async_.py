@@ -142,7 +142,7 @@ class AsyncOpenAIClient(AsyncBaseClient):
             elif event.type == 'response.output_item.added':
 
                 if event.item.type == 'reasoning':
-                    thought = Thought(id=event.item.id, summaries=[])
+                    thought = Thought(id=event.item.id, summaries=[], provider=self.provider)
                     completion.thoughts.append(thought)
                     yield ThoughtStart(id=thought.id)
 
@@ -384,7 +384,8 @@ class AsyncOpenAIClient(AsyncBaseClient):
             if item.type == 'reasoning':
                 thought = Thought(
                     id=item.id,
-                    summaries=[summary.text for summary in item.summary]
+                    summaries=[summary.text for summary in item.summary],
+                    provider=self.provider
                 )
                 completion.thoughts.append(thought)
 

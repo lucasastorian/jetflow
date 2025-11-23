@@ -110,7 +110,7 @@ class AnthropicClient(BaseClient):
 
             elif event.type == 'content_block_start':
                 if event.content_block.type == 'thinking':
-                    thought = Thought(id="", summaries=[""])
+                    thought = Thought(id="", summaries=[""], provider="anthropic")
                     completion.thoughts.append(thought)
                     yield ThoughtStart(id="")
 
@@ -239,7 +239,7 @@ class AnthropicClient(BaseClient):
 
             elif event.type == 'content_block_start':
                 if event.content_block.type == 'thinking':
-                    completion.thoughts.append(Thought(id="", summaries=[""]))
+                    completion.thoughts.append(Thought(id="", summaries=[""], provider="anthropic"))
 
                 elif event.content_block.type == 'text':
                     pass

@@ -106,7 +106,8 @@ def process_completion(response, logger) -> List[Message]:
         if block.type == 'thinking':
             completion.thoughts.append(Thought(
                 id=getattr(block, 'id', ''),
-                summaries=[block.thinking]
+                summaries=[block.thinking],
+                provider="anthropic"
             ))
             if logger:
                 logger.log_thought(block.thinking)

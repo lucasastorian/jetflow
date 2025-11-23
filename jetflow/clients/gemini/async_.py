@@ -94,7 +94,7 @@ class AsyncGeminiClient(AsyncBaseClient):
         for part in candidate.content.parts:
             if part.thought and part.text:
                 # Thinking content - id will be set when we see the function_call signature
-                thought = Thought(id="", summaries=[part.text])
+                thought = Thought(id="", summaries=[part.text], provider="gemini")
                 completion.thoughts.append(thought)
                 if logger:
                     logger.log_thought(part.text)
@@ -109,7 +109,7 @@ class AsyncGeminiClient(AsyncBaseClient):
                         completion.thoughts[-1].id = thought_signature
                     else:
                         # No thought exists - create one to hold the signature
-                        thought = Thought(id=thought_signature, summaries=[])
+                        thought = Thought(id=thought_signature, summaries=[], provider="gemini")
                         completion.thoughts.append(thought)
 
                 action = Action(
@@ -154,7 +154,7 @@ class AsyncGeminiClient(AsyncBaseClient):
             for part in chunk.candidates[0].content.parts:
                 if part.thought and part.text:
                     # Thinking content - id will be set when we see function_call signature
-                    thought = Thought(id="", summaries=[part.text])
+                    thought = Thought(id="", summaries=[part.text], provider="gemini")
                     completion.thoughts.append(thought)
 
                     yield ThoughtStart(id="")
@@ -174,7 +174,7 @@ class AsyncGeminiClient(AsyncBaseClient):
                             completion.thoughts[-1].id = thought_signature
                         else:
                             # No thought exists - create one to hold the signature
-                            thought = Thought(id=thought_signature, summaries=[])
+                            thought = Thought(id=thought_signature, summaries=[], provider="gemini")
                             completion.thoughts.append(thought)
 
                     action_id = str(uuid.uuid4())

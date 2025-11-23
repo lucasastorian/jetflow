@@ -1,6 +1,13 @@
-"""Grok (xAI) client module"""
+"""Grok (xAI) client module
 
-from jetflow.clients.grok.sync import GrokClient
-from jetflow.clients.grok.async_ import AsyncGrokClient
+Requires: pip install jetflow[grok] (uses OpenAI SDK)
+"""
 
-__all__ = ["GrokClient", "AsyncGrokClient"]
+try:
+    from jetflow.clients.grok.sync import GrokClient
+    from jetflow.clients.grok.async_ import AsyncGrokClient
+    __all__ = ["GrokClient", "AsyncGrokClient"]
+except ImportError as e:
+    raise ImportError(
+        "Grok client requires openai SDK. Install with: pip install jetflow[grok]"
+    ) from e

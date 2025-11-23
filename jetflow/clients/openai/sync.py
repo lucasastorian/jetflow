@@ -115,8 +115,7 @@ class OpenAIClient(BaseClient):
         stream = self.client.responses.create(**params)
         yield from self._stream_completion_events(stream, actions, logger)
 
-    @staticmethod
-    def _stream_completion_events(response, actions: List[BaseAction], logger) -> Iterator[StreamEvent]:
+    def _stream_completion_events(self, response, actions: List[BaseAction], logger) -> Iterator[StreamEvent]:
         """Stream a chat completion and yield events"""
         completion = Message(
             role="assistant",
@@ -143,7 +142,7 @@ class OpenAIClient(BaseClient):
             elif event.type == 'response.output_item.added':
 
                 if event.item.type == 'reasoning':
-                    thought = Thought(id=event.item.id, summaries=[])
+                    thought = Thought(id=event.item.id, summaries=[], provider=self.provider)
                     completion.thoughts.append(thought)
                     yield ThoughtStart(id=thought.id)
 
@@ -385,7 +384,8 @@ class OpenAIClient(BaseClient):
             if item.type == 'reasoning':
                 thought = Thought(
                     id=item.id,
-                    summaries=[summary.text for summary in item.summary]
+                    summaries=[summary.text for summary in item.summary],
+                    provider=self.provider
                 )
                 completion.thoughts.append(thought)
 

@@ -6,6 +6,10 @@ from typing import List
 from jetflow.action import BaseAction
 from jetflow.models.message import Message
 
+# Dummy signature for cross-provider compatibility (non-Gemini thoughts)
+# See: https://ai.google.dev/gemini-api/docs/thinking#thought-signatures
+DUMMY_THOUGHT_SIGNATURE = "context_engineering_is_the_way_to_go"
+
 
 def build_gemini_config(
     system_prompt: str,
@@ -125,7 +129,13 @@ def messages_to_contents(messages: List[Message]) -> List[types.Content]:
             if msg.actions:
                 thought_signature = None
                 if msg.thoughts:
-                    thought_signature = msg.thoughts[-1].id if msg.thoughts[-1].id else None
+                    thought = msg.thoughts[-1]
+                    if thought.id:
+                        # Use real signature for Gemini, dummy for other providers
+                        if thought.provider == "gemini":
+                            thought_signature = thought.id
+                        else:
+                            thought_signature = DUMMY_THOUGHT_SIGNATURE
 
                 for i, action in enumerate(msg.actions):
                     fc_part = types.Part.from_function_call(

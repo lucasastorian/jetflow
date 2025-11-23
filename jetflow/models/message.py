@@ -29,6 +29,7 @@ class Thought:
     """Reasoning trace from LLM"""
     id: str | bytes  # Signature - str for Anthropic, bytes for Gemini
     summaries: List[str]
+    provider: str = None  # Provider that generated this thought (for cross-provider compatibility)
 
 
 @dataclass
