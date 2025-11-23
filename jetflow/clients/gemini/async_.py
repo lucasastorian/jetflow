@@ -147,7 +147,15 @@ class AsyncGeminiClient(AsyncBaseClient):
 
         yield MessageStart(role="assistant")
 
+        finish_reason = None
+
         async for chunk in stream:
+            # Check for finish_reason on each chunk (may indicate early termination)
+            if chunk.candidates:
+                candidate = chunk.candidates[0]
+                if hasattr(candidate, 'finish_reason') and candidate.finish_reason:
+                    finish_reason = candidate.finish_reason
+
             if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
                 continue
 
@@ -203,6 +211,11 @@ class AsyncGeminiClient(AsyncBaseClient):
                 completion.completion_tokens = chunk.usage_metadata.candidates_token_count
                 if hasattr(chunk.usage_metadata, 'thoughts_token_count'):
                     completion.thinking_tokens = chunk.usage_metadata.thoughts_token_count
+
+        # Log warning if stream ended without producing content or actions
+        if logger and not completion.content and not completion.actions:
+            reason_str = str(finish_reason) if finish_reason else "unknown"
+            logger.log_warning(f"Gemini stream ended without content or actions. finish_reason: {reason_str}")
 
         completion.status = "completed"
         yield MessageEnd(message=completion)
