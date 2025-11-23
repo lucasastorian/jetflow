@@ -34,6 +34,7 @@ class ActionResponse:
     message: 'Message'
     follow_up: Optional[ActionFollowUp] = None
     summary: str = None  # Optional summary for logging (from ActionResult.summary)
+    result: dict = None  # Structured result for UI rendering (from ActionResult.metadata)
 
 
 @dataclass

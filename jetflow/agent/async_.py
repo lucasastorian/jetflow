@@ -260,10 +260,15 @@ class AsyncAgent:
 
             self.logger.log_action_end(response.summary, response.message.content, response.message.error)
 
+            # Attach result to the action for UI rendering
+            called_action.result = response.result
+
             is_exit = bool(getattr(action_impl, '_is_exit', False))
 
             yield ActionExecuted(
+                action_id=called_action.id,
                 message=response.message,
+                result=response.result,
                 summary=response.summary,
                 follow_up=response.follow_up,
                 is_exit=is_exit
@@ -316,3 +321,8 @@ class AsyncAgent:
     @property
     def system_prompt(self) -> str:
         return self._system_prompt() if callable(self._system_prompt) else self._system_prompt
+
+    @property
+    def exit_actions(self) -> List[Union[BaseAction, AsyncBaseAction]]:
+        """Get all actions marked as exit actions"""
+        return [a for a in self.actions if getattr(a, '_is_exit', False)]

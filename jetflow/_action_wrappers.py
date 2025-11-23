@@ -28,7 +28,8 @@ def _build_response_from_result(result, action) -> ActionResponse:
                 actions=result.follow_up_actions,
                 force=result.force_follow_up
             ) if result.follow_up_actions else None,
-            summary=result.summary
+            summary=result.summary,
+            result=result.metadata  # Pass through for UI rendering
         )
     else:
         return ActionResponse(

@@ -18,8 +18,9 @@ class Action:
     id: str
     name: str
     status: Literal['streaming', 'parsed', 'completed', 'failed']
-    body: dict
+    body: dict  # Input parameters
 
+    result: dict = None  # Output result (populated after execution)
     external_id: str = None  # OpenAI Responses API 'id' attribute
     citation_start: int = None  # Starting citation ID for this action (set by Agent)
 

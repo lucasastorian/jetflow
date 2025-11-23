@@ -82,7 +82,9 @@ class ActionExecutionStart:
 @dataclass
 class ActionExecuted:
     """Action execution completes with result"""
+    action_id: str  # ID of the action that was executed
     message: Message  # The tool response message (role="tool")
+    result: dict = None  # Structured result for UI rendering
     summary: str = None  # Optional summary for display/logging
     follow_up: 'ActionFollowUp' = None  # Follow-up actions from this execution
     is_exit: bool = False  # Whether this was an exit action
