@@ -50,13 +50,15 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         system_prompt: str,
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
+        enable_web_search: bool = False,
+        require_action: bool = False,
         logger: 'VerboseLogger' = None,
         stream: bool = False
     ) -> List[Message]:
         """Non-streaming completion - single HTTP request/response"""
         params = build_legacy_params(
             self.model, self.temperature, system_prompt, messages, actions,
-            allowed_actions, self.reasoning_effort, stream=stream
+            allowed_actions, self.reasoning_effort, require_action=require_action, stream=stream
         )
 
         return await self._complete_with_retry(params, logger)
@@ -67,13 +69,15 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         system_prompt: str,
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
+        enable_web_search: bool = False,
+        require_action: bool = False,
         logger: 'VerboseLogger' = None,
         stream: bool = True
     ) -> AsyncIterator[StreamEvent]:
         """Streaming completion - yields events in real-time"""
         params = build_legacy_params(
             self.model, self.temperature, system_prompt, messages, actions,
-            allowed_actions, self.reasoning_effort, stream=stream
+            allowed_actions, self.reasoning_effort, require_action=require_action, stream=stream
         )
 
         async for event in self._stream_events_with_retry(params, logger):

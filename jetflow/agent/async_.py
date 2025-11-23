@@ -213,6 +213,7 @@ class AsyncAgent:
             system_prompt=system_prompt,
             actions=actions,
             allowed_actions=allowed_actions,
+            require_action=self.require_action,
             logger=self.logger,
             stream=False
         )
@@ -246,6 +247,7 @@ class AsyncAgent:
             system_prompt=system_prompt,
             actions=actions,
             allowed_actions=allowed_actions,
+            require_action=self.require_action,
             logger=self.logger,
             stream=True
         ):

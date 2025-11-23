@@ -24,6 +24,7 @@ class BaseClient(ABC):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         logger: Optional['VerboseLogger'] = None,
         stream: bool = False,
     ) -> List['Message']:
@@ -33,6 +34,8 @@ class BaseClient(ABC):
         Most providers will return a single-item list.
 
         Args:
+            allowed_actions: Restrict which actions can be called (None = all, [] = none)
+            require_action: Force the model to call an action (tool_choice="required")
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
         """
@@ -46,12 +49,15 @@ class BaseClient(ABC):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         logger: Optional['VerboseLogger'] = None,
         stream: bool = True,
     ) -> Iterator['StreamEvent']:
         """Streaming completion - yields events in real-time (sync).
 
         Args:
+            allowed_actions: Restrict which actions can be called (None = all, [] = none)
+            require_action: Force the model to call an action (tool_choice="required")
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
         """
@@ -72,6 +78,7 @@ class AsyncBaseClient(ABC):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         logger: Optional['VerboseLogger'] = None,
         stream: bool = False,
     ) -> List['Message']:
@@ -81,6 +88,8 @@ class AsyncBaseClient(ABC):
         Most providers will return a single-item list.
 
         Args:
+            allowed_actions: Restrict which actions can be called (None = all, [] = none)
+            require_action: Force the model to call an action (tool_choice="required")
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
         """
@@ -94,12 +103,15 @@ class AsyncBaseClient(ABC):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         logger: Optional['VerboseLogger'] = None,
         stream: bool = True,
     ):
         """Streaming completion - yields events in real-time (async).
 
         Args:
+            allowed_actions: Restrict which actions can be called (None = all, [] = none)
+            require_action: Force the model to call an action (tool_choice="required")
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
         """

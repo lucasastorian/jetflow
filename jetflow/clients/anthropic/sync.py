@@ -42,6 +42,7 @@ class AnthropicClient(BaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         logger: 'VerboseLogger' = None,
         stream: bool = False
     ) -> List[Message]:
@@ -49,7 +50,7 @@ class AnthropicClient(BaseClient):
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget,
-            stream=stream
+            require_action=require_action, stream=stream
         )
         return self._complete_with_retry(params, logger)
 
@@ -60,6 +61,7 @@ class AnthropicClient(BaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         logger: 'VerboseLogger' = None,
         stream: bool = True
     ) -> Iterator[StreamEvent]:
@@ -67,7 +69,7 @@ class AnthropicClient(BaseClient):
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget,
-            stream=stream
+            require_action=require_action, stream=stream
         )
         yield from self._stream_events_with_retry(params, logger)
 

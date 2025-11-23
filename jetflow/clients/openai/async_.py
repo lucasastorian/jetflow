@@ -48,8 +48,8 @@ class AsyncOpenAIClient(AsyncBaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         logger: 'VerboseLogger' = None,
-        tool_choice: str = None,
         stream: bool = False,
     ) -> List[Message]:
         """Non-streaming completion - single HTTP request/response. Returns list of Messages (multiple if web searches occur)."""
@@ -60,11 +60,11 @@ class AsyncOpenAIClient(AsyncBaseClient):
             actions,
             allowed_actions,
             enable_web_search,
+            require_action,
             self.temperature,
             self.use_flex,
             self.reasoning_effort,
             stream=stream,
-            tool_choice=tool_choice
         )
 
         return await self._complete_with_retry(params, actions, logger)
@@ -76,8 +76,8 @@ class AsyncOpenAIClient(AsyncBaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         logger: 'VerboseLogger' = None,
-        tool_choice: str = None,
         stream: bool = True,
     ) -> AsyncIterator[StreamEvent]:
         """Streaming completion - yields events in real-time"""
@@ -88,11 +88,11 @@ class AsyncOpenAIClient(AsyncBaseClient):
             actions,
             allowed_actions,
             enable_web_search,
+            require_action,
             self.temperature,
             self.use_flex,
             self.reasoning_effort,
             stream=stream,
-            tool_choice=tool_choice
         )
 
         async for event in self._stream_events_with_retry(params, actions, logger):

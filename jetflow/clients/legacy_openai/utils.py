@@ -13,9 +13,15 @@ def build_legacy_params(
     actions: List[BaseAction],
     allowed_actions: Optional[List[BaseAction]],
     reasoning_effort: Optional[Literal['minimal', 'low', 'medium', 'high']],
-    stream: bool
+    require_action: bool = False,
+    stream: bool = True
 ) -> Dict[str, Any]:
-    """Build parameters for legacy OpenAI ChatCompletions API"""
+    """Build parameters for legacy OpenAI ChatCompletions API
+
+    Args:
+        allowed_actions: Restrict which actions can be called (None = all, [] = none)
+        require_action: Force the model to call an action (tool_choice="required")
+    """
     formatted_messages = [{"role": "system", "content": system_prompt}] + [
         message.legacy_openai_format() for message in messages
     ]
@@ -36,27 +42,30 @@ def build_legacy_params(
     if reasoning_effort:
         params["reasoning_effort"] = reasoning_effort
 
-    # Handle tool_choice based on allowed_actions
+    # Handle tool_choice based on allowed_actions and require_action
     if allowed_actions is not None:
         if len(allowed_actions) == 0:
-            # Empty list means no tools allowed
+            # Empty list = disable function calling
             params['tool_choice'] = "none"
         elif len(allowed_actions) == 1:
-            # Single action: force that specific function
+            # Single action = force that specific function
             params['tool_choice'] = {
                 "type": "function",
                 "function": {"name": allowed_actions[0].name}
             }
         else:
-            # Multiple actions: use allowed_tools mode
+            # Multiple allowed actions = required mode with restrictions
             params['tool_choice'] = {
                 "type": "allowed_tools",
-                "mode": "auto",
+                "mode": "required",
                 "tools": [
                     {"type": "function", "function": {"name": action.name}}
                     for action in allowed_actions
                 ]
             }
+    elif require_action:
+        # No restrictions but must call a function
+        params['tool_choice'] = "required"
 
     return params
 

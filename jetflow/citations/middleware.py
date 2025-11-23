@@ -12,7 +12,6 @@ Usage:
             print(f"New citations detected: {event.citations}")
 """
 
-import inspect
 from typing import List, Iterator, AsyncIterator, Optional, TYPE_CHECKING
 
 from jetflow.clients.base import BaseClient, AsyncBaseClient
@@ -35,10 +34,6 @@ class CitationMiddleware(AsyncBaseClient):
         self.provider = client.provider
         self.model = client.model
 
-        # Check if wrapped client supports enable_web_search parameter
-        sig = inspect.signature(client.complete)
-        self._supports_web_search = 'enable_web_search' in sig.parameters
-
     async def stream(
         self,
         messages: List['Message'],
@@ -46,6 +41,7 @@ class CitationMiddleware(AsyncBaseClient):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         logger: Optional['BaseLogger'] = None,
         stream: bool = True,
     ) -> AsyncIterator[StreamEvent]:
@@ -53,19 +49,16 @@ class CitationMiddleware(AsyncBaseClient):
         self.citation_manager.reset_stream_state()
         content_buffer = ""
 
-        # Build kwargs conditionally based on what the client supports
-        kwargs = {
-            'messages': messages,
-            'system_prompt': system_prompt,
-            'actions': actions,
-            'allowed_actions': allowed_actions,
-            'logger': logger,
-            'stream': stream
-        }
-        if self._supports_web_search:
-            kwargs['enable_web_search'] = enable_web_search
-
-        async for event in self.client.stream(**kwargs):
+        async for event in self.client.stream(
+            messages=messages,
+            system_prompt=system_prompt,
+            actions=actions,
+            allowed_actions=allowed_actions,
+            enable_web_search=enable_web_search,
+            require_action=require_action,
+            logger=logger,
+            stream=stream
+        ):
             if isinstance(event, ContentDelta):
                 content_buffer += event.delta
                 new_citations = self.citation_manager.check_new_citations(content_buffer)
@@ -86,23 +79,21 @@ class CitationMiddleware(AsyncBaseClient):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         logger: Optional['BaseLogger'] = None,
         stream: bool = False,
     ) -> List['Message']:
         """Pass through to wrapped client (no citation detection needed for non-streaming)"""
-        # Build kwargs conditionally based on what the client supports
-        kwargs = {
-            'messages': messages,
-            'system_prompt': system_prompt,
-            'actions': actions,
-            'allowed_actions': allowed_actions,
-            'logger': logger,
-            'stream': stream
-        }
-        if self._supports_web_search:
-            kwargs['enable_web_search'] = enable_web_search
-
-        return await self.client.complete(**kwargs)
+        return await self.client.complete(
+            messages=messages,
+            system_prompt=system_prompt,
+            actions=actions,
+            allowed_actions=allowed_actions,
+            enable_web_search=enable_web_search,
+            require_action=require_action,
+            logger=logger,
+            stream=stream
+        )
 
 
 class SyncCitationMiddleware(BaseClient):
@@ -115,10 +106,6 @@ class SyncCitationMiddleware(BaseClient):
         self.provider = client.provider
         self.model = client.model
 
-        # Check if wrapped client supports enable_web_search parameter
-        sig = inspect.signature(client.complete)
-        self._supports_web_search = 'enable_web_search' in sig.parameters
-
     def stream(
         self,
         messages: List['Message'],
@@ -126,6 +113,7 @@ class SyncCitationMiddleware(BaseClient):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         logger: Optional['BaseLogger'] = None,
         stream: bool = True,
     ) -> Iterator[StreamEvent]:
@@ -133,19 +121,16 @@ class SyncCitationMiddleware(BaseClient):
         self.citation_manager.reset_stream_state()
         content_buffer = ""
 
-        # Build kwargs conditionally based on what the client supports
-        kwargs = {
-            'messages': messages,
-            'system_prompt': system_prompt,
-            'actions': actions,
-            'allowed_actions': allowed_actions,
-            'logger': logger,
-            'stream': stream
-        }
-        if self._supports_web_search:
-            kwargs['enable_web_search'] = enable_web_search
-
-        for event in self.client.stream(**kwargs):
+        for event in self.client.stream(
+            messages=messages,
+            system_prompt=system_prompt,
+            actions=actions,
+            allowed_actions=allowed_actions,
+            enable_web_search=enable_web_search,
+            require_action=require_action,
+            logger=logger,
+            stream=stream
+        ):
             if isinstance(event, ContentDelta):
                 content_buffer += event.delta
                 new_citations = self.citation_manager.check_new_citations(content_buffer)
@@ -166,20 +151,18 @@ class SyncCitationMiddleware(BaseClient):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         logger: Optional['BaseLogger'] = None,
         stream: bool = False,
     ) -> List['Message']:
         """Pass through to wrapped client (no citation detection needed for non-streaming)"""
-        # Build kwargs conditionally based on what the client supports
-        kwargs = {
-            'messages': messages,
-            'system_prompt': system_prompt,
-            'actions': actions,
-            'allowed_actions': allowed_actions,
-            'logger': logger,
-            'stream': stream
-        }
-        if self._supports_web_search:
-            kwargs['enable_web_search'] = enable_web_search
-
-        return self.client.complete(**kwargs)
+        return self.client.complete(
+            messages=messages,
+            system_prompt=system_prompt,
+            actions=actions,
+            allowed_actions=allowed_actions,
+            enable_web_search=enable_web_search,
+            require_action=require_action,
+            logger=logger,
+            stream=stream
+        )

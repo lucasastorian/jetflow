@@ -27,7 +27,7 @@ class Action:
 @dataclass
 class Thought:
     """Reasoning trace from LLM"""
-    id: str
+    id: str | bytes  # Signature - str for Anthropic, bytes for Gemini
     summaries: List[str]
 
 
@@ -232,8 +232,9 @@ class Message:
             }
 
             if self.actions:
-                message["tool_calls"] = [
-                    {
+                tool_calls = []
+                for action in self.actions:
+                    tool_call = {
                         "id": action.id,
                         "type": "function",
                         "function": {
@@ -241,8 +242,8 @@ class Message:
                             "arguments": json.dumps(action.body)
                         }
                     }
-                    for action in self.actions
-                ]
+                    tool_calls.append(tool_call)
+                message["tool_calls"] = tool_calls
 
             return message
 

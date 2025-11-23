@@ -19,17 +19,26 @@ from jetflow.chain import Chain, AsyncChain
 from jetflow.citations import CitationManager, CitationExtractor
 from jetflow.utils.usage import Usage
 
-# Import clients (optional dependencies)
+# Import clients (optional dependencies - each wrapped separately)
 try:
-    from jetflow.clients import (
-        AnthropicClient, AsyncAnthropicClient,
-        OpenAIClient, AsyncOpenAIClient,
-        GrokClient, AsyncGrokClient,
-        GeminiClient, AsyncGeminiClient,
-    )
-    _clients_available = True
+    from jetflow.clients import AnthropicClient, AsyncAnthropicClient
 except ImportError:
-    _clients_available = False
+    pass
+
+try:
+    from jetflow.clients import OpenAIClient, AsyncOpenAIClient
+except ImportError:
+    pass
+
+try:
+    from jetflow.clients import GrokClient, AsyncGrokClient
+except ImportError:
+    pass
+
+try:
+    from jetflow.clients import GeminiClient, AsyncGeminiClient
+except ImportError:
+    pass
 
 __all__ = [
     "__version__",
@@ -62,14 +71,11 @@ __all__ = [
 ]
 
 # Add clients to __all__ if available
-if _clients_available:
-    __all__.extend([
-        "AnthropicClient",
-        "AsyncAnthropicClient",
-        "OpenAIClient",
-        "AsyncOpenAIClient",
-        "GrokClient",
-        "AsyncGrokClient",
-        "GeminiClient",
-        "AsyncGeminiClient",
-    ])
+for _client_name in [
+    "AnthropicClient", "AsyncAnthropicClient",
+    "OpenAIClient", "AsyncOpenAIClient",
+    "GrokClient", "AsyncGrokClient",
+    "GeminiClient", "AsyncGeminiClient",
+]:
+    if _client_name in dir():
+        __all__.append(_client_name)

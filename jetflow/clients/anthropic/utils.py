@@ -29,9 +29,15 @@ def build_message_params(
     actions: List[BaseAction],
     allowed_actions: Optional[List[BaseAction]],
     reasoning_budget: int,
+    require_action: bool = False,
     stream: bool = True
 ) -> Dict[str, Any]:
-    """Build request parameters for Anthropic Messages API"""
+    """Build request parameters for Anthropic Messages API
+
+    Args:
+        allowed_actions: Restrict which actions can be called (None = all, [] = none)
+        require_action: Force the model to call an action (tool_choice="any")
+    """
     formatted_messages = [message.anthropic_format() for message in messages]
 
     params = {
@@ -45,22 +51,34 @@ def build_message_params(
         "stream": stream
     }
 
-    if reasoning_budget > 0 and supports_thinking(model):
+    thinking_enabled = reasoning_budget > 0 and supports_thinking(model)
+
+    if thinking_enabled:
         params['thinking'] = {
             "type": "enabled",
             "budget_tokens": reasoning_budget
         }
 
-    # Handle tool_choice based on allowed_actions
+    # Handle tool_choice based on allowed_actions and require_action
+    # NOTE: With extended thinking, only "auto" and "none" are allowed
     if allowed_actions is not None:
         if len(allowed_actions) == 0:
+            # Empty list = disable function calling
             params['tool_choice'] = {"type": "none"}
+        elif thinking_enabled:
+            # With thinking: can't force tools, just filter the tools list
+            params['tools'] = [action.anthropic_schema for action in allowed_actions]
+            # tool_choice stays "auto" (default)
         elif len(allowed_actions) == 1:
+            # Single action = force that specific function
             params['tool_choice'] = {"type": "tool", "name": allowed_actions[0].name}
         else:
-            # Multiple actions: use "any" and filter tools list
+            # Multiple allowed actions = force one of them
             params['tool_choice'] = {"type": "any"}
             params['tools'] = [action.anthropic_schema for action in allowed_actions]
+    elif require_action and not thinking_enabled:
+        # No restrictions but must call a function (only without thinking)
+        params['tool_choice'] = {"type": "any"}
 
     return params
 

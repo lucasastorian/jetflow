@@ -18,20 +18,17 @@ def build_response_params(
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
+        require_action: bool = False,
         temperature: float = 1.0,
         use_flex: bool = False,
         reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = 'medium',
         stream: bool = True,
-        tool_choice: str = None
 ) -> dict:
     """Build common request parameters for OpenAI API calls
 
     Args:
-        tool_choice: Override tool_choice behavior. Options:
-            - None (default): Auto-determine based on allowed_actions
-            - "auto": Model decides whether to call tools
-            - "none": Prevent any tool calls
-            - "required": Force at least one tool call
+        allowed_actions: Restrict which actions can be called (None = all, [] = none)
+        require_action: Force the model to call an action (tool_choice="required")
     """
     items = [item for message in messages for item in message.openai_format()]
 
@@ -60,25 +57,27 @@ def build_response_params(
     if tools:
         params['tools'] = tools
 
-        # Handle tool_choice based on allowed_actions
+        # Handle tool_choice based on allowed_actions and require_action
         if allowed_actions is not None:
             if len(allowed_actions) == 0:
+                # Empty list = disable function calling
                 params['tool_choice'] = "none"
             elif len(allowed_actions) == 1:
+                # Single action = force that specific function
                 params['tool_choice'] = {"type": "function", "name": allowed_actions[0].name}
             else:
+                # Multiple allowed actions = required mode with restrictions
                 params['tool_choice'] = {
                     "type": "allowed_tools",
-                    "mode": "auto",
+                    "mode": "required",
                     "tools": [
                         {"type": "function", "name": action.name}
                         for action in allowed_actions
                     ]
                 }
-
-        # Allow explicit tool_choice override if needed
-        if tool_choice:
-            params['tool_choice'] = tool_choice
+        elif require_action:
+            # No restrictions but must call a function
+            params['tool_choice'] = "required"
 
     return params
 
