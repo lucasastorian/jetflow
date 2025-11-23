@@ -30,6 +30,8 @@ class Agent:
                  logger: BaseLogger = None, verbose: bool = True, max_tokens_before_exit: int = 200000):
         if max_iter < 1:
             raise ValueError("max_iter must be >= 1")
+        if require_action is False:
+            raise ValueError("require_action=False is not supported at Agent level. Use require_action=None (default) or True.")
         validate_client(client, is_async=False)
 
         actions = actions or []
