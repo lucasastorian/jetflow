@@ -33,35 +33,31 @@ def build_gemini_config(
     tools = None
     tool_config = None
 
-    if actions:
+    # Don't pass tools at all if function calling is disabled
+    # Gemini 3 doesn't handle mode="NONE" properly with tools defined
+    should_disable_tools = (
+        require_action is False or
+        (allowed_actions is not None and len(allowed_actions) == 0)
+    )
+
+    if actions and not should_disable_tools:
         func_declarations = [action_to_function(a) for a in actions]
         tools = [types.Tool(function_declarations=func_declarations)]
 
         # Configure function calling mode
-        if allowed_actions is not None:
-            if len(allowed_actions) == 0:
-                # Empty list = disable function calling
-                tool_config = types.ToolConfig(
-                    function_calling_config=types.FunctionCallingConfig(mode="NONE")
+        if allowed_actions is not None and len(allowed_actions) > 0:
+            # Specific actions = restrict to those functions (and force call)
+            allowed_names = [a.name for a in allowed_actions]
+            tool_config = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                    mode="ANY",
+                    allowed_function_names=allowed_names
                 )
-            else:
-                # Specific actions = restrict to those functions (and force call)
-                allowed_names = [a.name for a in allowed_actions]
-                tool_config = types.ToolConfig(
-                    function_calling_config=types.FunctionCallingConfig(
-                        mode="ANY",
-                        allowed_function_names=allowed_names
-                    )
-                )
+            )
         elif require_action is True:
             # Must call a function
             tool_config = types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(mode="ANY")
-            )
-        elif require_action is False:
-            # Cannot call functions - force text response
-            tool_config = types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(mode="NONE")
             )
         # If require_action is None, defaults to AUTO
 

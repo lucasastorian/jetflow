@@ -25,7 +25,11 @@ class AsyncAgent:
 
     max_depth: int = 10
 
-    def __init__(self, client: AsyncBaseClient, actions: List[Union[Type[BaseAction], Type[AsyncBaseAction], BaseAction, AsyncBaseAction]] = None, system_prompt: Union[str, Callable[[], str]] = "", max_iter: int = 20, require_action: bool = None, logger: BaseLogger = None, verbose: bool = True, max_tokens_before_exit: int = 200000):
+    def __init__(self, client: AsyncBaseClient,
+                 actions: List[Union[Type[BaseAction], Type[AsyncBaseAction], BaseAction, AsyncBaseAction]] = None,
+                 system_prompt: Union[str, Callable[[], str]] = "", max_iter: int = 20,
+                 require_action: bool = None, logger: BaseLogger = None, verbose: bool = True,
+                 max_tokens_before_exit: int = 200000):
         if max_iter < 1:
             raise ValueError("max_iter must be >= 1")
         validate_client(client, is_async=True)
