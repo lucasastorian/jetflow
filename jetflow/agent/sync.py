@@ -7,7 +7,7 @@ from jetflow.citations import SyncCitationMiddleware
 from jetflow.action import BaseAction
 from jetflow.models import Message, Action
 from jetflow.models import AgentResponse, ActionFollowUp, StepResult
-from jetflow.models import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted, ContentDelta
+from jetflow.models import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted
 from jetflow.agent.state import AgentState
 from jetflow.agent.utils import (
     validate_client, prepare_and_validate_actions,
@@ -25,17 +25,9 @@ class Agent:
 
     max_depth: int = 10
 
-    def __init__(
-        self,
-        client: BaseClient,
-        actions: List[Union[Type[BaseAction], BaseAction]] = None,
-        system_prompt: Union[str, Callable[[], str]] = "",
-        max_iter: int = 20,
-        require_action: bool = False,
-        logger: BaseLogger = None,
-        verbose: bool = True,
-        max_tokens_before_exit: int = 200000
-    ):
+    def __init__(self, client: BaseClient, actions: List[Union[Type[BaseAction], BaseAction]] = None,
+                 system_prompt: Union[str, Callable[[], str]] = "", max_iter: int = 20, require_action: bool = False,
+                 logger: BaseLogger = None, verbose: bool = True, max_tokens_before_exit: int = 200000):
         validate_client(client, is_async=False)
 
         actions = actions or []
@@ -55,16 +47,14 @@ class Agent:
         self.num_iter = 0
 
     def run(self, query: Union[str, List[Message]]) -> AgentResponse:
-        """Execute agent loop: LLM call + actions until exit or max iterations"""
+        """Execute agent loop until exit or max iterations"""
         with Timer.measure() as timer:
             self._add_messages_to_history(query)
 
             follow_up_actions = []
             while self.num_iter < self.max_iter:
                 result = self._navigate_sequence_non_streaming(
-                    actions=self.actions + follow_up_actions,
-                    system_prompt=self.system_prompt,
-                    depth=0
+                    actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, depth=0
                 )
 
                 if result.is_exit:
@@ -75,18 +65,7 @@ class Agent:
             return self._build_final_response(timer, success=False)
 
     def stream(self, query: Union[str, List[Message]]) -> Iterator[Union[StreamEvent, AgentResponse]]:
-        """Execute agent loop with streaming events: LLM call + actions until exit or max iterations
-
-        Yields streaming events, then yields AgentResponse as final item.
-
-        Usage:
-            response = None
-            for event in agent.stream("query"):
-                if isinstance(event, AgentResponse):
-                    response = event
-                elif isinstance(event, ContentDelta):
-                    print(event.delta, end="")
-        """
+        """Execute agent loop with streaming, yields events then AgentResponse"""
         with Timer.measure() as timer:
             self._add_messages_to_history(query)
 
@@ -95,9 +74,7 @@ class Agent:
                 result = None
 
                 for event in self._navigate_sequence_streaming(
-                    actions=self.actions + follow_up_actions,
-                    system_prompt=self.system_prompt,
-                    depth=0
+                    actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, depth=0
                 ):
                     if isinstance(event, StepResult):
                         result = event
@@ -112,14 +89,9 @@ class Agent:
 
             yield self._build_final_response(timer, success=False)
 
-    def _navigate_sequence_non_streaming(
-        self,
-        actions: List[BaseAction],
-        system_prompt: str,
-        allowed_actions: List[BaseAction] = None,
-        depth: int = 0
-    ) -> StepResult:
-        """Non-streaming navigate sequence"""
+    def _navigate_sequence_non_streaming(self, actions: List[BaseAction], system_prompt: str,
+                                         allowed_actions: List[BaseAction] = None, depth: int = 0) -> StepResult:
+        """Navigate action sequence, recursing on forced follow-ups"""
         if depth > self.max_depth:
             raise RuntimeError(f"Exceeded max follow-up depth {self.max_depth}")
 
@@ -146,14 +118,9 @@ class Agent:
 
         return StepResult(is_exit=False, follow_ups=optional_follow_ups)
 
-    def _navigate_sequence_streaming(
-        self,
-        actions: List[BaseAction],
-        system_prompt: str,
-        allowed_actions: List[BaseAction] = None,
-        depth: int = 0
-    ) -> Iterator[Union[StreamEvent, StepResult]]:
-        """Streaming navigate sequence"""
+    def _navigate_sequence_streaming(self, actions: List[BaseAction], system_prompt: str,
+                                     allowed_actions: List[BaseAction] = None, depth: int = 0) -> Iterator[Union[StreamEvent, StepResult]]:
+        """Navigate action sequence with streaming, recursing on forced follow-ups"""
         if depth > self.max_depth:
             raise RuntimeError(f"Exceeded max follow-up depth {self.max_depth}")
 
@@ -194,18 +161,9 @@ class Agent:
 
         yield StepResult(is_exit=False, follow_ups=optional_follow_ups)
 
-    def _step(
-        self,
-        actions: List[BaseAction],
-        system_prompt: str,
-        allowed_actions: List[BaseAction] = None
-    ) -> Optional[List[ActionFollowUp]]:
-        """Execute one step: LLM call + actions (non-streaming, uses client.complete())
-
-        Returns:
-            None if exit action called
-            List[ActionFollowUp] otherwise (empty list if no follow-ups)
-        """
+    def _step(self, actions: List[BaseAction], system_prompt: str,
+              allowed_actions: List[BaseAction] = None) -> Optional[List[ActionFollowUp]]:
+        """Execute one step: LLM call + actions. Returns None if exit, else follow-ups"""
         if self._is_final_step() or self._approaching_context_limit(system_prompt):
             allowed_actions = self._get_final_step_allowed_actions()
 
@@ -229,16 +187,9 @@ class Agent:
 
         return self._consume_action_events(main_completion.actions, actions)
 
-    def _step_streaming(
-        self,
-        actions: List[BaseAction],
-        system_prompt: str,
-        allowed_actions: List[BaseAction] = None
-    ) -> Iterator[Union[StreamEvent, StepResult]]:
-        """Execute one step: LLM call + actions (streaming, uses client.stream())
-
-        Yields streaming events, then yields StepResult as final item.
-        """
+    def _step_streaming(self, actions: List[BaseAction], system_prompt: str,
+                        allowed_actions: List[BaseAction] = None) -> Iterator[Union[StreamEvent, StepResult]]:
+        """Execute one step with streaming. Yields events, then StepResult"""
         if self._is_final_step() or self._approaching_context_limit(system_prompt):
             allowed_actions = self._get_final_step_allowed_actions()
 
@@ -266,7 +217,6 @@ class Agent:
             yield StepResult(is_exit=(follow_ups is None), follow_ups=follow_ups or [])
             return
 
-        # Forward action events and aggregate follow-ups
         follow_ups = []
         for event in self._execute_actions(main_completion.actions, actions):
             yield event
@@ -280,13 +230,7 @@ class Agent:
         yield StepResult(is_exit=False, follow_ups=follow_ups)
 
     def _execute_actions(self, called_actions: List[Action], actions: List[BaseAction]) -> Iterator[StreamEvent]:
-        """Execute actions and yield streaming events with metadata
-
-        Yields ActionExecutionStart and ActionExecuted events.
-        ActionExecuted carries follow_up and is_exit metadata.
-
-        This is the ONLY implementation of action execution - shared by both paths.
-        """
+        """Execute actions and yield ActionExecutionStart/ActionExecuted events"""
         state = AgentState(messages=self.messages, citations=dict(self.citation_manager.citations))
 
         for called_action in called_actions:
@@ -323,17 +267,8 @@ class Agent:
             if is_exit:
                 return
 
-    def _consume_action_events(
-        self,
-        called_actions: List[Action],
-        actions: List[BaseAction]
-    ) -> Optional[List[ActionFollowUp]]:
-        """Consume action execution events and aggregate follow-ups (non-streaming)
-
-        Returns:
-            None if exit action called
-            List[ActionFollowUp] otherwise (empty list if no follow-ups)
-        """
+    def _consume_action_events(self, called_actions: List[Action], actions: List[BaseAction]) -> Optional[List[ActionFollowUp]]:
+        """Consume action events and return follow-ups. Returns None if exit"""
         follow_ups = []
         for event in self._execute_actions(called_actions, actions):
             if isinstance(event, ActionExecuted):
@@ -352,11 +287,9 @@ class Agent:
         add_messages_to_history(self.messages, query, self.citation_manager)
 
     def _is_final_step(self) -> bool:
-        """Check if this is the final iteration"""
         return self.num_iter == self.max_iter - 1
 
     def _approaching_context_limit(self, system_prompt: str) -> bool:
-        """Check if message history is approaching context window limit"""
         token_count = count_message_tokens(self.messages, system_prompt)
         if token_count >= self.max_tokens_before_exit:
             self.logger.log_warning(f"Approaching context limit ({token_count} tokens). Forcing exit.")
@@ -364,14 +297,11 @@ class Agent:
         return False
 
     def _get_final_step_allowed_actions(self) -> List[BaseAction]:
-        """Get allowed_actions for the final step"""
         if self.require_action:
             return [a for a in self.actions if getattr(a, '_is_exit', False)]
-        else:
-            return []
+        return []
 
     def _build_final_response(self, timer: Timer, success: bool) -> AgentResponse:
-        """Build the final agent response"""
         return _build_response(self, timer, success)
 
     @property
