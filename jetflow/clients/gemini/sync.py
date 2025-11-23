@@ -147,7 +147,7 @@ class GeminiClient(BaseClient):
         yield MessageStart(role="assistant")
 
         for chunk in stream:
-            if not chunk.candidates or not chunk.candidates[0].content:
+            if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
                 continue
 
             for part in chunk.candidates[0].content.parts:
