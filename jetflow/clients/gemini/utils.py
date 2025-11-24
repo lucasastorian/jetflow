@@ -105,20 +105,35 @@ def find_action_name(action_id: str, messages: List[Message]) -> str:
 
 
 def messages_to_contents(messages: List[Message]) -> List[types.Content]:
-    """Convert Message objects to Gemini Content format"""
+    """Convert Message objects to Gemini Content format
+
+    Gemini requires function responses to immediately follow function calls,
+    and consecutive tool messages must be grouped into a single user turn.
+    """
     contents = []
+    pending_tool_parts = []  # Accumulate consecutive tool responses
+
+    def flush_tool_parts():
+        """Add accumulated tool parts as a single user Content"""
+        nonlocal pending_tool_parts
+        if pending_tool_parts:
+            contents.append(types.Content(role="user", parts=pending_tool_parts))
+            pending_tool_parts = []
 
     for msg in messages:
         if msg.role == "tool":
-            # Function response - look up action name from history
+            # Function response - accumulate for grouping
             action_name = find_action_name(msg.action_id, messages)
             part = types.Part.from_function_response(
                 name=action_name,
                 response={"result": msg.content}
             )
-            contents.append(types.Content(role="user", parts=[part]))
+            pending_tool_parts.append(part)
 
         elif msg.role == "assistant":
+            # Flush any pending tool responses before assistant turn
+            flush_tool_parts()
+
             parts = []
 
             # Add thought summaries
@@ -162,9 +177,15 @@ def messages_to_contents(messages: List[Message]) -> List[types.Content]:
                 contents.append(types.Content(role="model", parts=parts))
 
         else:  # user
+            # Flush any pending tool responses before user turn
+            flush_tool_parts()
+
             contents.append(types.Content(
                 role="user",
                 parts=[types.Part(text=msg.content)]
             ))
+
+    # Flush any remaining tool parts at the end
+    flush_tool_parts()
 
     return contents
