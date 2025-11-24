@@ -51,7 +51,14 @@ class Chain:
                     f"Agent at index {i} must have at least one exit action to hand off control."
                 )
 
-        # Validate thinking compatibility (provider-specific requirements)
+        self._validate_thinking_compatibility(agents)
+
+        self.agents = agents
+        self.verbose = verbose
+        self.logger = VerboseLogger(verbose)
+
+    def _validate_thinking_compatibility(self, agents: List[Agent]):
+        """Validate thinking model compatibility across chain"""
         anthropic_thinking_agents = []
         anthropic_non_thinking_agents = []
         openai_thinking_agents = []
@@ -87,6 +94,23 @@ class Chain:
                 f"Either use all thinking models, or set reasoning_effort='none' for all Anthropic agents."
             )
 
+        # Anthropic thinking: cannot have non-Anthropic agents before it
+        # Because Anthropic requires valid thought signatures from ALL previous turns
+        if anthropic_thinking_agents:
+            for anthropic_idx in anthropic_thinking_agents:
+                # Check all agents before this Anthropic thinking agent
+                for prev_idx in range(anthropic_idx):
+                    prev_agent = agents[prev_idx]
+                    if prev_agent.client.provider != "Anthropic":
+                        raise ValueError(
+                            f"Cannot chain non-Anthropic agent (index {prev_idx}, provider={prev_agent.client.provider}) "
+                            f"before Anthropic thinking agent (index {anthropic_idx}). "
+                            f"Anthropic requires ALL assistant messages to have valid Anthropic thinking blocks with signatures. "
+                            f"Non-Anthropic providers produce incompatible or missing thinking signatures. "
+                            f"Either: (1) Use only Anthropic agents before the thinking agent, "
+                            f"or (2) Disable thinking on the Anthropic agent."
+                        )
+
         # OpenAI: cannot chain thinking → non-thinking (loses thinking context)
         if openai_thinking_agents and openai_non_thinking_agents:
             first_non_thinking = min(openai_non_thinking_agents)
@@ -99,10 +123,6 @@ class Chain:
                     f"Non-thinking OpenAI agents: {openai_non_thinking_agents}. "
                     f"OpenAI allows non-thinking → thinking, but not thinking → non-thinking."
                 )
-
-        self.agents = agents
-        self.verbose = verbose
-        self.logger = VerboseLogger(verbose)
 
     def run(self, query: Union[str, List[Message]]) -> ChainResponse:
         """Execute the chain, returns ChainResponse"""
@@ -256,7 +276,14 @@ class AsyncChain:
                     f"Agent at index {i} must have at least one exit action to hand off control."
                 )
 
-        # Validate thinking compatibility (provider-specific requirements)
+        self._validate_thinking_compatibility(agents)
+
+        self.agents = agents
+        self.verbose = verbose
+        self.logger = VerboseLogger(verbose)
+
+    def _validate_thinking_compatibility(self, agents: List[AsyncAgent]):
+        """Validate thinking model compatibility across chain"""
         anthropic_thinking_agents = []
         anthropic_non_thinking_agents = []
         openai_thinking_agents = []
@@ -292,6 +319,23 @@ class AsyncChain:
                 f"Either use all thinking models, or set reasoning_effort='none' for all Anthropic agents."
             )
 
+        # Anthropic thinking: cannot have non-Anthropic agents before it
+        # Because Anthropic requires valid thought signatures from ALL previous turns
+        if anthropic_thinking_agents:
+            for anthropic_idx in anthropic_thinking_agents:
+                # Check all agents before this Anthropic thinking agent
+                for prev_idx in range(anthropic_idx):
+                    prev_agent = agents[prev_idx]
+                    if prev_agent.client.provider != "Anthropic":
+                        raise ValueError(
+                            f"Cannot chain non-Anthropic agent (index {prev_idx}, provider={prev_agent.client.provider}) "
+                            f"before Anthropic thinking agent (index {anthropic_idx}). "
+                            f"Anthropic requires ALL assistant messages to have valid Anthropic thinking blocks with signatures. "
+                            f"Non-Anthropic providers produce incompatible or missing thinking signatures. "
+                            f"Either: (1) Use only Anthropic agents before the thinking agent, "
+                            f"or (2) Disable thinking on the Anthropic agent."
+                        )
+
         # OpenAI: cannot chain thinking → non-thinking (loses thinking context)
         if openai_thinking_agents and openai_non_thinking_agents:
             first_non_thinking = min(openai_non_thinking_agents)
@@ -304,10 +348,6 @@ class AsyncChain:
                     f"Non-thinking OpenAI agents: {openai_non_thinking_agents}. "
                     f"OpenAI allows non-thinking → thinking, but not thinking → non-thinking."
                 )
-
-        self.agents = agents
-        self.verbose = verbose
-        self.logger = VerboseLogger(verbose)
 
     async def run(self, query: Union[str, List[Message]]) -> ChainResponse:
         """Execute the chain, returns ChainResponse"""

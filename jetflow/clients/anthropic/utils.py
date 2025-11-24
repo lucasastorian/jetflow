@@ -6,7 +6,16 @@ from jetflow.models.message import Message
 
 
 BETAS = ["interleaved-thinking-2025-05-14"]
-THINKING_MODELS = ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-sonnet-4-1']
+THINKING_MODELS = [
+    'claude-opus-4-5',
+    'claude-opus-4-1',
+    'claude-opus-4',
+    'claude-sonnet-4-5',
+    'claude-sonnet-4-1',
+    'claude-sonnet-4',
+    'claude-3-7-sonnet',  # deprecated
+    'claude-haiku-4-5'
+]
 REASONING_BUDGET_MAP = {
     "low": 1024,
     "medium": 2048,
