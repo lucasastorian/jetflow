@@ -90,6 +90,21 @@ class ActionExecuted:
     is_exit: bool = False  # Whether this was an exit action
 
 
+@dataclass
+class ChainAgentStart:
+    """Chain agent execution begins"""
+    agent_index: int  # 0-indexed
+    total_agents: int
+
+
+@dataclass
+class ChainAgentEnd:
+    """Chain agent execution completes"""
+    agent_index: int
+    total_agents: int
+    duration: float  # seconds
+
+
 # Union type for all streaming events
 StreamEvent = Union[
     MessageStart,
@@ -102,5 +117,7 @@ StreamEvent = Union[
     ActionDelta,
     ActionEnd,
     ActionExecutionStart,
-    ActionExecuted
+    ActionExecuted,
+    ChainAgentStart,
+    ChainAgentEnd
 ]

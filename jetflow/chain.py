@@ -1,13 +1,14 @@
 """Sequential agent chaining with shared message history"""
 
 import datetime
-from contextlib import contextmanager
-from typing import List, Union, Iterator, Literal
+import time
+from typing import List, Union, Iterator, AsyncIterator
 
 from jetflow.agent import Agent, AsyncAgent
 from jetflow.models import Message
-from jetflow.models.response import ChainResponse
+from jetflow.models.response import ChainResponse, AgentResponse
 from jetflow.models import StreamEvent, MessageEnd
+from jetflow.models.events import ChainAgentStart, ChainAgentEnd
 from jetflow.utils.usage import Usage
 from jetflow.utils.verbose_logger import VerboseLogger
 
@@ -104,18 +105,7 @@ class Chain:
         self.logger = VerboseLogger(verbose)
 
     def run(self, query: Union[str, List[Message]]) -> ChainResponse:
-        """
-        Execute the chain with an initial query.
-
-        Args:
-            query: Initial user query (string or list of messages)
-
-        Returns:
-            ChainResponse with accumulated messages and aggregated usage
-
-        Raises:
-            RuntimeError: If a non-last agent fails to exit properly
-        """
+        """Execute the chain, returns ChainResponse"""
         # Initialize shared message history
         if isinstance(query, str):
             shared_messages = [Message(role="user", content=query, status="completed")]
@@ -129,8 +119,6 @@ class Chain:
         for i, agent in enumerate(self.agents):
             is_last = (i == len(self.agents) - 1)
 
-            # LOG: Chain transition start
-            import time
             agent_start_time = time.time()
             self.logger.log_chain_transition_start(i, len(self.agents))
 
@@ -138,18 +126,15 @@ class Chain:
             agent.reset()
 
             # Run agent with shared history
-            # Agent.run() accepts List[Message], so it will extend its messages
             result = agent.run(shared_messages.copy())
 
             # Extract NEW messages this agent added
-            # (result.messages = shared_messages + new messages)
             new_messages = result.messages[len(shared_messages):]
             shared_messages.extend(new_messages)
 
             # Accumulate usage
             total_usage = total_usage + result.usage
 
-            # LOG: Chain transition end
             agent_duration = time.time() - agent_start_time
             self.logger.log_chain_transition_end(i, len(self.agents), agent_duration)
 
@@ -170,61 +155,67 @@ class Chain:
             success=True
         )
 
-    @contextmanager
-    def stream(
-        self,
-        query: Union[str, List[Message]],
-        mode: Literal["deltas", "messages"] = "deltas"
-    ) -> Iterator[Iterator[StreamEvent]]:
-        """
-        Stream chain execution with real-time events.
-
-        Args:
-            query: Initial user query (string or list of messages)
-            mode: "deltas" for granular events, "messages" for MessageEnd only
-
-        Yields:
-            Iterator of StreamEvent instances from all agents in the chain
-
-        Example:
-            ```python
-            with chain.stream("Research AI safety") as events:
-                for event in events:
-                    if isinstance(event, ContentDelta):
-                        print(event.delta, end="", flush=True)
-                    elif isinstance(event, MessageEnd):
-                        print(f"\\nStage complete: {event.message.content[:50]}...")
-            ```
-        """
+    def stream(self, query: Union[str, List[Message]]) -> Iterator[Union[StreamEvent, ChainResponse]]:
+        """Execute chain with streaming, yields events then ChainResponse"""
         # Initialize shared message history
         if isinstance(query, str):
             shared_messages = [Message(role="user", content=query, status="completed")]
         else:
             shared_messages = list(query)
 
+        total_usage = Usage()
         start_time = datetime.datetime.now()
 
-        def event_generator():
-            """Generate streaming events from all agents in the chain"""
-            # Run each agent sequentially
-            for i, agent in enumerate(self.agents):
-                is_last = (i == len(self.agents) - 1)
+        # Run each agent sequentially
+        for i, agent in enumerate(self.agents):
+            is_last = (i == len(self.agents) - 1)
 
-                # Reset agent's internal state (but keep actions/config)
-                agent.reset()
+            agent_start_time = time.time()
+            self.logger.log_chain_transition_start(i, len(self.agents))
 
-                # Stream agent execution
-                with agent.stream(shared_messages.copy(), mode=mode) as agent_events:
-                    for event in agent_events:
-                        yield event
+            # Yield chain agent start event
+            yield ChainAgentStart(agent_index=i, total_agents=len(self.agents))
 
-                        # Capture new messages from MessageEnd events
-                        if isinstance(event, MessageEnd):
-                            # Extract NEW messages this agent added
-                            new_messages = agent.messages[len(shared_messages):]
-                            shared_messages.extend(new_messages)
+            # Reset agent's internal state (but keep actions/config)
+            agent.reset()
 
-        yield event_generator()
+            # Stream agent execution
+            agent_response = None
+            for event in agent.stream(shared_messages.copy()):
+                if isinstance(event, AgentResponse):
+                    agent_response = event
+                else:
+                    yield event
+
+            # Extract NEW messages this agent added
+            new_messages = agent_response.messages[len(shared_messages):]
+            shared_messages.extend(new_messages)
+
+            # Accumulate usage
+            total_usage = total_usage + agent_response.usage
+
+            agent_duration = time.time() - agent_start_time
+            self.logger.log_chain_transition_end(i, len(self.agents), agent_duration)
+
+            # Yield chain agent end event
+            yield ChainAgentEnd(agent_index=i, total_agents=len(self.agents), duration=agent_duration)
+
+            # Verify non-last agents exited properly
+            if not is_last and not agent_response.success:
+                raise RuntimeError(
+                    f"Agent at index {i} failed to exit via an exit action. "
+                    f"Check that it has exit actions and successfully called one."
+                )
+
+        end_time = datetime.datetime.now()
+
+        yield ChainResponse(
+            content=shared_messages[-1].content if shared_messages else "",
+            messages=shared_messages,
+            usage=total_usage,
+            duration=(end_time - start_time).total_seconds(),
+            success=True
+        )
 
 
 class AsyncChain:
@@ -319,18 +310,7 @@ class AsyncChain:
         self.logger = VerboseLogger(verbose)
 
     async def run(self, query: Union[str, List[Message]]) -> ChainResponse:
-        """
-        Execute the chain with an initial query.
-
-        Args:
-            query: Initial user query (string or list of messages)
-
-        Returns:
-            ChainResponse with accumulated messages and aggregated usage
-
-        Raises:
-            RuntimeError: If a non-last agent fails to exit properly
-        """
+        """Execute the chain, returns ChainResponse"""
         # Initialize shared message history
         if isinstance(query, str):
             shared_messages = [Message(role="user", content=query, status="completed")]
@@ -344,8 +324,6 @@ class AsyncChain:
         for i, agent in enumerate(self.agents):
             is_last = (i == len(self.agents) - 1)
 
-            # LOG: Chain transition start
-            import time
             agent_start_time = time.time()
             self.logger.log_chain_transition_start(i, len(self.agents))
 
@@ -362,7 +340,6 @@ class AsyncChain:
             # Accumulate usage
             total_usage = total_usage + result.usage
 
-            # LOG: Chain transition end
             agent_duration = time.time() - agent_start_time
             self.logger.log_chain_transition_end(i, len(self.agents), agent_duration)
 
@@ -376,6 +353,68 @@ class AsyncChain:
         end_time = datetime.datetime.now()
 
         return ChainResponse(
+            content=shared_messages[-1].content if shared_messages else "",
+            messages=shared_messages,
+            usage=total_usage,
+            duration=(end_time - start_time).total_seconds(),
+            success=True
+        )
+
+    async def stream(self, query: Union[str, List[Message]]) -> AsyncIterator[Union[StreamEvent, ChainResponse]]:
+        """Execute chain with streaming, yields events then ChainResponse"""
+        # Initialize shared message history
+        if isinstance(query, str):
+            shared_messages = [Message(role="user", content=query, status="completed")]
+        else:
+            shared_messages = list(query)
+
+        total_usage = Usage()
+        start_time = datetime.datetime.now()
+
+        # Run each agent sequentially
+        for i, agent in enumerate(self.agents):
+            is_last = (i == len(self.agents) - 1)
+
+            agent_start_time = time.time()
+            self.logger.log_chain_transition_start(i, len(self.agents))
+
+            # Yield chain agent start event
+            yield ChainAgentStart(agent_index=i, total_agents=len(self.agents))
+
+            # Reset agent's internal state (but keep actions/config)
+            agent.reset()
+
+            # Stream agent execution
+            agent_response = None
+            async for event in agent.stream(shared_messages.copy()):
+                if isinstance(event, AgentResponse):
+                    agent_response = event
+                else:
+                    yield event
+
+            # Extract NEW messages this agent added
+            new_messages = agent_response.messages[len(shared_messages):]
+            shared_messages.extend(new_messages)
+
+            # Accumulate usage
+            total_usage = total_usage + agent_response.usage
+
+            agent_duration = time.time() - agent_start_time
+            self.logger.log_chain_transition_end(i, len(self.agents), agent_duration)
+
+            # Yield chain agent end event
+            yield ChainAgentEnd(agent_index=i, total_agents=len(self.agents), duration=agent_duration)
+
+            # Verify non-last agents exited properly
+            if not is_last and not agent_response.success:
+                raise RuntimeError(
+                    f"Agent at index {i} failed to exit via an exit action. "
+                    f"Check that it has exit actions and successfully called one."
+                )
+
+        end_time = datetime.datetime.now()
+
+        yield ChainResponse(
             content=shared_messages[-1].content if shared_messages else "",
             messages=shared_messages,
             usage=total_usage,

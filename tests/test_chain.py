@@ -12,7 +12,8 @@ import asyncio
 from dotenv import load_dotenv
 from jetflow import Agent, AsyncAgent, Chain, AsyncChain, action
 from jetflow.clients.anthropic import AnthropicClient, AsyncAnthropicClient
-from jetflow.models.response import ActionResult
+from jetflow.models.response import ActionResult, ChainResponse
+from jetflow.models import StreamEvent, ContentDelta, MessageEnd, ChainAgentStart, ChainAgentEnd
 from pydantic import BaseModel, Field
 
 load_dotenv()
@@ -211,6 +212,150 @@ async def test_async_chain():
 
 
 # ============================================================================
+# Test 3: Sync Chain Streaming
+# ============================================================================
+
+def test_sync_chain_stream():
+    """Test sync chain streaming"""
+    print("=" * 80)
+    print("TEST 3: SYNC CHAIN - STREAMING")
+    print("=" * 80)
+    print()
+
+    client = AnthropicClient(model="claude-haiku-4-5")
+
+    search_agent = Agent(
+        client=client,
+        actions=[add_numbers, search_complete],
+        system_prompt="""You are a search specialist.
+        Calculate 5 + 10 using add_numbers, then exit with search_complete.""",
+        require_action=True,
+        max_iter=10,
+        verbose=True
+    )
+
+    analysis_agent = Agent(
+        client=client,
+        actions=[add_numbers, analysis_complete],
+        system_prompt="""You are an analyst.
+        Review findings and exit with analysis_complete.""",
+        require_action=True,
+        max_iter=10,
+        verbose=True
+    )
+
+    chain = Chain([search_agent, analysis_agent])
+
+    # Stream and collect events
+    events = []
+    response = None
+    for event in chain.stream("Calculate 5 + 10"):
+        events.append(event)
+        if isinstance(event, ChainResponse):
+            response = event
+
+    print("\n" + "=" * 80)
+    print("ASSERTIONS")
+    print("=" * 80)
+
+    assert response is not None, "Should yield ChainResponse at end"
+    assert response.success, "Chain should complete successfully"
+    assert len(events) > 1, "Should have multiple events before final response"
+
+    # Count event types
+    content_deltas = sum(1 for e in events if isinstance(e, ContentDelta))
+    message_ends = sum(1 for e in events if isinstance(e, MessageEnd))
+    chain_starts = sum(1 for e in events if isinstance(e, ChainAgentStart))
+    chain_ends = sum(1 for e in events if isinstance(e, ChainAgentEnd))
+
+    # Should have 2 chain agent start/end events (one per agent)
+    assert chain_starts == 2, f"Expected 2 ChainAgentStart events, got {chain_starts}"
+    assert chain_ends == 2, f"Expected 2 ChainAgentEnd events, got {chain_ends}"
+
+    print(f"✓ Total events: {len(events)}")
+    print(f"✓ ContentDelta events: {content_deltas}")
+    print(f"✓ MessageEnd events: {message_ends}")
+    print(f"✓ ChainAgentStart events: {chain_starts}")
+    print(f"✓ ChainAgentEnd events: {chain_ends}")
+    print(f"✓ Success: {response.success}")
+
+    print("\n✅ TEST 3 PASSED\n")
+    return response
+
+
+# ============================================================================
+# Test 4: Async Chain Streaming
+# ============================================================================
+
+async def test_async_chain_stream():
+    """Test async chain streaming"""
+    print("=" * 80)
+    print("TEST 4: ASYNC CHAIN - STREAMING")
+    print("=" * 80)
+    print()
+
+    client = AsyncAnthropicClient(model="claude-haiku-4-5")
+
+    search_agent = AsyncAgent(
+        client=client,
+        actions=[add_numbers, search_complete],
+        system_prompt="""You are a search specialist.
+        Calculate 8 + 12 using add_numbers, then exit with search_complete.""",
+        require_action=True,
+        max_iter=10,
+        verbose=True
+    )
+
+    analysis_agent = AsyncAgent(
+        client=client,
+        actions=[add_numbers, analysis_complete],
+        system_prompt="""You are an analyst.
+        Review findings and exit with analysis_complete.""",
+        require_action=True,
+        max_iter=10,
+        verbose=True
+    )
+
+    chain = AsyncChain([search_agent, analysis_agent])
+
+    # Stream and collect events
+    events = []
+    response = None
+    async for event in chain.stream("Calculate 8 + 12"):
+        events.append(event)
+        if isinstance(event, ChainResponse):
+            response = event
+
+    print("\n" + "=" * 80)
+    print("ASSERTIONS")
+    print("=" * 80)
+
+    assert response is not None, "Should yield ChainResponse at end"
+    assert response.success, "Chain should complete successfully"
+    assert len(events) > 1, "Should have multiple events before final response"
+
+    # Count event types
+    content_deltas = sum(1 for e in events if isinstance(e, ContentDelta))
+    message_ends = sum(1 for e in events if isinstance(e, MessageEnd))
+    chain_starts = sum(1 for e in events if isinstance(e, ChainAgentStart))
+    chain_ends = sum(1 for e in events if isinstance(e, ChainAgentEnd))
+
+    # Should have 2 chain agent start/end events (one per agent)
+    assert chain_starts == 2, f"Expected 2 ChainAgentStart events, got {chain_starts}"
+    assert chain_ends == 2, f"Expected 2 ChainAgentEnd events, got {chain_ends}"
+
+    print(f"✓ Total events: {len(events)}")
+    print(f"✓ ContentDelta events: {content_deltas}")
+    print(f"✓ MessageEnd events: {message_ends}")
+    print(f"✓ ChainAgentStart events: {chain_starts}")
+    print(f"✓ ChainAgentEnd events: {chain_ends}")
+    print(f"✓ Success: {response.success}")
+
+    print("\n✅ TEST 4 PASSED\n")
+    return response
+
+
+# ============================================================================
 # Main
 # ============================================================================
 
@@ -218,6 +363,8 @@ async def main():
     """Run all tests"""
     test_sync_chain()
     await test_async_chain()
+    test_sync_chain_stream()
+    await test_async_chain_stream()
 
 
 if __name__ == "__main__":
@@ -230,8 +377,11 @@ if __name__ == "__main__":
         print("🎉 ALL CHAIN TESTS PASSED!")
         print("=" * 80)
         print("\nValidated:")
-        print("  ✓ Sync chain execution")
-        print("  ✓ Async chain execution")
+        print("  ✓ Sync chain run()")
+        print("  ✓ Async chain run()")
+        print("  ✓ Sync chain stream()")
+        print("  ✓ Async chain stream()")
+        print("  ✓ ChainAgentStart/ChainAgentEnd events")
         print("  ✓ Sequential agent execution")
         print("  ✓ Shared message history between agents")
         print("  ✓ Exit action requirements")

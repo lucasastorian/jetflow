@@ -13,7 +13,9 @@ from jetflow.models.events import (
     ActionDelta,
     ActionEnd,
     ActionExecutionStart,
-    ActionExecuted
+    ActionExecuted,
+    ChainAgentStart,
+    ChainAgentEnd
 )
 from jetflow.models.response import AgentResponse, ActionResponse, ActionResult, ActionFollowUp, StepResult
 __all__ = [
@@ -35,6 +37,8 @@ __all__ = [
     'ActionEnd',
     'ActionExecutionStart',
     'ActionExecuted',
+    'ChainAgentStart',
+    'ChainAgentEnd',
     # Response types
     'AgentResponse',
     'ActionResponse',
