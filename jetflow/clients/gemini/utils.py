@@ -143,6 +143,11 @@ def messages_to_contents(messages: List[Message]) -> List[types.Content]:
                         else:
                             thought_signature = DUMMY_THOUGHT_SIGNATURE
 
+                # If no thoughts but we have actions, use dummy signature
+                # This handles cross-provider chains where previous agent had no thinking
+                if thought_signature is None:
+                    thought_signature = DUMMY_THOUGHT_SIGNATURE
+
                 for i, action in enumerate(msg.actions):
                     fc_part = types.Part.from_function_call(
                         name=action.name,
