@@ -34,9 +34,7 @@ dependencies = [
 [project.optional-dependencies]
 openai = ["openai>=1.0.0", "jiter>=0.5.0", "tenacity>=8.0.0"]
 anthropic = ["anthropic>=0.18.0", "jiter>=0.5.0", "tenacity>=8.0.0"]
-# Convenience alias (uses OpenAI SDK)
 grok = ["openai>=1.0.0", "jiter>=0.5.0", "tenacity>=8.0.0"]
-# Native Google GenAI SDK
 gemini = ["google-genai>=1.0.0"]
 exec = ["numpy>=2.3.0", "pandas>=2.3.0"]
 all = [
