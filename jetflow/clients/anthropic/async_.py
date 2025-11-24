@@ -24,12 +24,14 @@ class AsyncAnthropicClient(AsyncBaseClient):
         model: str = "claude-sonnet-4-5",
         api_key: str = None,
         temperature: float = 1.0,
-        reasoning_effort: Literal['low', 'medium', 'high', 'none'] = 'medium'
+        reasoning_effort: Literal['low', 'medium', 'high', 'none'] = 'medium',
+        effort: Literal['low', 'medium', 'high'] = None
     ):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
         self.reasoning_budget = REASONING_BUDGET_MAP[self.reasoning_effort]
+        self.effort = effort  # Token usage control (Opus 4.5 only)
 
         self.client = anthropic.AsyncAnthropic(
             api_key=api_key or os.environ.get('ANTHROPIC_API_KEY'),
@@ -51,7 +53,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget,
-            require_action=require_action, stream=stream
+            require_action=require_action, stream=stream, effort=self.effort
         )
         return await self._complete_with_retry(params, logger)
 
@@ -70,7 +72,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget,
-            require_action=require_action, stream=stream
+            require_action=require_action, stream=stream, effort=self.effort
         )
         async for event in self._stream_events_with_retry(params, logger):
             yield event
@@ -113,9 +115,10 @@ class AsyncAnthropicClient(AsyncBaseClient):
 
             elif event.type == 'content_block_start':
                 if event.content_block.type == 'thinking':
-                    thought = Thought(id="", summaries=[""], provider="anthropic")
+                    signature = getattr(event.content_block, 'signature', '')
+                    thought = Thought(id=signature, summaries=[""], provider="anthropic")
                     completion.thoughts.append(thought)
-                    yield ThoughtStart(id="")
+                    yield ThoughtStart(id=signature)
 
                 elif event.content_block.type == 'text':
                     pass

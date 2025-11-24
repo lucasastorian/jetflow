@@ -5,7 +5,7 @@ from jetflow.action import BaseAction
 from jetflow.models.message import Message
 
 
-BETAS = ["interleaved-thinking-2025-05-14"]
+BETAS = ["interleaved-thinking-2025-05-14", "effort-2025-11-24"]
 THINKING_MODELS = [
     'claude-opus-4-5',
     'claude-opus-4-1',
@@ -39,13 +39,15 @@ def build_message_params(
     allowed_actions: Optional[List[BaseAction]],
     reasoning_budget: int,
     require_action: bool = None,
-    stream: bool = True
+    stream: bool = True,
+    effort: Optional[Literal['low', 'medium', 'high']] = None
 ) -> Dict[str, Any]:
     """Build request parameters for Anthropic Messages API
 
     Args:
         allowed_actions: Restrict which actions can be called (None = all, [] = none)
         require_action: True=force call, False=disable calls, None=auto
+        effort: Token usage control (low/medium/high). Only for Claude Opus 4.5.
     """
     formatted_messages = [message.anthropic_format() for message in messages]
 
@@ -59,6 +61,10 @@ def build_message_params(
         "tools": [action.anthropic_schema for action in actions],
         "stream": stream
     }
+
+    # Add effort parameter (Opus 4.5 only)
+    if effort:
+        params['output_config'] = {"effort": effort}
 
     thinking_enabled = reasoning_budget > 0 and supports_thinking(model)
 
@@ -118,7 +124,7 @@ def process_completion(response, logger) -> List[Message]:
     for block in response.content:
         if block.type == 'thinking':
             completion.thoughts.append(Thought(
-                id=getattr(block, 'id', ''),
+                id=getattr(block, 'signature', ''),
                 summaries=[block.thinking],
                 provider="anthropic"
             ))
