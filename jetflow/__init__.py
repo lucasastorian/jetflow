@@ -14,7 +14,8 @@ from jetflow.models import (
     StreamEvent, MessageStart, MessageEnd, ContentDelta,
     ThoughtStart, ThoughtDelta, ThoughtEnd,
     ActionStart, ActionDelta, ActionEnd,
-    ActionExecutionStart, ActionExecuted
+    ActionExecutionStart, ActionExecuted,
+    ChainAgentStart, ChainAgentEnd
 )
 from jetflow.chain import Chain, AsyncChain
 from jetflow.citations import CitationManager, CitationExtractor
@@ -70,6 +71,8 @@ __all__ = [
     "ActionEnd",
     "ActionExecutionStart",
     "ActionExecuted",
+    "ChainAgentStart",
+    "ChainAgentEnd",
 ]
 
 # Add clients to __all__ if available
