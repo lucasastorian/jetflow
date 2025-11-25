@@ -4,23 +4,73 @@ PRICING = {
     "Anthropic": {
         "claude-opus-4-5": {
             "input_per_million": 5.0,
+            "cache_write_5m_per_million": 6.25,    # 1.25x base
+            "cache_write_1h_per_million": 10.0,    # 2x base
+            "cache_read_per_million": 0.50,        # 0.1x base
             "output_per_million": 25.0,
-            "cached_input_per_million": 0.50,
         },
         "claude-opus-4-1": {
-            "input_per_million": 15,
+            "input_per_million": 15.0,
+            "cache_write_5m_per_million": 18.75,   # 1.25x base
+            "cache_write_1h_per_million": 30.0,    # 2x base
+            "cache_read_per_million": 1.50,        # 0.1x base
             "output_per_million": 75.0,
-            "cached_input_per_million": 1.50,
+        },
+        "claude-opus-4": {
+            "input_per_million": 15.0,
+            "cache_write_5m_per_million": 18.75,   # 1.25x base
+            "cache_write_1h_per_million": 30.0,    # 2x base
+            "cache_read_per_million": 1.50,        # 0.1x base
+            "output_per_million": 75.0,
         },
         "claude-sonnet-4-5": {
             "input_per_million": 3.0,
+            "cache_write_5m_per_million": 3.75,    # 1.25x base
+            "cache_write_1h_per_million": 6.0,     # 2x base
+            "cache_read_per_million": 0.30,        # 0.1x base
             "output_per_million": 15.0,
-            "cached_input_per_million": 0.3,
+        },
+        "claude-sonnet-4": {
+            "input_per_million": 3.0,
+            "cache_write_5m_per_million": 3.75,    # 1.25x base
+            "cache_write_1h_per_million": 6.0,     # 2x base
+            "cache_read_per_million": 0.30,        # 0.1x base
+            "output_per_million": 15.0,
+        },
+        "claude-sonnet-3-7": {
+            "input_per_million": 3.0,
+            "cache_write_5m_per_million": 3.75,    # 1.25x base
+            "cache_write_1h_per_million": 6.0,     # 2x base
+            "cache_read_per_million": 0.30,        # 0.1x base
+            "output_per_million": 15.0,
         },
         "claude-haiku-4-5": {
             "input_per_million": 1.0,
+            "cache_write_5m_per_million": 1.25,    # 1.25x base
+            "cache_write_1h_per_million": 2.0,     # 2x base
+            "cache_read_per_million": 0.10,        # 0.1x base
             "output_per_million": 5.0,
-            "cached_input_per_million": 0.1,
+        },
+        "claude-haiku-3-5": {
+            "input_per_million": 0.80,
+            "cache_write_5m_per_million": 1.0,     # 1.25x base
+            "cache_write_1h_per_million": 1.6,     # 2x base
+            "cache_read_per_million": 0.08,        # 0.1x base
+            "output_per_million": 4.0,
+        },
+        "claude-haiku-3": {
+            "input_per_million": 0.25,
+            "cache_write_5m_per_million": 0.30,    # 1.25x base (rounded)
+            "cache_write_1h_per_million": 0.50,    # 2x base
+            "cache_read_per_million": 0.03,        # 0.1x base (rounded)
+            "output_per_million": 1.25,
+        },
+        "claude-opus-3": {
+            "input_per_million": 15.0,
+            "cache_write_5m_per_million": 18.75,   # 1.25x base
+            "cache_write_1h_per_million": 30.0,    # 2x base
+            "cache_read_per_million": 1.50,        # 0.1x base
+            "output_per_million": 75.0,
         },
     },
     "OpenAI": {
@@ -221,23 +271,57 @@ def get_pricing(provider: str, model: str = None):
 
 def calculate_cost(
     uncached_input_tokens: int,
-    cached_input_tokens: int,
+    cache_write_tokens: int,
+    cache_read_tokens: int,
     output_tokens: int,
     provider: str,
-    model: str
+    model: str,
+    cache_ttl: str = '5m'  # Default to 5m TTL
 ) -> float:
-    """Calculate cost in USD for token usage."""
+    """Calculate cost in USD for token usage.
+
+    Args:
+        uncached_input_tokens: Regular input tokens (1x cost)
+        cache_write_tokens: Cache creation tokens (1.25x or 2x cost)
+        cache_read_tokens: Cache hit tokens (0.1x cost)
+        output_tokens: Output tokens
+        provider: Provider name (e.g., "Anthropic")
+        model: Model name
+        cache_ttl: Cache TTL ('5m' or '1h'), default '5m'
+
+    Returns:
+        Total cost in USD
+    """
     pricing = get_pricing(provider, model)
 
     if not pricing:
         return 0.0
 
+    # Regular input cost
     input_cost = (uncached_input_tokens / 1_000_000) * pricing["input_per_million"]
 
-    cached_cost = 0.0
-    if cached_input_tokens > 0 and "cached_input_per_million" in pricing:
-        cached_cost = (cached_input_tokens / 1_000_000) * pricing["cached_input_per_million"]
+    # Cache write cost (depends on TTL)
+    cache_write_cost = 0.0
+    if cache_write_tokens > 0:
+        if cache_ttl == '1h' and "cache_write_1h_per_million" in pricing:
+            cache_write_cost = (cache_write_tokens / 1_000_000) * pricing["cache_write_1h_per_million"]
+        elif "cache_write_5m_per_million" in pricing:
+            # Default to 5m pricing
+            cache_write_cost = (cache_write_tokens / 1_000_000) * pricing["cache_write_5m_per_million"]
+        elif "cached_input_per_million" in pricing:
+            # Fallback for legacy pricing (treat as cache read for OpenAI)
+            cache_write_cost = (cache_write_tokens / 1_000_000) * pricing["cached_input_per_million"]
 
+    # Cache read cost
+    cache_read_cost = 0.0
+    if cache_read_tokens > 0:
+        if "cache_read_per_million" in pricing:
+            cache_read_cost = (cache_read_tokens / 1_000_000) * pricing["cache_read_per_million"]
+        elif "cached_input_per_million" in pricing:
+            # Fallback for legacy pricing
+            cache_read_cost = (cache_read_tokens / 1_000_000) * pricing["cached_input_per_million"]
+
+    # Output cost
     output_cost = (output_tokens / 1_000_000) * pricing["output_per_million"]
 
-    return input_cost + cached_cost + output_cost
+    return input_cost + cache_write_cost + cache_read_cost + output_cost

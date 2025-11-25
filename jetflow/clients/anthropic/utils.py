@@ -29,6 +29,56 @@ def supports_thinking(model: str) -> bool:
     return any(model.startswith(prefix) for prefix in THINKING_MODELS)
 
 
+def add_cache_control_markers(
+    tools: List[Dict[str, Any]],
+    system: Any,
+    messages: List[Dict[str, Any]],
+    ttl: Literal['5m', '1h'] = '5m'
+) -> None:
+    """Add cache_control markers to enable incremental prompt caching.
+
+    Per Anthropic docs, the system automatically checks up to 20 blocks backward
+    from each cache breakpoint. We add markers at strategic points:
+    - End of tools (caches all tool definitions)
+    - End of system prompt (caches system instructions)
+    - End of message history (caches conversation incrementally)
+
+    Args:
+        tools: List of tool definitions (will be modified in-place)
+        system: System prompt (string or list of blocks, will be modified in-place)
+        messages: List of message dicts (will be modified in-place)
+        ttl: Cache time-to-live, either '5m' or '1h'
+    """
+    cache_marker = {"type": "ephemeral", "ttl": ttl}
+
+    # Cache tools (if present)
+    if tools:
+        tools[-1]["cache_control"] = cache_marker
+
+    # Cache system prompt (if present and is a list of blocks)
+    if isinstance(system, list) and system:
+        system[-1]["cache_control"] = cache_marker
+
+    # Cache conversation history incrementally
+    # Find last message's last content block
+    if messages:
+        last_message = messages[-1]
+        content = last_message.get("content")
+
+        if isinstance(content, list) and content:
+            # Content is a list of blocks - mark the last block
+            content[-1]["cache_control"] = cache_marker
+        elif isinstance(content, str):
+            # Content is a string - convert to block format with cache_control
+            last_message["content"] = [
+                {
+                    "type": "text",
+                    "text": content,
+                    "cache_control": cache_marker
+                }
+            ]
+
+
 def build_message_params(
     model: str,
     temperature: float,
@@ -40,7 +90,9 @@ def build_message_params(
     reasoning_budget: int,
     require_action: bool = None,
     stream: bool = True,
-    effort: Optional[Literal['low', 'medium', 'high']] = None
+    effort: Optional[Literal['low', 'medium', 'high']] = None,
+    enable_caching: bool = False,
+    cache_ttl: Literal['5m', '1h'] = '5m'
 ) -> Dict[str, Any]:
     """Build request parameters for Anthropic Messages API
 
@@ -48,6 +100,8 @@ def build_message_params(
         allowed_actions: Restrict which actions can be called (None = all, [] = none)
         require_action: True=force call, False=disable calls, None=auto
         effort: Token usage control (low/medium/high). Only for Claude Opus 4.5.
+        enable_caching: Whether to add cache_control markers for prompt caching
+        cache_ttl: Cache time-to-live, either '5m' or '1h'
     """
     formatted_messages = [message.anthropic_format() for message in messages]
 
@@ -99,13 +153,31 @@ def build_message_params(
         params['tool_choice'] = {"type": "none"}
     # If require_action is None, defaults to auto
 
+    # Add cache control markers if caching is enabled
+    if enable_caching:
+        add_cache_control_markers(
+            tools=params['tools'],
+            system=params['system'],
+            messages=params['messages'],
+            ttl=cache_ttl
+        )
+
     return params
 
 
 def apply_usage_to_message(usage_obj, message: Message) -> None:
-    """Apply usage information from Anthropic response to Message"""
-    message.uncached_prompt_tokens = usage_obj.input_tokens
-    message.completion_tokens = usage_obj.output_tokens
+    """Apply usage information from Anthropic response to Message
+
+    Anthropic returns:
+    - input_tokens: Regular uncached input (1x cost)
+    - cache_creation_input_tokens: Cache writes (1.25x or 2x cost)
+    - cache_read_input_tokens: Cache hits (0.1x cost)
+    - output_tokens: Output tokens
+    """
+    message.uncached_prompt_tokens = usage_obj.input_tokens or 0
+    message.cache_write_tokens = usage_obj.cache_creation_input_tokens or 0
+    message.cache_read_tokens = usage_obj.cache_read_input_tokens or 0
+    message.completion_tokens = usage_obj.output_tokens or 0
 
 
 def process_completion(response, logger) -> List[Message]:
@@ -147,7 +219,9 @@ def process_completion(response, logger) -> List[Message]:
 
     # Apply usage
     if hasattr(response, 'usage') and response.usage:
-        completion.uncached_prompt_tokens = response.usage.input_tokens
-        completion.completion_tokens = response.usage.output_tokens
+        completion.uncached_prompt_tokens = response.usage.input_tokens or 0
+        completion.cache_write_tokens = response.usage.cache_creation_input_tokens or 0
+        completion.cache_read_tokens = response.usage.cache_read_input_tokens or 0
+        completion.completion_tokens = response.usage.output_tokens or 0
 
     return [completion]

@@ -564,44 +564,110 @@ client = LegacyOpenAIClient(
 
 ## Built-in Actions
 
-### PythonExec
+### LocalPythonExec
 
-Safe Python code execution with persistent state.
+Safe local Python code execution with persistent state.
 
 ```python
-from jetflow.actions import PythonExec
+from jetflow.actions import LocalPythonExec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
-    actions=[PythonExec]
+    actions=[LocalPythonExec()]
 )
 ```
 
 **Schema:**
 ```python
 class PythonExec(BaseModel):
-    code: str       # Python code to execute
-    reset: bool     # Clear session variables (default: False)
+    code: str  # Python code to execute
 ```
 
 **Features:**
 
-- Variables persist across calls
-- Safe execution (no file I/O, network, etc.)
-- Supports: math, collections, builtins
+- Variables persist across calls (per-agent isolated namespace)
+- Safe execution (no file I/O, network, subprocess, etc.)
+- Supports: math, collections, builtins, numpy, pandas
 - Auto-returns last expression or `result`/`out`/`data`/`summary` variables
+- 5-second timeout per execution
 
 **Example:**
 ```python
 # LLM calls:
-PythonExec(code="x = 10; y = 20; x + y")
-# Returns: "30"
+LocalPythonExec(code="x = 10; y = 20; x + y")
+# Returns: "**Result**: `30`"
 
-PythonExec(code="x * 2")
-# Returns: "20" (x persists)
+LocalPythonExec(code="x * 2")
+# Returns: "**Result**: `20`" (x persists)
 
-PythonExec(code="result = x + y; result")
-# Returns: "30"
+LocalPythonExec(code="result = x + y; result")
+# Returns: "**Result**: `30`"
+```
+
+### E2BPythonExec
+
+Cloud-based Python code execution via E2B sandboxes with session persistence.
+
+```python
+from jetflow.actions.e2b_code_interpreter import E2BPythonExec
+
+# Ephemeral (default)
+agent = Agent(
+    client=AnthropicClient(),
+    actions=[E2BPythonExec()]
+)
+
+# Session-based persistence
+agent = Agent(
+    client=AnthropicClient(),
+    actions=[E2BPythonExec(session_id="chat_123", persistent=True)]
+)
+```
+
+**Schema:**
+```python
+class PythonExec(BaseModel):
+    code: str  # Python code to execute
+```
+
+**Initialization:**
+```python
+E2BPythonExec(
+    session_id: Optional[str] = None,  # Session identifier for persistence
+    user_id: Optional[str] = None,     # Optional user identifier
+    persistent: bool = False,          # Enable session persistence
+    timeout: int = 300,                # Sandbox timeout (seconds)
+    api_key: Optional[str] = None      # E2B API key (or use E2B_API_KEY env)
+)
+```
+
+**Features:**
+
+- Full Python environment with data analysis libraries (numpy, pandas, matplotlib, etc.)
+- Variables and filesystem persist across calls (when `persistent=True`)
+- Session resumption: paused sandboxes are automatically resumed
+- Auto-returns last expression or `result`/`out`/`data`/`summary` variables
+- Chart/image generation support
+
+**Manual Execution:**
+```python
+executor = E2BPythonExec(session_id="chat_123", persistent=True)
+executor.__start__()
+
+# Direct execution
+result = executor.run_code("import pandas as pd; df = pd.DataFrame({'a': [1,2,3]})")
+
+# Extract data
+data = executor.extract_dataframe('df')  # Returns list of dicts
+value = executor.extract_variable('x')   # Returns JSON-compatible value
+
+executor.__stop__()
+```
+
+**Connect to Existing Sandbox:**
+```python
+# Connect directly to a running/paused sandbox
+executor = E2BPythonExec.from_sandbox_id('sbx_abc123')
 ```
 
 ---

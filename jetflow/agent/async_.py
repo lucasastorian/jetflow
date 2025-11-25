@@ -13,7 +13,7 @@ from jetflow.agent.utils import (
     validate_client, prepare_and_validate_actions,
     _build_response, add_messages_to_history, find_action,
     handle_no_actions, handle_action_not_found, reset_agent_state,
-    count_message_tokens
+    count_message_tokens, should_enable_caching
 )
 from jetflow.utils.base_logger import BaseLogger
 from jetflow.utils.verbose_logger import VerboseLogger
@@ -52,48 +52,66 @@ class AsyncAgent:
         self.messages: List[Message] = []
         self.num_iter = 0
 
+    def _should_enable_caching(self) -> bool:
+        """Determine if prompt caching should be enabled for this iteration."""
+        return should_enable_caching(self.max_iter, self.num_iter, bool(self.actions))
+
     async def run(self, query: Union[str, List[Message]]) -> AgentResponse:
         """Execute agent loop until exit or max iterations"""
-        async with Timer.measure_async() as timer:
-            self._add_messages_to_history(query)
+        # Call __start__ hooks on all actions
+        await self._call_lifecycle_hooks('__start__')
 
-            follow_up_actions = []
-            while self.num_iter < self.max_iter:
-                result = await self._navigate_sequence_non_streaming(
-                    actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, depth=0
-                )
+        try:
+            async with Timer.measure_async() as timer:
+                self._add_messages_to_history(query)
 
-                if result.is_exit:
-                    return self._build_final_response(timer, success=True)
+                follow_up_actions = []
+                while self.num_iter < self.max_iter:
+                    result = await self._navigate_sequence_non_streaming(
+                        actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, depth=0
+                    )
 
-                follow_up_actions = result.follow_ups
+                    if result.is_exit:
+                        return self._build_final_response(timer, success=True)
 
-            return self._build_final_response(timer, success=False)
+                    follow_up_actions = result.follow_ups
+
+                return self._build_final_response(timer, success=False)
+        finally:
+            # Call __stop__ hooks on all actions
+            await self._call_lifecycle_hooks('__stop__')
 
     async def stream(self, query: Union[str, List[Message]]) -> AsyncIterator[Union[StreamEvent, AgentResponse]]:
         """Execute agent loop with streaming, yields events then AgentResponse"""
-        async with Timer.measure_async() as timer:
-            self._add_messages_to_history(query)
+        # Call __start__ hooks on all actions
+        await self._call_lifecycle_hooks('__start__')
 
-            follow_up_actions = []
-            while self.num_iter < self.max_iter:
-                result = None
+        try:
+            async with Timer.measure_async() as timer:
+                self._add_messages_to_history(query)
 
-                async for event in self._navigate_sequence_streaming(
-                    actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, depth=0
-                ):
-                    if isinstance(event, StepResult):
-                        result = event
-                    else:
-                        yield event
+                follow_up_actions = []
+                while self.num_iter < self.max_iter:
+                    result = None
 
-                if result.is_exit:
-                    yield self._build_final_response(timer, success=True)
-                    return
+                    async for event in self._navigate_sequence_streaming(
+                        actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, depth=0
+                    ):
+                        if isinstance(event, StepResult):
+                            result = event
+                        else:
+                            yield event
 
-                follow_up_actions = result.follow_ups
+                    if result.is_exit:
+                        yield self._build_final_response(timer, success=True)
+                        return
 
-            yield self._build_final_response(timer, success=False)
+                    follow_up_actions = result.follow_ups
+
+                yield self._build_final_response(timer, success=False)
+        finally:
+            # Call __stop__ hooks on all actions
+            await self._call_lifecycle_hooks('__stop__')
 
     async def _navigate_sequence_non_streaming(self, actions: List[Union[BaseAction, AsyncBaseAction]], system_prompt: str, allowed_actions: List[Union[BaseAction, AsyncBaseAction]] = None, depth: int = 0) -> StepResult:
         """Navigate action sequence, recursing on forced follow-ups"""
@@ -177,7 +195,8 @@ class AsyncAgent:
             allowed_actions=allowed_actions,
             require_action=self.require_action,
             logger=self.logger,
-            stream=False
+            stream=False,
+            enable_caching=self._should_enable_caching()
         )
 
         self.messages.extend(completions)
@@ -203,7 +222,8 @@ class AsyncAgent:
             allowed_actions=allowed_actions,
             require_action=self.require_action,
             logger=self.logger,
-            stream=True
+            stream=True,
+            enable_caching=self._should_enable_caching()
         ):
             yield event
             if isinstance(event, MessageEnd):
@@ -288,6 +308,19 @@ class AsyncAgent:
                     follow_ups.append(event.follow_up)
 
         return follow_ups if follow_ups else []
+
+    async def _call_lifecycle_hooks(self, hook_name: str):
+        """Call lifecycle hooks (__start__ or __stop__) on all action instances"""
+        for action in self.actions:
+            if hasattr(action, hook_name) and callable(getattr(action, hook_name)):
+                hook = getattr(action, hook_name)
+                try:
+                    result = hook()
+                    # Await if it's a coroutine
+                    if hasattr(result, '__await__'):
+                        await result
+                except Exception as e:
+                    self.logger.log_error(f"Error in {hook_name} hook for {action.name}: {e}")
 
     def reset(self):
         """Reset agent state for fresh execution"""

@@ -208,17 +208,17 @@ Before shipping:
 Jetflow ships with **safe Python execution**:
 
 ```python
-from jetflow.actions import PythonExec
+from jetflow.actions import LocalPythonExec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
-    actions=[PythonExec]
+    actions=[LocalPythonExec()]
 )
 
 resp = agent.run("Calculate compound interest: $10k principal, 5% rate, 10 years")
 ```
 
-Variables persist across calls—perfect for data analysis.
+Variables persist across calls—perfect for data analysis. For cloud-based execution with full libraries, use `E2BPythonExec`.
 
 ---
 

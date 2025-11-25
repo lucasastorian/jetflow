@@ -63,10 +63,17 @@ class Message:
     citations: dict = None  # Dict[int, dict] - citation ID → metadata
 
     # Usage tracking
-    cached_prompt_tokens: int = None
-    uncached_prompt_tokens: int = None
-    thinking_tokens: int = None
-    completion_tokens: int = None
+    uncached_prompt_tokens: int = None       # Regular input tokens (no caching)
+    cache_write_tokens: int = None           # Cache creation tokens (1.25x or 2x cost)
+    cache_read_tokens: int = None            # Cache hit tokens (0.1x cost)
+    thinking_tokens: int = None              # Thinking/reasoning tokens
+    completion_tokens: int = None            # Output tokens
+
+    # Legacy field for backward compatibility
+    @property
+    def cached_prompt_tokens(self) -> int:
+        """Legacy property - returns cache_read_tokens for backward compatibility"""
+        return self.cache_read_tokens or 0
 
     # Provider-specific
     external_id: str = None

@@ -27,6 +27,7 @@ class BaseClient(ABC):
         require_action: bool = False,
         logger: Optional['VerboseLogger'] = None,
         stream: bool = False,
+        enable_caching: bool = False,
     ) -> List['Message']:
         """Non-streaming completion - single HTTP request/response.
 
@@ -38,6 +39,7 @@ class BaseClient(ABC):
             require_action: Force the model to call an action (tool_choice="required")
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
+            enable_caching: Enable prompt caching (Anthropic only)
         """
         raise NotImplementedError
 
@@ -52,6 +54,7 @@ class BaseClient(ABC):
         require_action: bool = False,
         logger: Optional['VerboseLogger'] = None,
         stream: bool = True,
+        enable_caching: bool = False,
     ) -> Iterator['StreamEvent']:
         """Streaming completion - yields events in real-time (sync).
 
@@ -60,6 +63,7 @@ class BaseClient(ABC):
             require_action: Force the model to call an action (tool_choice="required")
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
+            enable_caching: Enable prompt caching (Anthropic only)
         """
         raise NotImplementedError
 
@@ -81,6 +85,7 @@ class AsyncBaseClient(ABC):
         require_action: bool = False,
         logger: Optional['VerboseLogger'] = None,
         stream: bool = False,
+        enable_caching: bool = False,
     ) -> List['Message']:
         """Non-streaming completion - single HTTP request/response (async).
 
@@ -92,6 +97,7 @@ class AsyncBaseClient(ABC):
             require_action: Force the model to call an action (tool_choice="required")
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
+            enable_caching: Enable prompt caching (Anthropic only)
         """
         raise NotImplementedError
 
@@ -106,6 +112,7 @@ class AsyncBaseClient(ABC):
         require_action: bool = False,
         logger: Optional['VerboseLogger'] = None,
         stream: bool = True,
+        enable_caching: bool = False,
     ):
         """Streaming completion - yields events in real-time (async).
 
@@ -114,5 +121,6 @@ class AsyncBaseClient(ABC):
             require_action: Force the model to call an action (tool_choice="required")
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
+            enable_caching: Enable prompt caching (Anthropic only)
         """
         raise NotImplementedError

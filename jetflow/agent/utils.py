@@ -87,19 +87,28 @@ def calculate_usage(messages: List[Message], provider: str, model: str) -> Usage
     usage = Usage()
 
     for msg in messages:
-        if msg.cached_prompt_tokens:
-            usage.cached_prompt_tokens += msg.cached_prompt_tokens
         if msg.uncached_prompt_tokens:
             usage.uncached_prompt_tokens += msg.uncached_prompt_tokens
+        if msg.cache_write_tokens:
+            usage.cache_write_tokens += msg.cache_write_tokens
+        if msg.cache_read_tokens:
+            usage.cache_read_tokens += msg.cache_read_tokens
         if msg.thinking_tokens:
             usage.thinking_tokens += msg.thinking_tokens
         if msg.completion_tokens:
             usage.completion_tokens += msg.completion_tokens
 
-    usage.prompt_tokens = usage.cached_prompt_tokens + usage.uncached_prompt_tokens
-    usage.total_tokens = usage.cached_prompt_tokens + usage.uncached_prompt_tokens + usage.thinking_tokens + usage.completion_tokens
+    usage.prompt_tokens = usage.uncached_prompt_tokens + usage.cache_write_tokens + usage.cache_read_tokens
+    usage.total_tokens = usage.prompt_tokens + usage.thinking_tokens + usage.completion_tokens
 
-    usage.estimated_cost = calculate_cost(uncached_input_tokens=usage.uncached_prompt_tokens, cached_input_tokens=usage.cached_prompt_tokens, output_tokens=usage.completion_tokens + usage.thinking_tokens, provider=provider, model=model)
+    usage.estimated_cost = calculate_cost(
+        uncached_input_tokens=usage.uncached_prompt_tokens,
+        cache_write_tokens=usage.cache_write_tokens,
+        cache_read_tokens=usage.cache_read_tokens,
+        output_tokens=usage.completion_tokens + usage.thinking_tokens,
+        provider=provider,
+        model=model
+    )
 
     return usage
 
@@ -252,3 +261,32 @@ def count_message_tokens(messages: List[Message], system_prompt: str) -> int:
         total += message.tokens
 
     return total
+
+
+def should_enable_caching(max_iter: int, num_iter: int, has_actions: bool) -> bool:
+    """Determine if prompt caching should be enabled for this iteration.
+
+    Caching is beneficial when the same prefix (system + tools + history) will be
+    reused in the next iteration. Don't cache if:
+    1. max_iter == 1: Single iteration, no future benefit
+    2. No actions: Single-shot response, won't iterate
+    3. num_iter == max_iter: Last iteration, no future calls
+
+    Args:
+        max_iter: Maximum number of iterations
+        num_iter: Current iteration number
+        has_actions: Whether the agent has any actions
+
+    Returns:
+        True if caching should be enabled, False otherwise
+    """
+    if max_iter == 1:
+        return False
+
+    if not has_actions:
+        return False
+
+    if num_iter + 1 >= max_iter:
+        return False
+
+    return True

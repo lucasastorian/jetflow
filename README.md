@@ -283,20 +283,20 @@ for event in chain.stream("Research and analyze"):
 
 ## Built-in Actions
 
-Jetflow includes one useful action: **safe Python execution**.
+Jetflow includes **safe Python execution**.
 
 ```python
-from jetflow.actions import PythonExec
+from jetflow.actions import LocalPythonExec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
-    actions=[PythonExec]
+    actions=[LocalPythonExec()]
 )
 
 resp = agent.run("Calculate compound interest: principal=10000, rate=0.05, years=10")
 ```
 
-Variables persist across calls. Perfect for data analysis workflows.
+Variables persist across calls. Perfect for data analysis workflows. For cloud-based execution with full libraries, use `E2BPythonExec`.
 
 ---
 

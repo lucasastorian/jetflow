@@ -19,7 +19,7 @@ except ImportError:
     HAS_NUMPY_PANDAS = False
 
 from jetflow.action import action
-from jetflow.actions.python_exec.utils import (
+from jetflow.actions.local_code_interpreter.utils import (
     preprocess_code,
     format_syntax_error,
     diff_namespace,
@@ -29,34 +29,17 @@ from jetflow.actions.python_exec.utils import (
 
 
 class TimeoutError(Exception):
-    """Execution timeout exceeded"""
     pass
 
 
 def timeout_handler(signum, frame):
-    """Signal handler for timeout"""
     raise TimeoutError("Execution exceeded timeout limit")
 
 
-class PythonExecSchema(BaseModel):
-    """
-    Execute Python code for calculations. State persists across calls - variables remain available.
+class PythonExec(BaseModel):
+    """Execute Python code. State persists - variables remain available. Return value by ending with expression or defining result/out/data/summary. Use billions for large numbers. Supports: math, numpy (np), pandas (pd)."""
 
-    **IMPORTANT: Always return a value by:**
-    - Ending with an expression: `revenue * margin`
-    - OR defining `result`, `out`, `data`, or `summary`: `result = {"ev": ev, "equity": equity}`
-
-    **Use billions for large numbers unless specified.**
-
-    Supports: math operations, control flow, comments, print(), builtins (round, sum, max, etc.), math module, numpy (as np), pandas (as pd)
-
-    **Data analysis libraries are SAFE and ENCOURAGED**: numpy and pandas are available for array operations, data manipulation, and statistical analysis.
-    """
-
-    code: str = Field(
-        description="Python code to execute. Variables persist across calls. "
-                    "MUST end with an expression OR define result/out/data/summary to return a value."
-    )
+    code: str = Field(description="Python code to execute. Variables persist. Must end with expression OR define result/out/data/summary.")
 
 
 # Safe builtins available for execution
@@ -96,7 +79,6 @@ if HAS_NUMPY_PANDAS:
 
 
 def _make_safe_import(allowed_builtins):
-    """Return a restricted __import__ that only allows whitelisted modules."""
     def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
         base = (name or "").split(".")[0]
         if base in allowed_builtins:
@@ -105,25 +87,22 @@ def _make_safe_import(allowed_builtins):
     return _safe_import
 
 
-@action(schema=PythonExecSchema, custom_field="code")
-class PythonExec:
-    """Python code execution action with isolated per-agent state"""
+@action(schema=PythonExec, custom_field="code")
+class LocalPythonExec:
+    """Python code execution with isolated per-agent state"""
 
     def __init__(self):
-        # Each agent gets its own isolated namespace
         self.namespace = {'__builtins__': _SAFE_BUILTINS.copy()}
         self.namespace['__builtins__']['__import__'] = _make_safe_import(_SAFE_BUILTINS)
 
-    def __call__(self, params: PythonExecSchema) -> str:
+    def __call__(self, params: PythonExec) -> str:
         code = preprocess_code(params.code)
 
-        # Capture stdout/stderr
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
         old_stdout = sys.stdout
         old_stderr = sys.stderr
 
-        # Set timeout alarm (Unix only) - default 5 seconds
         DEFAULT_TIMEOUT = 5
         old_handler = None
         try:
@@ -131,21 +110,17 @@ class PythonExec:
                 old_handler = signal.signal(signal.SIGALRM, timeout_handler)
                 signal.alarm(DEFAULT_TIMEOUT)
         except (ValueError, OSError):
-            # signal.alarm() only works in main thread on Unix
             pass
 
         try:
             sys.stdout = stdout_capture
             sys.stderr = stderr_capture
 
-            # Parse and validate
             try:
                 parsed = ast.parse(code, mode='exec')
             except SyntaxError as e:
-                # Show context without full code
                 return f"**Syntax Error**: {e.msg} at line {e.lineno}, column {e.offset}"
 
-            # Security check
             guard = ASTGuard(safe_builtins=_SAFE_BUILTINS)
             try:
                 guard.visit(parsed)
@@ -158,27 +133,21 @@ class PythonExec:
             if parsed.body:
                 last_node = parsed.body[-1]
 
-                # If last statement is an expression, evaluate it
                 if isinstance(last_node, ast.Expr):
-                    # Execute all but last
                     if len(parsed.body) > 1:
                         statements = ast.Module(body=parsed.body[:-1], type_ignores=[])
                         exec(compile(statements, '<string>', 'exec'), self.namespace)
 
-                    # Evaluate last as expression
                     expr = ast.Expression(body=last_node.value)
                     result = eval(compile(expr, '<string>', 'eval'), self.namespace)
                 else:
-                    # Execute all statements
                     exec(compile(parsed, '<string>', 'exec'), self.namespace)
 
-                    # Look for result variables
                     for candidate in ("result", "out", "data", "summary"):
                         if candidate in self.namespace and candidate not in before_ns:
                             result = self.namespace[candidate]
                             break
 
-                    # If no result found, show state changes
                     if result is None:
                         diff = diff_namespace(before_ns, self.namespace)
                         if diff["added"] or diff["modified"]:
@@ -187,13 +156,11 @@ class PythonExec:
         except TimeoutError:
             return f"**Timeout Error**: Execution exceeded {DEFAULT_TIMEOUT} seconds limit. Consider breaking into smaller steps."
         except Exception as e:
-            # Only show last 500 chars of traceback to save tokens
             tb = traceback.format_exc()
             if len(tb) > 500:
                 tb = "..." + tb[-500:]
             return f"**Error**: {str(e)}\n\n```\n{tb}\n```"
         finally:
-            # Clear timeout alarm
             try:
                 if hasattr(signal, 'SIGALRM'):
                     signal.alarm(0)
@@ -208,15 +175,12 @@ class PythonExec:
         stdout_output = stdout_capture.getvalue()
         stderr_output = stderr_capture.getvalue()
 
-        # Truncate long output
         MAX_STDOUT = 6000
         if len(stdout_output) > MAX_STDOUT:
             stdout_output = stdout_output[:MAX_STDOUT] + "\n...[truncated]..."
 
-        # Round floats
         result = round_recursive(result)
 
-        # Build response (don't echo code - wastes tokens)
         num_lines = len(code.strip().split('\n'))
         content_parts = [f"**Executed** {num_lines} line(s)"]
 

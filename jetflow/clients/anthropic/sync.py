@@ -24,13 +24,17 @@ class AnthropicClient(BaseClient):
         api_key: str = None,
         temperature: float = 1.0,
         reasoning_effort: Literal['low', 'medium', 'high', 'none'] = 'medium',
-        effort: Literal['low', 'medium', 'high'] = None
+        effort: Literal['low', 'medium', 'high'] = None,
+        prompt_caching: Literal['never', 'agentic', 'conversational'] = 'agentic',
+        cache_ttl: Literal['5m', '1h'] = '5m'
     ):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
         self.reasoning_budget = REASONING_BUDGET_MAP[self.reasoning_effort]
         self.effort = effort  # Token usage control (Opus 4.5 only)
+        self.prompt_caching = prompt_caching
+        self.cache_ttl = cache_ttl
 
         self.client = anthropic.Anthropic(
             api_key=api_key or os.environ.get('ANTHROPIC_API_KEY'),
@@ -46,13 +50,23 @@ class AnthropicClient(BaseClient):
         enable_web_search: bool = False,
         require_action: bool = False,
         logger: 'VerboseLogger' = None,
-        stream: bool = False
+        stream: bool = False,
+        enable_caching: bool = False
     ) -> List[Message]:
         """Non-streaming completion - single HTTP request/response"""
+        # Determine caching based on mode
+        if self.prompt_caching == 'never':
+            should_cache = False
+        elif self.prompt_caching == 'conversational':
+            should_cache = True  # Always cache in conversational mode
+        else:  # 'agentic'
+            should_cache = enable_caching  # Agent decides via _should_enable_caching()
+
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget,
-            require_action=require_action, stream=stream, effort=self.effort
+            require_action=require_action, stream=stream, effort=self.effort,
+            enable_caching=should_cache, cache_ttl=self.cache_ttl
         )
         return self._complete_with_retry(params, logger)
 
@@ -65,13 +79,23 @@ class AnthropicClient(BaseClient):
         enable_web_search: bool = False,
         require_action: bool = False,
         logger: 'VerboseLogger' = None,
-        stream: bool = True
+        stream: bool = True,
+        enable_caching: bool = False
     ) -> Iterator[StreamEvent]:
         """Streaming completion - yields events in real-time"""
+        # Determine caching based on mode
+        if self.prompt_caching == 'never':
+            should_cache = False
+        elif self.prompt_caching == 'conversational':
+            should_cache = True  # Always cache in conversational mode
+        else:  # 'agentic'
+            should_cache = enable_caching  # Agent decides via _should_enable_caching()
+
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget,
-            require_action=require_action, stream=stream, effort=self.effort
+            require_action=require_action, stream=stream, effort=self.effort,
+            enable_caching=should_cache, cache_ttl=self.cache_ttl
         )
         yield from self._stream_events_with_retry(params, logger)
 

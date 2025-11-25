@@ -146,17 +146,17 @@ response = agent.run("How many papers were published? Multiply by 2")
 Skip writing custom calculators. Use the built-in Python executor.
 
 ```python
-from jetflow.actions import PythonExec
+from jetflow.actions import LocalPythonExec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
-    actions=[PythonExec]
+    actions=[LocalPythonExec()]
 )
 
 response = agent.run("Calculate compound interest: $10k principal, 5% rate, 10 years")
 ```
 
-**The LLM writes Python code to solve it.** Variables persist across calls—perfect for data analysis.
+**The LLM writes Python code to solve it.** Variables persist across calls—perfect for data analysis. For cloud-based execution with full libraries, use `E2BPythonExec`.
 
 ---
 
@@ -243,7 +243,7 @@ with agent.stream("What is 25 * 4?") as events:
 ✅ **Create agents** with `Agent(client, actions)`
 ✅ **Run queries** and get results + cost tracking
 ✅ **Debug cleanly** with full transcript access
-✅ **Use built-ins** like `PythonExec` for common tasks
+✅ **Use built-ins** like `LocalPythonExec` for common tasks
 ✅ **Go async** with `AsyncAgent` and `@action` (auto-detects sync/async)
 ✅ **Stream events** with `agent.stream()` for real-time feedback
 
