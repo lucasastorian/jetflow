@@ -609,7 +609,7 @@ LocalPythonExec(code="result = x + y; result")
 Cloud-based Python code execution via E2B sandboxes with session persistence.
 
 ```python
-from jetflow.actions.e2b_code_interpreter import E2BPythonExec
+from jetflow.actions import E2BPythonExec
 
 # Ephemeral (default)
 agent = Agent(

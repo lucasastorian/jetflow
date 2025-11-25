@@ -19,7 +19,7 @@ except ImportError:
     HAS_NUMPY_PANDAS = False
 
 from jetflow.action import action
-from jetflow.actions.local_code_interpreter.utils import (
+from jetflow.actions.local_python_exec.utils import (
     preprocess_code,
     format_syntax_error,
     diff_namespace,

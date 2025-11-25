@@ -18,7 +18,7 @@ load_dotenv()
 
 # Check dependencies
 try:
-    from jetflow.actions.e2b_code_interpreter import E2BPythonExec
+    from jetflow.actions.e2b_python_exec import E2BPythonExec
     from jetflow.agent import Agent
     from jetflow.clients.anthropic import AnthropicClient
     HAS_E2B = True

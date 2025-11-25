@@ -3,7 +3,7 @@
 from typing import Optional
 from pydantic import BaseModel, Field
 from jetflow.action import action
-from jetflow.actions.e2b_code_interpreter.executor import E2BSandboxExecutor
+from jetflow.actions.e2b_python_exec.executor import E2BSandboxExecutor
 
 
 class PythonExec(BaseModel):
