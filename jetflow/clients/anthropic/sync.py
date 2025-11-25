@@ -97,7 +97,7 @@ class AnthropicClient(BaseClient):
             require_action=require_action, stream=stream, effort=self.effort,
             enable_caching=should_cache, cache_ttl=self.cache_ttl
         )
-        yield from self._stream_events_with_retry(params, logger)
+        yield from self._stream_events_with_retry(params, logger, require_action=require_action)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -111,12 +111,12 @@ class AnthropicClient(BaseClient):
         )),
         reraise=True
     )
-    def _stream_events_with_retry(self, params: dict, logger) -> Iterator[StreamEvent]:
+    def _stream_events_with_retry(self, params: dict, logger, require_action: bool = False) -> Iterator[StreamEvent]:
         """Create and consume a streaming response with retries, yielding events"""
         response = self.client.beta.messages.create(**params)
-        yield from self._stream_completion_events(response, logger)
+        yield from self._stream_completion_events(response, logger, require_action=require_action)
 
-    def _stream_completion_events(self, response, logger) -> Iterator[StreamEvent]:
+    def _stream_completion_events(self, response, logger, require_action: bool = False) -> Iterator[StreamEvent]:
         """Stream a chat completion and yield events"""
         completion = Message(
             role="assistant",
@@ -187,10 +187,12 @@ class AnthropicClient(BaseClient):
                     )
 
                 elif event.delta.type == 'text_delta':
-                    completion.content += event.delta.text
-                    if logger:
-                        logger.log_content_delta(event.delta.text)
-                    yield ContentDelta(delta=event.delta.text)
+                    # Skip content deltas when require_action=True (Anthropic sometimes generates short text before tools)
+                    if not require_action:
+                        completion.content += event.delta.text
+                        if logger:
+                            logger.log_content_delta(event.delta.text)
+                        yield ContentDelta(delta=event.delta.text)
 
             elif event.type == 'content_block_stop':
                 if completion.thoughts and completion.thoughts[-1].summaries:
