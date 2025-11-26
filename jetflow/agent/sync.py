@@ -9,6 +9,7 @@ from jetflow.models import Message, Action
 from jetflow.models import AgentResponse, ActionFollowUp, StepResult
 from jetflow.models import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted
 from jetflow.agent.state import AgentState
+from jetflow.agent.context import ContextConfig, ContextManager
 from jetflow.agent.utils import (
     validate_client, prepare_and_validate_actions,
     _build_response, add_messages_to_history, find_action,
@@ -27,7 +28,8 @@ class Agent:
 
     def __init__(self, client: BaseClient, actions: List[Union[Type[BaseAction], BaseAction]] = None,
                  system_prompt: Union[str, Callable[[], str]] = "", max_iter: int = 20, require_action: bool = None,
-                 logger: BaseLogger = None, verbose: bool = True, max_tokens_before_exit: int = 200000):
+                 logger: BaseLogger = None, verbose: bool = True, max_tokens_before_exit: int = 200000,
+                 context_config: ContextConfig = None):
         if max_iter < 1:
             raise ValueError("max_iter must be >= 1")
         if require_action is False:
@@ -47,6 +49,11 @@ class Agent:
 
         self.logger = logger if logger is not None else VerboseLogger(verbose)
 
+        # Context management
+        self.context_config = context_config or ContextConfig()
+        self._context_manager = ContextManager(self.context_config)
+        self._cache_marker_index: Optional[int] = None  # Track where to place cache marker
+
         self.messages: List[Message] = []
         self.num_iter = 0
 
@@ -62,6 +69,15 @@ class Agent:
         try:
             with Timer.measure() as timer:
                 self._add_messages_to_history(query)
+
+                # Apply context management on first iteration (num_iter==0)
+                # This maintains consistent truncations throughout the run for prompt caching
+                token_count = count_message_tokens(self.messages, self.system_prompt)
+                self.messages, self._cache_marker_index = self._context_manager.apply_if_needed(
+                    self.messages,
+                    self.num_iter,
+                    token_count
+                )
 
                 follow_up_actions = []
                 while self.num_iter < self.max_iter:
@@ -87,6 +103,15 @@ class Agent:
         try:
             with Timer.measure() as timer:
                 self._add_messages_to_history(query)
+
+                # Apply context management on first iteration (num_iter==0)
+                # This maintains consistent truncations throughout the run for prompt caching
+                token_count = count_message_tokens(self.messages, self.system_prompt)
+                self.messages, self._cache_marker_index = self._context_manager.apply_if_needed(
+                    self.messages,
+                    self.num_iter,
+                    token_count
+                )
 
                 follow_up_actions = []
                 while self.num_iter < self.max_iter:
@@ -196,7 +221,8 @@ class Agent:
             require_action=self.require_action,
             logger=self.logger,
             stream=False,
-            enable_caching=self._should_enable_caching()
+            enable_caching=self._should_enable_caching(),
+            context_cache_index=self._cache_marker_index
         )
 
         self.messages.extend(completions)
@@ -224,7 +250,8 @@ class Agent:
             require_action=self.require_action,
             logger=self.logger,
             stream=True,
-            enable_caching=self._should_enable_caching()
+            enable_caching=self._should_enable_caching(),
+            context_cache_index=self._cache_marker_index
         ):
             yield event
             if isinstance(event, MessageEnd):
@@ -320,6 +347,7 @@ class Agent:
     def reset(self):
         """Reset agent state for fresh execution"""
         reset_agent_state(self)
+        self._context_manager.reset()
 
     def _add_messages_to_history(self, query: Union[str, List[Message]]):
         add_messages_to_history(self.messages, query, self.citation_manager)

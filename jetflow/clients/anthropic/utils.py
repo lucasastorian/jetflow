@@ -33,7 +33,8 @@ def add_cache_control_markers(
     tools: List[Dict[str, Any]],
     system: Any,
     messages: List[Dict[str, Any]],
-    ttl: Literal['5m', '1h'] = '5m'
+    ttl: Literal['5m', '1h'] = '5m',
+    context_cache_index: Optional[int] = None
 ) -> None:
     """Add cache_control markers to enable incremental prompt caching.
 
@@ -43,11 +44,16 @@ def add_cache_control_markers(
     - End of system prompt (caches system instructions)
     - End of message history (caches conversation incrementally)
 
+    When context_cache_index is provided (from context truncation), the cache
+    marker is placed after that message index instead of at the end. This
+    ensures the cache prefix stays stable even as more messages are truncated.
+
     Args:
         tools: List of tool definitions (will be modified in-place)
         system: System prompt (string or list of blocks, will be modified in-place)
         messages: List of message dicts (will be modified in-place)
         ttl: Cache time-to-live, either '5m' or '1h'
+        context_cache_index: Message index after last truncation for cache placement
     """
     cache_marker = {"type": "ephemeral", "ttl": ttl}
 
@@ -60,23 +66,44 @@ def add_cache_control_markers(
         system[-1]["cache_control"] = cache_marker
 
     # Cache conversation history incrementally
-    # Find last message's last content block
+    # When truncation is active, place TWO markers:
+    # 1. At truncation boundary (stable prefix)
+    # 2. At end of messages (incremental caching)
+    # Otherwise, place only at end of messages
     if messages:
-        last_message = messages[-1]
-        content = last_message.get("content")
+        indices_to_mark = []
 
-        if isinstance(content, list) and content:
-            # Content is a list of blocks - mark the last block
-            content[-1]["cache_control"] = cache_marker
-        elif isinstance(content, str):
-            # Content is a string - convert to block format with cache_control
-            last_message["content"] = [
-                {
-                    "type": "text",
-                    "text": content,
-                    "cache_control": cache_marker
-                }
-            ]
+        if context_cache_index is not None:
+            # Truncation active - mark both truncation boundary AND end
+            truncation_idx = min(context_cache_index, len(messages) - 1)
+            end_idx = len(messages) - 1
+
+            # Add both if they're different positions
+            if truncation_idx != end_idx:
+                indices_to_mark = [truncation_idx, end_idx]
+            else:
+                indices_to_mark = [end_idx]
+        else:
+            # No truncation - just mark the end
+            indices_to_mark = [len(messages) - 1]
+
+        # Apply cache markers to selected message indices
+        for idx in indices_to_mark:
+            target_message = messages[idx]
+            content = target_message.get("content")
+
+            if isinstance(content, list) and content:
+                # Content is a list of blocks - mark the last block
+                content[-1]["cache_control"] = cache_marker
+            elif isinstance(content, str):
+                # Content is a string - convert to block format with cache_control
+                target_message["content"] = [
+                    {
+                        "type": "text",
+                        "text": content,
+                        "cache_control": cache_marker
+                    }
+                ]
 
 
 def build_message_params(
@@ -92,7 +119,8 @@ def build_message_params(
     stream: bool = True,
     effort: Optional[Literal['low', 'medium', 'high']] = None,
     enable_caching: bool = False,
-    cache_ttl: Literal['5m', '1h'] = '5m'
+    cache_ttl: Literal['5m', '1h'] = '5m',
+    context_cache_index: Optional[int] = None
 ) -> Dict[str, Any]:
     """Build request parameters for Anthropic Messages API
 
@@ -102,6 +130,7 @@ def build_message_params(
         effort: Token usage control (low/medium/high). Only for Claude Opus 4.5.
         enable_caching: Whether to add cache_control markers for prompt caching
         cache_ttl: Cache time-to-live, either '5m' or '1h'
+        context_cache_index: Message index after last truncation for cache placement
     """
     formatted_messages = [message.anthropic_format() for message in messages]
 
@@ -159,7 +188,8 @@ def build_message_params(
             tools=params['tools'],
             system=params['system'],
             messages=params['messages'],
-            ttl=cache_ttl
+            ttl=cache_ttl,
+            context_cache_index=context_cache_index
         )
 
     return params

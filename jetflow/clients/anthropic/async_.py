@@ -5,7 +5,7 @@ import httpx
 import anthropic
 from jiter import from_json
 from anthropic import AsyncStream
-from typing import Literal, List, AsyncIterator
+from typing import Literal, List, AsyncIterator, Optional
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from jetflow.action import BaseAction
@@ -52,7 +52,8 @@ class AsyncAnthropicClient(AsyncBaseClient):
         require_action: bool = False,
         logger: 'VerboseLogger' = None,
         stream: bool = False,
-        enable_caching: bool = False
+        enable_caching: bool = False,
+        context_cache_index: Optional[int] = None
     ) -> List[Message]:
         """Non-streaming completion - single HTTP request/response"""
         # Determine caching based on mode
@@ -67,7 +68,8 @@ class AsyncAnthropicClient(AsyncBaseClient):
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget,
             require_action=require_action, stream=stream, effort=self.effort,
-            enable_caching=should_cache, cache_ttl=self.cache_ttl
+            enable_caching=should_cache, cache_ttl=self.cache_ttl,
+            context_cache_index=context_cache_index
         )
         return await self._complete_with_retry(params, logger)
 
@@ -81,7 +83,8 @@ class AsyncAnthropicClient(AsyncBaseClient):
         require_action: bool = False,
         logger: 'VerboseLogger' = None,
         stream: bool = True,
-        enable_caching: bool = False
+        enable_caching: bool = False,
+        context_cache_index: Optional[int] = None
     ) -> AsyncIterator[StreamEvent]:
         """Streaming completion - yields events in real-time"""
         # Determine caching based on mode
@@ -96,7 +99,8 @@ class AsyncAnthropicClient(AsyncBaseClient):
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget,
             require_action=require_action, stream=stream, effort=self.effort,
-            enable_caching=should_cache, cache_ttl=self.cache_ttl
+            enable_caching=should_cache, cache_ttl=self.cache_ttl,
+            context_cache_index=context_cache_index
         )
         async for event in self._stream_events_with_retry(params, logger, require_action=require_action):
             yield event

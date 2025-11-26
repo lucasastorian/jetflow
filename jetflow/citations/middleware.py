@@ -45,6 +45,7 @@ class CitationMiddleware(AsyncBaseClient):
         logger: Optional['BaseLogger'] = None,
         stream: bool = True,
         enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
     ) -> AsyncIterator[StreamEvent]:
         """Stream events with citation detection"""
         self.citation_manager.reset_stream_state()
@@ -59,7 +60,8 @@ class CitationMiddleware(AsyncBaseClient):
             require_action=require_action,
             logger=logger,
             stream=stream,
-            enable_caching=enable_caching
+            enable_caching=enable_caching,
+            context_cache_index=context_cache_index
         ):
             if isinstance(event, ContentDelta):
                 content_buffer += event.delta
@@ -85,6 +87,7 @@ class CitationMiddleware(AsyncBaseClient):
         logger: Optional['BaseLogger'] = None,
         stream: bool = False,
         enable_caching: bool = True,
+        context_cache_index: Optional[int] = None,
     ) -> List['Message']:
         """Pass through to wrapped client (no citation detection needed for non-streaming)"""
         return await self.client.complete(
@@ -96,7 +99,8 @@ class CitationMiddleware(AsyncBaseClient):
             require_action=require_action,
             logger=logger,
             enable_caching=enable_caching,
-            stream=stream
+            stream=stream,
+            context_cache_index=context_cache_index
         )
 
 
@@ -121,6 +125,7 @@ class SyncCitationMiddleware(BaseClient):
         logger: Optional['BaseLogger'] = None,
         stream: bool = True,
         enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
     ) -> Iterator[StreamEvent]:
         """Stream events with citation detection"""
         self.citation_manager.reset_stream_state()
@@ -135,7 +140,8 @@ class SyncCitationMiddleware(BaseClient):
             require_action=require_action,
             logger=logger,
             stream=stream,
-            enable_caching=enable_caching
+            enable_caching=enable_caching,
+            context_cache_index=context_cache_index
         ):
             if isinstance(event, ContentDelta):
                 content_buffer += event.delta
@@ -161,6 +167,7 @@ class SyncCitationMiddleware(BaseClient):
         logger: Optional['BaseLogger'] = None,
         stream: bool = False,
         enable_caching: bool = True,
+        context_cache_index: Optional[int] = None,
     ) -> List['Message']:
         """Pass through to wrapped client (no citation detection needed for non-streaming)"""
         return self.client.complete(
@@ -172,5 +179,6 @@ class SyncCitationMiddleware(BaseClient):
             require_action=require_action,
             logger=logger,
             enable_caching=enable_caching,
-            stream=stream
+            stream=stream,
+            context_cache_index=context_cache_index
         )

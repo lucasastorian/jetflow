@@ -7,6 +7,7 @@ A lightweight, production-ready framework for building agentic workflows with LL
 from jetflow.__version__ import __version__
 from jetflow.agent import Agent, AsyncAgent
 from jetflow.agent.state import AgentState
+from jetflow.agent.context import ContextConfig
 from jetflow.action import action
 from jetflow.models import (
     Message, Action, Thought,
@@ -47,6 +48,7 @@ __all__ = [
     "Agent",
     "AsyncAgent",
     "AgentState",
+    "ContextConfig",
     "Chain",
     "AsyncChain",
     "action",

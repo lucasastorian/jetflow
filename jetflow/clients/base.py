@@ -28,6 +28,7 @@ class BaseClient(ABC):
         logger: Optional['VerboseLogger'] = None,
         stream: bool = False,
         enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
     ) -> List['Message']:
         """Non-streaming completion - single HTTP request/response.
 
@@ -40,6 +41,7 @@ class BaseClient(ABC):
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
             enable_caching: Enable prompt caching (Anthropic only)
+            context_cache_index: Message index after last truncation for cache placement (Anthropic only)
         """
         raise NotImplementedError
 
@@ -55,6 +57,7 @@ class BaseClient(ABC):
         logger: Optional['VerboseLogger'] = None,
         stream: bool = True,
         enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
     ) -> Iterator['StreamEvent']:
         """Streaming completion - yields events in real-time (sync).
 
@@ -64,6 +67,7 @@ class BaseClient(ABC):
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
             enable_caching: Enable prompt caching (Anthropic only)
+            context_cache_index: Message index after last truncation for cache placement (Anthropic only)
         """
         raise NotImplementedError
 
@@ -86,6 +90,7 @@ class AsyncBaseClient(ABC):
         logger: Optional['VerboseLogger'] = None,
         stream: bool = False,
         enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
     ) -> List['Message']:
         """Non-streaming completion - single HTTP request/response (async).
 
@@ -98,6 +103,7 @@ class AsyncBaseClient(ABC):
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
             enable_caching: Enable prompt caching (Anthropic only)
+            context_cache_index: Message index after last truncation for cache placement (Anthropic only)
         """
         raise NotImplementedError
 
@@ -113,6 +119,7 @@ class AsyncBaseClient(ABC):
         logger: Optional['VerboseLogger'] = None,
         stream: bool = True,
         enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
     ):
         """Streaming completion - yields events in real-time (async).
 
@@ -122,5 +129,6 @@ class AsyncBaseClient(ABC):
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
             enable_caching: Enable prompt caching (Anthropic only)
+            context_cache_index: Message index after last truncation for cache placement (Anthropic only)
         """
         raise NotImplementedError
