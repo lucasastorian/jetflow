@@ -88,10 +88,9 @@ def build_response_params(
 
 def apply_usage_to_message(usage_obj, message: Message) -> None:
     """Apply usage information from OpenAI usage object to completion message"""
-    message.uncached_prompt_tokens = (
-            usage_obj.input_tokens - usage_obj.input_tokens_details.cached_tokens
-    )
-    message.cached_prompt_tokens = usage_obj.input_tokens_details.cached_tokens
+    cached_tokens = usage_obj.input_tokens_details.cached_tokens
+    message.uncached_prompt_tokens = usage_obj.input_tokens - cached_tokens
+    message.cache_read_tokens = cached_tokens  # Use cache_read_tokens, not cached_prompt_tokens
     message.thinking_tokens = getattr(usage_obj.output_tokens_details, 'reasoning_tokens', 0)
     message.completion_tokens = usage_obj.output_tokens - message.thinking_tokens
 

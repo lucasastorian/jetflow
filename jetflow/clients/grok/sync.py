@@ -1,17 +1,20 @@
 """Sync Grok (xAI) client - wrapper around OpenAI Responses API client"""
 
 import os
-from typing import Literal
+from typing import Literal, List, Iterator, Optional
 from jetflow.clients.openai.sync import OpenAIClient
+from jetflow.clients.grok.utils import build_grok_params
+from jetflow.action import BaseAction
+from jetflow.models.message import Message
+from jetflow.models.events import StreamEvent
 
 
 class GrokClient(OpenAIClient):
     """
     Grok (xAI) client using OpenAI Responses API.
 
-    Simply wraps OpenAIClient with xAI base URL and defaults.
-    Note: Grok doesn't stream function call arguments via deltas,
-    but the parent class handles this via function_call_arguments.done.
+    Wraps OpenAIClient with xAI base URL and defaults.
+    Overrides tool building to disable OpenAI custom tools (Grok doesn't support them).
     """
     provider: str = "Grok"
 
@@ -31,7 +34,6 @@ class GrokClient(OpenAIClient):
             temperature: Sampling temperature
             reasoning_effort: Reasoning effort level ('low' or 'high')
         """
-        # Call parent init but we'll override the client
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
@@ -44,3 +46,61 @@ class GrokClient(OpenAIClient):
             api_key=api_key or os.environ.get('XAI_API_KEY'),
             timeout=300.0,
         )
+
+    def complete(
+        self,
+        messages: List[Message],
+        system_prompt: str,
+        actions: List[BaseAction],
+        allowed_actions: List[BaseAction] = None,
+        enable_web_search: bool = False,
+        require_action: bool = False,
+        logger: 'VerboseLogger' = None,
+        stream: bool = False,
+        enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
+    ) -> List[Message]:
+        """Non-streaming completion - uses Grok-specific param builder"""
+        params = build_grok_params(
+            self.model,
+            system_prompt,
+            messages,
+            actions,
+            allowed_actions,
+            enable_web_search,
+            require_action,
+            self.temperature,
+            self.reasoning_effort,
+            stream=stream,
+        )
+
+        return self._complete_with_retry(params, actions, logger)
+
+    def stream(
+        self,
+        messages: List[Message],
+        system_prompt: str,
+        actions: List[BaseAction],
+        allowed_actions: List[BaseAction] = None,
+        enable_web_search: bool = False,
+        require_action: bool = False,
+        logger: 'VerboseLogger' = None,
+        stream: bool = True,
+        enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
+    ) -> Iterator[StreamEvent]:
+        """Streaming completion - uses Grok-specific param builder"""
+        params = build_grok_params(
+            self.model,
+            system_prompt,
+            messages,
+            actions,
+            allowed_actions,
+            enable_web_search,
+            require_action,
+            self.temperature,
+            self.reasoning_effort,
+            stream=stream,
+        )
+
+        yield from self._stream_events_with_retry(params, actions, logger)
