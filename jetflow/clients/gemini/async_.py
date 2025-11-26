@@ -3,7 +3,7 @@
 import os
 import uuid
 from google import genai
-from typing import List, AsyncIterator
+from typing import List, AsyncIterator, Optional
 
 from jetflow.action import BaseAction
 from jetflow.models.message import Message, Action, Thought
@@ -42,6 +42,8 @@ class AsyncGeminiClient(AsyncBaseClient):
         require_action: bool = False,
         logger: 'VerboseLogger' = None,
         stream: bool = False,
+        enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
     ) -> List[Message]:
         """Non-streaming completion"""
         config = build_gemini_config(system_prompt, actions, self.thinking_budget, allowed_actions, require_action)
@@ -65,6 +67,8 @@ class AsyncGeminiClient(AsyncBaseClient):
         require_action: bool = False,
         logger: 'VerboseLogger' = None,
         stream: bool = True,
+        enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
     ) -> AsyncIterator[StreamEvent]:
         """Streaming completion - yields events"""
         config = build_gemini_config(system_prompt, actions, self.thinking_budget, allowed_actions, require_action)

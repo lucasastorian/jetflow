@@ -11,7 +11,7 @@ Compatible with OpenAI-compatible providers:
 import os
 import openai
 from jiter import from_json
-from typing import Literal, List, Iterator
+from typing import Literal, List, Iterator, Optional
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from jetflow.action import BaseAction
@@ -52,7 +52,9 @@ class LegacyOpenAIClient(BaseClient):
         enable_web_search: bool = False,
         require_action: bool = False,
         logger: 'VerboseLogger' = None,
-        stream: bool = False
+        stream: bool = False,
+        enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
     ) -> List[Message]:
         """Non-streaming completion - single HTTP request/response"""
         params = build_legacy_params(
@@ -71,7 +73,9 @@ class LegacyOpenAIClient(BaseClient):
         enable_web_search: bool = False,
         require_action: bool = False,
         logger: 'VerboseLogger' = None,
-        stream: bool = True
+        stream: bool = True,
+        enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
     ) -> Iterator[StreamEvent]:
         """Streaming completion - yields events in real-time"""
         params = build_legacy_params(

@@ -5,7 +5,7 @@ import httpx
 import openai
 from jiter import from_json
 from openai import AsyncStream
-from typing import Literal, List, AsyncIterator
+from typing import Literal, List, AsyncIterator, Optional
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from jetflow.action import BaseAction
@@ -51,6 +51,8 @@ class AsyncOpenAIClient(AsyncBaseClient):
         require_action: bool = False,
         logger: 'VerboseLogger' = None,
         stream: bool = False,
+        enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
     ) -> List[Message]:
         """Non-streaming completion - single HTTP request/response. Returns list of Messages (multiple if web searches occur)."""
         params = build_response_params(
@@ -79,6 +81,8 @@ class AsyncOpenAIClient(AsyncBaseClient):
         require_action: bool = False,
         logger: 'VerboseLogger' = None,
         stream: bool = True,
+        enable_caching: bool = False,
+        context_cache_index: Optional[int] = None,
     ) -> AsyncIterator[StreamEvent]:
         """Streaming completion - yields events in real-time"""
         params = build_response_params(
