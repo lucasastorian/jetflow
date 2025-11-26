@@ -85,7 +85,7 @@ def apply_legacy_usage(usage_obj, completion: Message):
         cached_tokens = usage_obj.prompt_tokens_details.cached_tokens or 0
 
     completion.uncached_prompt_tokens = usage_obj.prompt_tokens - cached_tokens
-    completion.cached_prompt_tokens = cached_tokens
+    completion.cache_read_tokens = cached_tokens  # Use cache_read_tokens, not cached_prompt_tokens
 
     # Handle thinking/reasoning tokens
     thinking_tokens = 0
