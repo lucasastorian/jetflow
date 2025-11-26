@@ -177,7 +177,7 @@ def test_multiturn_python_exec():
     # Reset Python namespace
     PYTHON_NAMESPACE.clear()
 
-    client = AnthropicClient(model="claude-haiku-4-5")
+    client = AnthropicClient(model="claude-4-5-haiku")
 
     agent = Agent(
         client=client,

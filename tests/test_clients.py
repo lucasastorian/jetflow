@@ -123,8 +123,8 @@ def calculate_profit_margins(params: CalculateProfitMargins) -> ActionResult:
 CLIENTS = [
     {
         "name": "Anthropic",
-        "sync_client": AnthropicClient(model="claude-haiku-4-5"),
-        "async_client": AsyncAnthropicClient(model="claude-haiku-4-5"),
+        "sync_client": AnthropicClient(model="claude-4-5-haiku"),
+        "async_client": AsyncAnthropicClient(model="claude-4-5-haiku"),
     },
     {
         "name": "OpenAI",
@@ -142,8 +142,8 @@ CLIENTS = [
 if os.getenv("XAI_API_KEY"):
     CLIENTS.append({
         "name": "Grok",
-        "sync_client": GrokClient(model="grok-4-fast-non-reasoning"),
-        "async_client": AsyncGrokClient(model="grok-4-fast-non-reasoning"),
+        "sync_client": GrokClient(model="grok-4-fast"),
+        "async_client": AsyncGrokClient(model="grok-4-fast"),
     })
 
 # Add Gemini if API key is available

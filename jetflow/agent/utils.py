@@ -7,7 +7,6 @@ from jetflow.clients.base import BaseClient, AsyncBaseClient
 from jetflow.action import BaseAction, AsyncBaseAction
 from jetflow.models import Message, Action
 from jetflow.models import AgentResponse, ActionFollowUp
-from jetflow.citations import CitationManager
 from jetflow.utils.usage import Usage
 from jetflow.utils.pricing import calculate_cost
 from jetflow.utils.timer import Timer
@@ -129,7 +128,7 @@ def _build_response(agent, timer: Timer, success: bool) -> AgentResponse:
 
     last_message = agent.messages[-1]
     if last_message.role == 'assistant':
-        used_citations = agent.citation_manager.get_used_citations(last_message.content)
+        used_citations = agent.client.get_used_citations(last_message.content)
         if used_citations:
             last_message.citations = used_citations
 
@@ -143,34 +142,34 @@ def _build_response(agent, timer: Timer, success: bool) -> AgentResponse:
     )
 
 
-def load_citations_from_messages(messages: List[Message], citation_manager: CitationManager) -> None:
-    """Load citations from existing messages into citation manager.
+def load_citations_from_messages(messages: List[Message], client) -> None:
+    """Load citations from existing messages into citation middleware.
 
-    Scans all messages for citations and adds them to the manager.
+    Scans all messages for citations and adds them to the middleware.
     This ensures citation state is consistent when initializing an agent
     with existing message history.
     """
     for msg in messages:
         if msg.citations:
-            citation_manager.add_citations(msg.citations)
+            client.add_citations(msg.citations)
 
 
 def add_messages_to_history(
     messages: List[Message],
     query: Union[str, List[Message]],
-    citation_manager: CitationManager = None
+    client = None
 ):
     """Add query messages to message history.
 
-    If citation_manager is provided, also loads any citations from the messages.
+    If client is provided, also loads any citations from the messages.
     """
     if isinstance(query, str):
         messages.append(Message(role="user", content=query, status="completed"))
     else:
         messages.extend(query)
-        # Load citations from existing messages if citation_manager provided
-        if citation_manager is not None:
-            load_citations_from_messages(query, citation_manager)
+        # Load citations from existing messages if client provided
+        if client is not None:
+            load_citations_from_messages(query, client)
 
 
 def find_action(name: str, actions: List[BaseAction]) -> Optional[BaseAction]:
@@ -229,8 +228,7 @@ def reset_agent_state(agent_instance):
     """Reset core agent state for fresh execution"""
     agent_instance.messages = []
     agent_instance.num_iter = 0
-    if hasattr(agent_instance, 'citation_manager'):
-        agent_instance.citation_manager.reset()
+    agent_instance.client.reset()
 
 
 def count_message_tokens(messages: List[Message], system_prompt: str) -> int:

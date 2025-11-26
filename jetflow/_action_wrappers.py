@@ -23,7 +23,8 @@ def _build_response_from_result(result: Union[ActionResult, Any], action: Action
                 action_id=action.id,
                 status="completed",
                 metadata=result.metadata,
-                citations=result.citations
+                citations=result.citations,
+                sources=result.sources
             ),
             follow_up=ActionFollowUp(
                 actions=result.follow_up_actions,
@@ -56,7 +57,7 @@ def _wrap_function_action(fn: Callable, schema: Type[BaseModel], exit: bool) -> 
     accepts_state = 'state' in sig.parameters
 
     class FunctionAction(BaseAction):
-        def __call__(self, action, state: AgentState = None) -> ActionResponse:
+        def __call__(self, action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
             try:
                 validated = self.schema(**action.body)
             except ValidationError as e:
@@ -73,7 +74,7 @@ def _wrap_function_action(fn: Callable, schema: Type[BaseModel], exit: bool) -> 
             try:
                 kwargs = {}
                 if accepts_citation_start:
-                    kwargs['citation_start'] = action.citation_start
+                    kwargs['citation_start'] = citation_start
                 if accepts_state:
                     kwargs['state'] = state
 
@@ -130,7 +131,7 @@ def _wrap_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> Type['
             if hasattr(self._instance, '__stop__'):
                 return self._instance.__stop__()
 
-        def __call__(self, action, state: AgentState = None) -> ActionResponse:
+        def __call__(self, action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
             try:
                 validated = self.schema(**action.body)
             except ValidationError as e:
@@ -147,7 +148,7 @@ def _wrap_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> Type['
             try:
                 kwargs = {}
                 if accepts_citation_start:
-                    kwargs['citation_start'] = action.citation_start
+                    kwargs['citation_start'] = citation_start
                 if accepts_state:
                     kwargs['state'] = state
 
@@ -188,7 +189,7 @@ def _wrap_async_function_action(fn: Callable, schema: Type[BaseModel], exit: boo
     accepts_state = 'state' in sig.parameters
 
     class AsyncFunctionAction(AsyncBaseAction):
-        async def __call__(self, action, state: AgentState = None) -> ActionResponse:
+        async def __call__(self, action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
             try:
                 validated = self.schema(**action.body)
             except ValidationError as e:
@@ -205,7 +206,7 @@ def _wrap_async_function_action(fn: Callable, schema: Type[BaseModel], exit: boo
             try:
                 kwargs = {}
                 if accepts_citation_start:
-                    kwargs['citation_start'] = action.citation_start
+                    kwargs['citation_start'] = citation_start
                 if accepts_state:
                     kwargs['state'] = state
 
@@ -269,7 +270,7 @@ def _wrap_async_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> 
                 if hasattr(result, '__await__'):
                     await result
 
-        async def __call__(self, action, state: AgentState = None) -> ActionResponse:
+        async def __call__(self, action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
             try:
                 validated = self.schema(**action.body)
             except ValidationError as e:
@@ -286,7 +287,7 @@ def _wrap_async_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> 
             try:
                 kwargs = {}
                 if accepts_citation_start:
-                    kwargs['citation_start'] = action.citation_start
+                    kwargs['citation_start'] = citation_start
                 if accepts_state:
                     kwargs['state'] = state
 

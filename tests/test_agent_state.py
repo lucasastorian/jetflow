@@ -149,7 +149,7 @@ def test_sync_agent_state_injection():
     print("=" * 80)
     print()
 
-    client = AnthropicClient(model="claude-haiku-4-5")
+    client = AnthropicClient(model="claude-4-5-haiku")
 
     agent = Agent(
         client=client,
@@ -197,7 +197,7 @@ async def test_async_agent_state_injection():
     print("=" * 80)
     print()
 
-    client = AsyncAnthropicClient(model="claude-haiku-4-5")
+    client = AsyncAnthropicClient(model="claude-4-5-haiku")
 
     agent = AsyncAgent(
         client=client,
@@ -246,7 +246,7 @@ def test_action_without_state():
     print()
 
     # research action doesn't declare state parameter - should still work
-    client = AnthropicClient(model="claude-haiku-4-5")
+    client = AnthropicClient(model="claude-4-5-haiku")
 
     agent = Agent(
         client=client,

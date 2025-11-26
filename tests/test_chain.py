@@ -77,7 +77,7 @@ def test_sync_chain():
     print("=" * 80)
     print()
 
-    client = AnthropicClient(model="claude-haiku-4-5")
+    client = AnthropicClient(model="claude-4-5-haiku")
 
     # Stage 1: Search agent (cheap, fast model)
     search_agent = Agent(
@@ -150,7 +150,7 @@ async def test_async_chain():
     print("=" * 80)
     print()
 
-    client = AsyncAnthropicClient(model="claude-haiku-4-5")
+    client = AsyncAnthropicClient(model="claude-4-5-haiku")
 
     # Stage 1: Search agent
     search_agent = AsyncAgent(
@@ -222,7 +222,7 @@ def test_sync_chain_stream():
     print("=" * 80)
     print()
 
-    client = AnthropicClient(model="claude-haiku-4-5")
+    client = AnthropicClient(model="claude-4-5-haiku")
 
     search_agent = Agent(
         client=client,
@@ -294,7 +294,7 @@ async def test_async_chain_stream():
     print("=" * 80)
     print()
 
-    client = AsyncAnthropicClient(model="claude-haiku-4-5")
+    client = AsyncAnthropicClient(model="claude-4-5-haiku")
 
     search_agent = AsyncAgent(
         client=client,

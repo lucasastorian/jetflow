@@ -121,7 +121,7 @@ def test_client_initialization():
     print("=" * 80)
 
     # Test 1: Default values
-    client_default = AnthropicClient(model="claude-haiku-4-5")
+    client_default = AnthropicClient(model="claude-4-5-haiku")
     assert client_default.prompt_caching == 'agentic', \
         f"Default prompt_caching should be 'agentic', got {client_default.prompt_caching}"
     assert client_default.cache_ttl == '5m', \
@@ -129,13 +129,13 @@ def test_client_initialization():
     print("✓ Default: prompt_caching='agentic', cache_ttl='5m'")
 
     # Test 2: Never mode
-    client_never = AnthropicClient(model="claude-haiku-4-5", prompt_caching='never')
+    client_never = AnthropicClient(model="claude-4-5-haiku", prompt_caching='never')
     assert client_never.prompt_caching == 'never'
     print("✓ Never mode: prompt_caching='never'")
 
     # Test 3: Conversational mode with 1h TTL
     client_conv_1h = AnthropicClient(
-        model="claude-haiku-4-5",
+        model="claude-4-5-haiku",
         prompt_caching='conversational',
         cache_ttl='1h'
     )
@@ -145,7 +145,7 @@ def test_client_initialization():
 
     # Test 4: Async client
     async_client = AsyncAnthropicClient(
-        model="claude-haiku-4-5",
+        model="claude-4-5-haiku",
         prompt_caching='agentic',
         cache_ttl='5m'
     )
@@ -166,7 +166,7 @@ def test_never_mode():
     print("TEST: Never Mode - Caching Disabled")
     print("=" * 80)
 
-    client = AnthropicClient(model="claude-haiku-4-5", prompt_caching='never')
+    client = AnthropicClient(model="claude-4-5-haiku", prompt_caching='never')
 
     # Verify that even if we pass enable_caching=True, it should be ignored
     # We test this by checking the client's mode
@@ -187,7 +187,7 @@ def test_conversational_mode():
     print("=" * 80)
 
     client = AnthropicClient(
-        model="claude-haiku-4-5",
+        model="claude-4-5-haiku",
         prompt_caching='conversational',
         cache_ttl='1h'
     )
@@ -213,7 +213,7 @@ def test_agentic_mode():
     print("=" * 80)
 
     client = AnthropicClient(
-        model="claude-haiku-4-5",
+        model="claude-4-5-haiku",
         prompt_caching='agentic',
         cache_ttl='5m'
     )
@@ -243,7 +243,7 @@ def test_agent_agentic_caching():
     print("=" * 80)
 
     client = AnthropicClient(
-        model="claude-haiku-4-5",
+        model="claude-4-5-haiku",
         prompt_caching='agentic',
         cache_ttl='5m'
     )
@@ -280,7 +280,7 @@ def test_agent_never_caching():
     print("=" * 80)
 
     client = AnthropicClient(
-        model="claude-haiku-4-5",
+        model="claude-4-5-haiku",
         prompt_caching='never',  # Disable caching
         cache_ttl='5m'
     )
@@ -313,7 +313,7 @@ def test_agent_conversational_caching():
     print("=" * 80)
 
     client = AnthropicClient(
-        model="claude-haiku-4-5",
+        model="claude-4-5-haiku",
         prompt_caching='conversational',  # Always cache
         cache_ttl='1h'  # Use 1h for conversations
     )
@@ -353,7 +353,7 @@ async def test_async_client_caching():
     print("=" * 80)
 
     client = AsyncAnthropicClient(
-        model="claude-haiku-4-5",
+        model="claude-4-5-haiku",
         prompt_caching='agentic',
         cache_ttl='5m'
     )

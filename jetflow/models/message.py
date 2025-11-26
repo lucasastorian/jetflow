@@ -21,8 +21,8 @@ class Action:
     body: dict  # Input parameters
 
     result: dict = None  # Output result (populated after execution)
+    sources: List[dict] = None  # Source metadata from action execution
     external_id: str = None  # OpenAI Responses API 'id' attribute
-    citation_start: int = None  # Starting citation ID for this action (set by Agent)
 
 
 @dataclass
@@ -61,6 +61,7 @@ class Message:
     error: bool = False
     metadata: dict = None
     citations: dict = None  # Dict[int, dict] - citation ID → metadata
+    sources: List[dict] = None  # List of source metadata dicts
 
     # Usage tracking
     uncached_prompt_tokens: int = None       # Regular input tokens (no caching)

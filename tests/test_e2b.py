@@ -34,7 +34,7 @@ def get_client():
     """Get Anthropic client for tests"""
     return AnthropicClient(
         api_key=os.getenv("ANTHROPIC_API_KEY"),
-        model="claude-haiku-4-5",
+        model="claude-4-5-haiku",
     )
 
 

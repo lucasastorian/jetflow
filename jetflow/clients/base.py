@@ -1,7 +1,7 @@
 """Base client interface for LLM providers"""
 
 from abc import ABC, abstractmethod
-from typing import List, Iterator, TYPE_CHECKING, Optional
+from typing import List, Iterator, AsyncIterator, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from jetflow.models.message import Message
@@ -120,7 +120,7 @@ class AsyncBaseClient(ABC):
         stream: bool = True,
         enable_caching: bool = False,
         context_cache_index: Optional[int] = None,
-    ):
+    ) -> AsyncIterator['StreamEvent']:
         """Streaming completion - yields events in real-time (async).
 
         Args:

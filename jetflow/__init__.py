@@ -19,7 +19,7 @@ from jetflow.models import (
     ChainAgentStart, ChainAgentEnd
 )
 from jetflow.chain import Chain, AsyncChain
-from jetflow.citations import CitationManager, CitationExtractor
+from jetflow.citations import CitationExtractor, AsyncCitationMiddleware, SyncCitationMiddleware
 from jetflow.utils.usage import Usage
 
 # Import clients (optional dependencies - each wrapped separately)
@@ -58,8 +58,9 @@ __all__ = [
     "AgentResponse",
     "ActionResult",
     "Usage",
-    "CitationManager",
     "CitationExtractor",
+    "AsyncCitationMiddleware",
+    "SyncCitationMiddleware",
     # Streaming events
     "StreamEvent",
     "MessageStart",

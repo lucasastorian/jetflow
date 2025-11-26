@@ -142,7 +142,7 @@ def test_sync_agent_mixed_actions():
     print("=" * 80)
     print()
 
-    client = AnthropicClient(model="claude-haiku-4-5")
+    client = AnthropicClient(model="claude-4-5-haiku")
 
     # Sync agent can use:
     # - Sync function actions ✓
@@ -199,7 +199,7 @@ async def test_async_agent_mixed_actions():
     print("=" * 80)
     print()
 
-    client = AsyncAnthropicClient(model="claude-haiku-4-5")
+    client = AsyncAnthropicClient(model="claude-4-5-haiku")
 
     # Async agent can use ALL action types:
     # - Sync function actions ✓ (called directly)

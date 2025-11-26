@@ -3,7 +3,7 @@
 from typing import List, Optional, Union, Callable, Type, AsyncIterator
 
 from jetflow.clients.base import AsyncBaseClient
-from jetflow.citations import CitationMiddleware
+from jetflow.citations import AsyncCitationMiddleware
 from jetflow.action import BaseAction, AsyncBaseAction
 from jetflow.models import Message, Action
 from jetflow.models import AgentResponse, ActionFollowUp, StepResult
@@ -40,8 +40,7 @@ class AsyncAgent:
         actions = actions or []
         self.actions = prepare_and_validate_actions(actions, require_action, is_async=True)
 
-        self.client = CitationMiddleware(client)
-        self.citation_manager = self.client.citation_manager
+        self.client = AsyncCitationMiddleware(client)
 
         self.max_iter = max_iter
         self.require_action = require_action
@@ -279,7 +278,7 @@ class AsyncAgent:
 
     async def _execute_actions(self, called_actions: List[Action], actions: List[Union[BaseAction, AsyncBaseAction]]) -> AsyncIterator[StreamEvent]:
         """Execute actions and yield ActionExecutionStart/ActionExecuted events"""
-        state = AgentState(messages=self.messages, citations=dict(self.citation_manager.citations))
+        state = AgentState(messages=self.messages, citations=dict(self.client.citations))
 
         for called_action in called_actions:
             action_impl = find_action(called_action.name, actions)
@@ -287,27 +286,29 @@ class AsyncAgent:
                 handle_action_not_found(called_action, self.actions, self.messages, self.logger)
                 continue
 
-            called_action.citation_start = self.citation_manager.get_next_id()
+            citation_start = self.client.get_next_id()
             self.logger.log_action_start(called_action.name, called_action.body)
 
             yield ActionExecutionStart(id=called_action.id, name=called_action.name, body=called_action.body)
 
             if isinstance(action_impl, AsyncBaseAction):
-                response = await action_impl(called_action, state=state)
+                response = await action_impl(called_action, state=state, citation_start=citation_start)
             else:
-                response = action_impl(called_action, state=state)
+                response = action_impl(called_action, state=state, citation_start=citation_start)
 
             if response.message.error:
                 self.logger.log_error(f"Action '{called_action.name}' failed: {response.message.content}")
 
             self.messages.append(response.message)
             if response.message.citations:
-                self.citation_manager.add_citations(response.message.citations)
+                self.client.add_citations(response.message.citations)
 
             self.logger.log_action_end(response.summary, response.message.content, response.message.error)
 
-            # Attach result to the action for UI rendering
+            # Attach result and sources to the action for UI rendering
             called_action.result = response.result
+            if response.message.sources:
+                called_action.sources = response.message.sources
 
             is_exit = bool(getattr(action_impl, '_is_exit', False))
 
@@ -354,7 +355,7 @@ class AsyncAgent:
         self._context_manager.reset()
 
     def _add_messages_to_history(self, query: Union[str, List[Message]]):
-        add_messages_to_history(self.messages, query, self.citation_manager)
+        add_messages_to_history(self.messages, query, self.client)
 
     def _is_final_step(self) -> bool:
         # Only treat as final step if we've done at least one iteration

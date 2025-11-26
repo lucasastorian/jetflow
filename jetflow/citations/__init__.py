@@ -1,12 +1,11 @@
 """Citation tracking and detection for Jetflow"""
 
-from jetflow.citations.manager import CitationManager, CitationExtractor, get_citation_metadata
-from jetflow.citations.middleware import CitationMiddleware, SyncCitationMiddleware
+from jetflow.citations.extractor import CitationExtractor
+from jetflow.citations.async_middleware import AsyncCitationMiddleware
+from jetflow.citations.sync_middleware import SyncCitationMiddleware
 
 __all__ = [
-    'CitationManager',
     'CitationExtractor',
-    'get_citation_metadata',
-    'CitationMiddleware',
+    'AsyncCitationMiddleware',
     'SyncCitationMiddleware',
 ]

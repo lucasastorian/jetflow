@@ -46,6 +46,7 @@ class ActionResult:
     metadata: dict = None
     summary: str = None
     citations: dict = None  # Dict[int, dict] - citation ID → metadata
+    sources: List[dict] = None  # List of source metadata dicts
 
 
 @dataclass
