@@ -286,7 +286,7 @@ for event in chain.stream("Research and analyze"):
 Jetflow includes **safe Python execution**.
 
 ```python
-from jetflow.actions import LocalPythonExec
+from jetflow.actions.local_python_exec import LocalPythonExec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),

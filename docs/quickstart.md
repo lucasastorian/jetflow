@@ -146,7 +146,7 @@ response = agent.run("How many papers were published? Multiply by 2")
 Skip writing custom calculators. Use the built-in Python executor.
 
 ```python
-from jetflow.actions import LocalPythonExec
+from jetflow.actions.local_python_exec import LocalPythonExec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),

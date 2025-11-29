@@ -569,7 +569,7 @@ client = LegacyOpenAIClient(
 Safe local Python code execution with persistent state.
 
 ```python
-from jetflow.actions import LocalPythonExec
+from jetflow.actions.local_python_exec import LocalPythonExec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
@@ -609,7 +609,7 @@ LocalPythonExec(code="result = x + y; result")
 Cloud-based Python code execution via E2B sandboxes with session persistence.
 
 ```python
-from jetflow.actions import E2BPythonExec
+from jetflow.actions.e2b_python_exec import E2BPythonExec
 
 # Ephemeral (default)
 agent = Agent(

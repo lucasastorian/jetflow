@@ -208,7 +208,7 @@ Before shipping:
 Jetflow ships with **safe Python execution**:
 
 ```python
-from jetflow.actions import LocalPythonExec
+from jetflow.actions.local_python_exec import LocalPythonExec
 
 agent = Agent(
     client=OpenAIClient(model="gpt-5"),
