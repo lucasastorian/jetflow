@@ -2,8 +2,8 @@
 
 import json
 import uuid
-from dataclasses import dataclass, field
-from typing import Literal, List
+from typing import Literal, List, Optional, Dict, Any, Union
+from pydantic import BaseModel, Field
 
 try:
     import tiktoken
@@ -12,37 +12,39 @@ except ImportError:
     TIKTOKEN_AVAILABLE = False
 
 
-@dataclass
-class Action:
+class Action(BaseModel):
     """A tool call from the LLM"""
     id: str
     name: str
     status: Literal['streaming', 'parsed', 'completed', 'failed']
-    body: dict  # Input parameters
+    body: Dict[str, Any]  # Input parameters
 
-    result: dict = None  # Output result (populated after execution)
-    sources: List[dict] = None  # Source metadata from action execution
-    external_id: str = None  # OpenAI Responses API 'id' attribute
+    result: Optional[Dict[str, Any]] = None  # Output result (populated after execution)
+    sources: Optional[List[Dict[str, Any]]] = None  # Source metadata from action execution
+    external_id: Optional[str] = None  # OpenAI Responses API 'id' attribute
+
+    model_config = {"extra": "allow"}
 
 
-@dataclass
-class Thought:
+class Thought(BaseModel):
     """Reasoning trace from LLM"""
-    id: str | bytes  # Signature - str for Anthropic, bytes for Gemini
+    id: Union[str, bytes]  # Signature - str for Anthropic, bytes for Gemini
     summaries: List[str]
-    provider: str = None  # Provider that generated this thought (for cross-provider compatibility)
+    provider: Optional[str] = None  # Provider that generated this thought (for cross-provider compatibility)
+
+    model_config = {"extra": "allow"}
 
 
-@dataclass
-class WebSearch:
+class WebSearch(BaseModel):
     """Web search call and results (OpenAI only)"""
     id: str
     query: str
-    results: str = None  # Search results content
+    results: Optional[str] = None  # Search results content
+
+    model_config = {"extra": "allow"}
 
 
-@dataclass
-class Message:
+class Message(BaseModel):
     """Unified message format across providers"""
 
     role: Literal['system', 'user', 'assistant', 'tool']
@@ -50,37 +52,38 @@ class Message:
     status: Literal['in_progress', 'completed', 'failed'] = 'completed'
 
     # Optional content (bundled together)
-    thoughts: List[Thought] = None
-    actions: List[Action] = None
+    thoughts: Optional[List[Thought]] = None
+    actions: Optional[List[Action]] = None
 
     # Web searches get their own Message (OpenAI bundles query + results)
-    web_search: WebSearch = None
+    web_search: Optional[WebSearch] = None
 
     # For tool messages
-    action_id: str = None
+    action_id: Optional[str] = None
     error: bool = False
-    metadata: dict = None
-    citations: dict = None  # Dict[int, dict] - citation ID → metadata
-    sources: List[dict] = None  # List of source metadata dicts
+    metadata: Optional[Dict[str, Any]] = None
+    citations: Optional[Dict[int, Dict[str, Any]]] = None  # Dict[int, dict] - citation ID → metadata
+    sources: Optional[List[Dict[str, Any]]] = None  # List of source metadata dicts
 
     # Usage tracking
-    uncached_prompt_tokens: int = None       # Regular input tokens (no caching)
-    cache_write_tokens: int = None           # Cache creation tokens (1.25x or 2x cost)
-    cache_read_tokens: int = None            # Cache hit tokens (0.1x cost)
-    thinking_tokens: int = None              # Thinking/reasoning tokens
-    completion_tokens: int = None            # Output tokens
+    uncached_prompt_tokens: Optional[int] = None       # Regular input tokens (no caching)
+    cache_write_tokens: Optional[int] = None           # Cache creation tokens (1.25x or 2x cost)
+    cache_read_tokens: Optional[int] = None            # Cache hit tokens (0.1x cost)
+    thinking_tokens: Optional[int] = None              # Thinking/reasoning tokens
+    completion_tokens: Optional[int] = None            # Output tokens
 
-    # Legacy field for backward compatibility
+    # Provider-specific
+    external_id: Optional[str] = None
+
+    # Internal
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+
+    model_config = {"extra": "allow"}
+
     @property
     def cached_prompt_tokens(self) -> int:
         """Legacy property - returns cache_read_tokens for backward compatibility"""
         return self.cache_read_tokens or 0
-
-    # Provider-specific
-    external_id: str = None
-
-    # Internal
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     @property
     def tokens(self) -> int:

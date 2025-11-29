@@ -18,12 +18,13 @@ load_dotenv()
 
 # Check dependencies
 try:
-    from jetflow.actions.e2b_python_exec import E2BPythonExec
+    from jetflow.actions.e2b_python_exec import E2BPythonExec, PythonExec
     from jetflow.agent import Agent
     from jetflow.clients.anthropic import AnthropicClient
     HAS_E2B = True
 except ImportError:
     HAS_E2B = False
+    PythonExec = None
 
 HAS_API_KEY = os.getenv("E2B_API_KEY") is not None
 HAS_ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY") is not None
@@ -382,7 +383,7 @@ def test_sandbox_pause_verification():
     assert response1.success
 
     # Get the sandbox ID that was created
-    sandbox_id = executor1.executor._last_sandbox_id
+    sandbox_id = executor1.sandbox._sandbox.sandbox_id if executor1.sandbox._sandbox else None
     print(f"Created sandbox: {sandbox_id}")
 
     # Query E2B API to check sandbox state

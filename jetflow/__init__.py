@@ -18,7 +18,7 @@ from jetflow.models import (
     ActionExecutionStart, ActionExecuted,
     ChainAgentStart, ChainAgentEnd
 )
-from jetflow.models.chart import Chart, ChartSeries, E2BChart, E2BChartElement
+from jetflow.models.chart import Chart, ChartSeries
 from jetflow.chain import Chain, AsyncChain
 from jetflow.citations import CitationExtractor, AsyncCitationMiddleware, SyncCitationMiddleware
 from jetflow.utils.usage import Usage
@@ -80,8 +80,6 @@ __all__ = [
     # Chart models
     "Chart",
     "ChartSeries",
-    "E2BChart",
-    "E2BChartElement",
 ]
 
 # Add clients to __all__ if available
