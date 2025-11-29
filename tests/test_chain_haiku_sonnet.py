@@ -76,7 +76,7 @@ def test_haiku_sonnet_chain_with_thinking():
     print("=" * 80)
     print()
 
-    haiku_client = AnthropicClient(model="claude-4-5-haiku", reasoning_effort="medium")
+    haiku_client = AnthropicClient(model="claude-haiku-4-5", reasoning_effort="medium")
     sonnet_client = AnthropicClient(model="claude-sonnet-4-5", reasoning_effort="medium")
 
     # Stage 1: Haiku agent
@@ -136,7 +136,7 @@ def test_haiku_sonnet_chain_without_thinking():
     print("=" * 80)
     print()
 
-    haiku_client = AnthropicClient(model="claude-4-5-haiku", reasoning_effort="none")
+    haiku_client = AnthropicClient(model="claude-haiku-4-5", reasoning_effort="none")
     sonnet_client = AnthropicClient(model="claude-sonnet-4-5", reasoning_effort="none")
 
     # Stage 1: Haiku agent

@@ -18,6 +18,8 @@ from jetflow.models.events import (
     ChainAgentEnd
 )
 from jetflow.models.response import AgentResponse, ActionResponse, ActionResult, ActionFollowUp, StepResult
+from jetflow.models.chart import Chart, ChartSeries, E2BChart, E2BChartElement
+
 __all__ = [
     # Message types
     'Message',
@@ -45,4 +47,9 @@ __all__ = [
     'ActionResult',
     'ActionFollowUp',
     'StepResult',
+    # Chart types
+    'Chart',
+    'ChartSeries',
+    'E2BChart',
+    'E2BChartElement',
 ]

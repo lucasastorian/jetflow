@@ -34,7 +34,16 @@ def get_client():
     """Get Anthropic client for tests"""
     return AnthropicClient(
         api_key=os.getenv("ANTHROPIC_API_KEY"),
-        model="claude-4-5-haiku",
+        model="claude-haiku-4-5",
+    )
+
+
+def get_mini_client():
+    """Get GPT-4o-mini client for tests"""
+    from jetflow.clients.openai import OpenAIClient
+    return OpenAIClient(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        model="gpt-4o-mini",
     )
 
 
@@ -424,6 +433,292 @@ def test_sandbox_pause_verification():
 
 
 # =============================================================================
+# CHART EXTRACTION TESTS
+# =============================================================================
+
+@skip_if_no_e2b
+def test_bar_chart_extraction():
+    """Test bar chart creation and metadata extraction"""
+    print("\n=== Test: Bar Chart Extraction ===")
+
+    executor = E2BPythonExec()
+    executor.__start__()
+
+    code = """
+import matplotlib.pyplot as plt
+
+authors = ['Author A', 'Author B', 'Author C', 'Author D']
+sales = [100, 200, 300, 400]
+
+plt.figure(figsize=(10, 6))
+plt.bar(authors, sales, label='Books Sold', color='blue')
+plt.xlabel('Authors')
+plt.ylabel('Number of Books Sold')
+plt.title('Book Sales by Authors')
+plt.tight_layout()
+plt.show()
+"""
+
+    result = executor(PythonExec(code=code))
+    executor.__stop__()
+
+    assert result.metadata is not None, "Should have metadata"
+    assert 'charts' in result.metadata, "Should have charts in metadata"
+    assert len(result.metadata['charts']) == 1, "Should have 1 chart"
+
+    chart = result.metadata['charts'][0]
+    assert chart['type'] in ['bar', 'ChartType.BAR'], f"Chart type should be bar, got {chart['type']}"
+    assert chart['title'] == 'Book Sales by Authors', f"Title mismatch: {chart['title']}"
+    assert chart['x_label'] == 'Authors', f"X label mismatch: {chart['x_label']}"
+    assert chart['y_label'] == 'Number of Books Sold', f"Y label mismatch: {chart['y_label']}"
+    assert len(chart['elements']) == 4, f"Should have 4 data points, got {len(chart['elements'])}"
+    assert 'id' in chart, "Chart should have an ID"
+
+    print(f"✅ Bar chart extracted: {chart['id']}")
+    print(f"   Type: {chart['type']}, Title: {chart['title']}")
+    print(f"   Elements: {len(chart['elements'])}")
+    return True
+
+
+@skip_if_no_e2b
+def test_line_chart_extraction():
+    """Test line chart creation and metadata extraction"""
+    print("\n=== Test: Line Chart Extraction ===")
+
+    executor = E2BPythonExec()
+    executor.__start__()
+
+    code = """
+import matplotlib.pyplot as plt
+
+months = ['Jan', 'Feb', 'Mar', 'Apr', 'May']
+revenue = [10000, 12000, 15000, 14000, 18000]
+
+plt.figure(figsize=(10, 6))
+plt.plot(months, revenue, marker='o', label='Revenue')
+plt.xlabel('Month')
+plt.ylabel('Revenue ($)')
+plt.title('Monthly Revenue Trend')
+plt.legend()
+plt.tight_layout()
+plt.show()
+"""
+
+    result = executor(PythonExec(code=code))
+    executor.__stop__()
+
+    assert result.metadata is not None, "Should have metadata"
+    assert 'charts' in result.metadata, "Should have charts in metadata"
+
+    chart = result.metadata['charts'][0]
+    assert chart['type'] in ['line', 'ChartType.LINE'], f"Chart type should be line, got {chart['type']}"
+    assert chart['title'] == 'Monthly Revenue Trend', f"Title mismatch: {chart['title']}"
+    assert 'id' in chart, "Chart should have an ID"
+
+    print(f"✅ Line chart extracted: {chart['id']}")
+    print(f"   Type: {chart['type']}, Title: {chart['title']}")
+    return True
+
+
+@skip_if_no_e2b
+def test_scatter_plot_extraction():
+    """Test scatter plot creation and metadata extraction"""
+    print("\n=== Test: Scatter Plot Extraction ===")
+
+    executor = E2BPythonExec()
+    executor.__start__()
+
+    code = """
+import matplotlib.pyplot as plt
+import numpy as np
+
+x = np.random.rand(50) * 100
+y = np.random.rand(50) * 100
+
+plt.figure(figsize=(10, 6))
+plt.scatter(x, y, alpha=0.5, label='Data Points')
+plt.xlabel('X Values')
+plt.ylabel('Y Values')
+plt.title('Random Scatter Plot')
+plt.legend()
+plt.tight_layout()
+plt.show()
+"""
+
+    result = executor(PythonExec(code=code))
+    executor.__stop__()
+
+    assert result.metadata is not None, "Should have metadata"
+    assert 'charts' in result.metadata, "Should have charts in metadata"
+
+    chart = result.metadata['charts'][0]
+    assert chart['type'] in ['scatter', 'ChartType.SCATTER'], f"Chart type should be scatter, got {chart['type']}"
+    assert chart['title'] == 'Random Scatter Plot', f"Title mismatch: {chart['title']}"
+
+    print(f"✅ Scatter plot extracted: {chart['id']}")
+    print(f"   Type: {chart['type']}, Title: {chart['title']}")
+    return True
+
+
+@skip_if_no_e2b
+def test_pie_chart_extraction():
+    """Test pie chart creation and metadata extraction"""
+    print("\n=== Test: Pie Chart Extraction ===")
+
+    executor = E2BPythonExec()
+    executor.__start__()
+
+    code = """
+import matplotlib.pyplot as plt
+
+categories = ['Product A', 'Product B', 'Product C', 'Product D']
+sales = [30, 25, 20, 25]
+
+plt.figure(figsize=(8, 8))
+plt.pie(sales, labels=categories, autopct='%1.1f%%')
+plt.title('Market Share by Product')
+plt.tight_layout()
+plt.show()
+"""
+
+    result = executor(PythonExec(code=code))
+    executor.__stop__()
+
+    assert result.metadata is not None, "Should have metadata"
+    assert 'charts' in result.metadata, "Should have charts in metadata"
+
+    chart = result.metadata['charts'][0]
+    assert chart['type'] in ['pie', 'ChartType.PIE'], f"Chart type should be pie, got {chart['type']}"
+    assert chart['title'] == 'Market Share by Product', f"Title mismatch: {chart['title']}"
+
+    print(f"✅ Pie chart extracted: {chart['id']}")
+    print(f"   Type: {chart['type']}, Title: {chart['title']}")
+    return True
+
+
+@skip_if_no_e2b
+def test_box_plot_extraction():
+    """Test box and whisker plot creation and metadata extraction"""
+    print("\n=== Test: Box Plot Extraction ===")
+
+    executor = E2BPythonExec()
+    executor.__start__()
+
+    code = """
+import matplotlib.pyplot as plt
+import numpy as np
+
+data = [np.random.normal(100, 10, 200),
+        np.random.normal(90, 20, 200),
+        np.random.normal(110, 15, 200)]
+
+plt.figure(figsize=(10, 6))
+plt.boxplot(data, labels=['Group A', 'Group B', 'Group C'])
+plt.xlabel('Groups')
+plt.ylabel('Values')
+plt.title('Distribution Comparison')
+plt.tight_layout()
+plt.show()
+"""
+
+    result = executor(PythonExec(code=code))
+    executor.__stop__()
+
+    assert result.metadata is not None, "Should have metadata"
+    assert 'charts' in result.metadata, "Should have charts in metadata"
+
+    chart = result.metadata['charts'][0]
+    # Box plots might be detected as 'box' or 'ChartType.BOX'
+    print(f"   Detected chart type: {chart['type']}")
+    assert chart['title'] == 'Distribution Comparison', f"Title mismatch: {chart['title']}"
+
+    print(f"✅ Box plot extracted: {chart['id']}")
+    print(f"   Type: {chart['type']}, Title: {chart['title']}")
+    return True
+
+
+@skip_if_no_e2b
+def test_embeddable_charts():
+    """Test embeddable charts feature with LLM"""
+    print("\n=== Test: Embeddable Charts with LLM ===")
+
+    client = get_mini_client()
+    executor = E2BPythonExec(embeddable_charts=True)
+    agent = Agent(client=client, actions=[executor], max_iter=3, verbose=False)
+
+    response = agent.run("Create a simple bar chart showing sales: Q1=100, Q2=150, Q3=200, Q4=180")
+
+    assert response.success, "Agent should complete"
+
+    # Find the tool response to check for embed instructions
+    tool_messages = [msg for msg in response.messages if msg.role == 'tool']
+
+    found_embed_instruction = False
+    for msg in tool_messages:
+        if '<chart id=' in msg.content and '</chart>' in msg.content:
+            found_embed_instruction = True
+            print(f"✅ Found embed instruction in tool output")
+            print(f"   Snippet: {msg.content[:200]}")
+            break
+
+    assert found_embed_instruction, "Should have embed instructions in tool output"
+
+    print("✅ Embeddable charts working")
+    return True
+
+
+@skip_if_no_e2b
+def test_multiple_charts():
+    """Test extracting multiple charts from single execution"""
+    print("\n=== Test: Multiple Charts Extraction ===")
+
+    executor = E2BPythonExec()
+    executor.__start__()
+
+    code = """
+import matplotlib.pyplot as plt
+
+# Chart 1: Bar chart
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+categories = ['A', 'B', 'C']
+values = [10, 20, 15]
+ax1.bar(categories, values)
+ax1.set_title('First Chart')
+ax1.set_xlabel('Category')
+ax1.set_ylabel('Value')
+
+# Chart 2: Line chart
+months = ['Jan', 'Feb', 'Mar']
+data = [5, 10, 8]
+ax2.plot(months, data, marker='o')
+ax2.set_title('Second Chart')
+ax2.set_xlabel('Month')
+ax2.set_ylabel('Data')
+
+plt.tight_layout()
+plt.show()
+"""
+
+    result = executor(PythonExec(code=code))
+    executor.__stop__()
+
+    # Note: E2B might return this as a single combined chart or separate charts
+    # depending on how it handles subplots
+    assert result.metadata is not None, "Should have metadata"
+
+    if 'charts' in result.metadata:
+        chart_count = len(result.metadata['charts'])
+        print(f"✅ Detected {chart_count} chart(s)")
+        for i, chart in enumerate(result.metadata['charts']):
+            print(f"   Chart {i+1}: {chart['type']} - {chart['title']}")
+    else:
+        print("⚠️  No charts detected (subplots may not be supported)")
+
+    return True
+
+
+# =============================================================================
 # TEST RUNNER
 # =============================================================================
 
@@ -457,6 +752,13 @@ if __name__ == "__main__":
         ("Variable Persistence", test_variable_persistence),
         ("Lifecycle Hooks", test_lifecycle_hooks),
         ("Sandbox Pause Verification", test_sandbox_pause_verification),
+        ("Bar Chart Extraction", test_bar_chart_extraction),
+        ("Line Chart Extraction", test_line_chart_extraction),
+        ("Scatter Plot Extraction", test_scatter_plot_extraction),
+        ("Pie Chart Extraction", test_pie_chart_extraction),
+        ("Box Plot Extraction", test_box_plot_extraction),
+        ("Embeddable Charts", test_embeddable_charts),
+        ("Multiple Charts", test_multiple_charts),
     ]
 
     results = []

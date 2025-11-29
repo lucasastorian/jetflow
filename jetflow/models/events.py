@@ -6,7 +6,7 @@ from typing import Literal, Union, TYPE_CHECKING
 if TYPE_CHECKING:
     from jetflow.models.response import ActionFollowUp
 
-from jetflow.models.message import Message
+from jetflow.models.message import Message, Action
 
 
 @dataclass
@@ -83,8 +83,8 @@ class ActionExecutionStart:
 class ActionExecuted:
     """Action execution completes with result"""
     action_id: str  # ID of the action that was executed
-    message: Message  # The tool response message (role="tool")
-    result: dict = None  # Structured result for UI rendering
+    action: 'Action' = None  # The mutated action object with .result and .sources populated
+    message: Message = None  # The tool response message (role="tool")
     summary: str = None  # Optional summary for display/logging
     follow_up: 'ActionFollowUp' = None  # Follow-up actions from this execution
     is_exit: bool = False  # Whether this was an exit action

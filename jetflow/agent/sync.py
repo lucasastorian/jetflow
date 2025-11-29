@@ -313,8 +313,8 @@ class Agent:
 
             yield ActionExecuted(
                 action_id=called_action.id,
+                action=called_action,
                 message=response.message,
-                result=response.result,
                 summary=response.summary,
                 follow_up=response.follow_up,
                 is_exit=is_exit

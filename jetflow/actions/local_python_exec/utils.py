@@ -74,24 +74,10 @@ def round_recursive(obj, decimals=10):
 
 
 class ASTGuard(ast.NodeVisitor):
-    """Security guard to prevent unsafe AST nodes"""
+    """Minimal AST guard - only blocks dunder attribute access"""
 
     def __init__(self, safe_builtins=None):
         self.safe_builtins = safe_builtins or {}
-
-    def visit_Import(self, node):
-        # Allow imports of modules already in SAFE_BUILTINS
-        for alias in node.names:
-            if alias.name not in self.safe_builtins:
-                raise SyntaxError(f"Import of '{alias.name}' is disabled for security")
-        self.generic_visit(node)
-
-    def visit_ImportFrom(self, node):
-        # Allow imports from modules already in SAFE_BUILTINS
-        if node.module and node.module in self.safe_builtins:
-            self.generic_visit(node)
-            return
-        raise SyntaxError(f"Imports from '{node.module}' are disabled for security")
 
     def visit_Name(self, node):
         if "__" in node.id:

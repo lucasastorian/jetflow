@@ -58,6 +58,20 @@ def _wrap_function_action(fn: Callable, schema: Type[BaseModel], exit: bool) -> 
 
     class FunctionAction(BaseAction):
         def __call__(self, action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
+            # Support direct schema calls for testing
+            if isinstance(action, self.schema):
+                kwargs = {}
+                if accepts_citation_start:
+                    kwargs['citation_start'] = citation_start
+                if accepts_state:
+                    kwargs['state'] = state
+                result = fn(action, **kwargs)
+                # For direct calls, return the result directly, not wrapped in ActionResponse
+                if isinstance(result, ActionResult):
+                    return result
+                return result
+
+            # Normal action call (from agent)
             try:
                 validated = self.schema(**action.body)
             except ValidationError as e:
@@ -132,6 +146,16 @@ def _wrap_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> Type['
                 return self._instance.__stop__()
 
         def __call__(self, action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
+            # Support direct schema calls for testing (executor(PythonExec(...)))
+            if isinstance(action, self.schema):
+                kwargs = {}
+                if accepts_citation_start:
+                    kwargs['citation_start'] = citation_start
+                if accepts_state:
+                    kwargs['state'] = state
+                return self._instance(action, **kwargs)
+
+            # Normal action call (from agent)
             try:
                 validated = self.schema(**action.body)
             except ValidationError as e:

@@ -123,8 +123,8 @@ def calculate_profit_margins(params: CalculateProfitMargins) -> ActionResult:
 CLIENTS = [
     {
         "name": "Anthropic",
-        "sync_client": AnthropicClient(model="claude-4-5-haiku"),
-        "async_client": AsyncAnthropicClient(model="claude-4-5-haiku"),
+        "sync_client": AnthropicClient(model="claude-haiku-4-5"),
+        "async_client": AsyncAnthropicClient(model="claude-haiku-4-5"),
     },
     {
         "name": "OpenAI",
