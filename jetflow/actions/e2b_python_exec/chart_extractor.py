@@ -77,9 +77,9 @@ def dump_raw_axes():
         var_name = fig_var_names.get(fig_num)
 
         # Extract LLM-attached metadata
-        subtitle = getattr(fig, 'jetflow_subtitle', None)
-        data_source = getattr(fig, 'jetflow_data_source', None)
-        citations = getattr(fig, 'jetflow_citations', [])
+        subtitle = getattr(fig, 'subtitle', None)
+        data_source = getattr(fig, 'data_source', None)
+        citations = getattr(fig, 'citations', [])
 
         for ax_idx, ax in enumerate(fig.get_axes()):
             shared_x_ids = [id(other) for other in fig.get_axes() if other != ax and ax.get_shared_x_axes().joined(ax, other)]
