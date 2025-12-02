@@ -57,11 +57,14 @@ def process_axis_group_to_chart(axis_group: List[Dict]) -> 'Chart':
         chart_id=metadata['chart_id'],
         type=chart_type,
         title=metadata.get('title'),
+        subtitle=metadata.get('subtitle'),
         x_label=metadata.get('xlabel'),
         y_label=y_label,
         series=all_series,
         x_scale=metadata.get('xscale', 'linear'),
         y_scale=metadata.get('yscale', 'linear'),
+        data_source=metadata.get('data_source'),
+        citations=metadata.get('citations', []),
     )
 
 
@@ -96,11 +99,21 @@ def _extract_chart_metadata(axis_group: List[Dict]) -> Dict[str, Any]:
     else:
         chart_id = f"fig-{first_ax['fig_num']}-ax-{first_ax['ax_idx']}"
 
+    # Extract LLM-attached metadata
+    subtitle = first_ax.get('subtitle')
+    data_source = first_ax.get('data_source')
+    citations = first_ax.get('citations', [])
+
     return {
         'chart_id': chart_id,
-        'title': title, 'xlabel': xlabel, 'ylabel': ylabel,
+        'title': title,
+        'subtitle': subtitle,
+        'xlabel': xlabel,
+        'ylabel': ylabel,
         'xscale': first_ax.get('xscale', 'linear'),
         'yscale': first_ax.get('yscale', 'linear'),
+        'data_source': data_source,
+        'citations': citations,
     }
 
 

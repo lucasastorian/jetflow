@@ -22,11 +22,14 @@ class Chart(BaseModel):
     chart_id: str = Field(description="Unique chart identifier")
     type: ChartType = Field(description="Chart type")
     title: Optional[str] = Field(None, description="Chart title")
+    subtitle: Optional[str] = Field(None, description="Chart subtitle/description")
     x_label: Optional[str] = Field(None, description="X-axis label")
     y_label: Optional[str] = Field(None, description="Y-axis label")
     series: List[ChartSeries] = Field(description="Data series")
     x_scale: str = Field("linear", description="X-axis scale")
     y_scale: str = Field("linear", description="Y-axis scale")
+    data_source: Optional[str] = Field(None, description="Data source description")
+    citations: List[int] = Field(default_factory=list, description="Source citation IDs")
     meta: Dict[str, Any] = Field(default_factory=dict, description="Optional metadata")
 
     def to_dict(self) -> Dict:

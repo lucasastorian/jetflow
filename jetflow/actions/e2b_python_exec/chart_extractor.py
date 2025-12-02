@@ -76,6 +76,11 @@ def dump_raw_axes():
         saved_filename = getattr(fig, '_jetflow_chart_id', None)
         var_name = fig_var_names.get(fig_num)
 
+        # Extract LLM-attached metadata
+        subtitle = getattr(fig, 'jetflow_subtitle', None)
+        data_source = getattr(fig, 'jetflow_data_source', None)
+        citations = getattr(fig, 'jetflow_citations', [])
+
         for ax_idx, ax in enumerate(fig.get_axes()):
             shared_x_ids = [id(other) for other in fig.get_axes() if other != ax and ax.get_shared_x_axes().joined(ax, other)]
             axis_data = {
@@ -83,6 +88,9 @@ def dump_raw_axes():
                 'fig_label': fig_label,
                 'saved_filename': saved_filename,
                 'var_name': var_name,
+                'subtitle': subtitle,
+                'data_source': data_source,
+                'citations': citations,
                 'title': ax.get_title() or None, 'xlabel': ax.get_xlabel() or None, 'ylabel': ax.get_ylabel() or None,
                 'xscale': ax.get_xscale(), 'yscale': ax.get_yscale(), 'shared_x_ids': shared_x_ids,
                 'lines': [], 'patches': [], 'collections': [],

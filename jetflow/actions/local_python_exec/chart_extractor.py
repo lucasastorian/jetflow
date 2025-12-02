@@ -49,11 +49,19 @@ class LocalChartExtractor:
             saved_filename = getattr(fig, '_jetflow_chart_id', None)
             var_name = fig_var_names.get(fig_num)
 
+            # Extract LLM-attached metadata
+            subtitle = getattr(fig, 'jetflow_subtitle', None)
+            data_source = getattr(fig, 'jetflow_data_source', None)
+            citations = getattr(fig, 'jetflow_citations', [])
+
             for ax_idx, ax in enumerate(fig.get_axes()):
                 axis_data = self._extract_axis_data(fig_num, ax_idx, ax, fig.get_axes())
                 axis_data['fig_label'] = fig_label
                 axis_data['saved_filename'] = saved_filename
                 axis_data['var_name'] = var_name
+                axis_data['subtitle'] = subtitle
+                axis_data['data_source'] = data_source
+                axis_data['citations'] = citations
                 raw_axes.append(axis_data)
 
         return raw_axes
