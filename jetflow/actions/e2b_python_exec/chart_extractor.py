@@ -58,12 +58,31 @@ import matplotlib.pyplot as plt
 
 def dump_raw_axes():
     raw_axes = []
+
+    # Try to find variable names for figures by inspecting globals
+    fig_var_names = {}
+    try:
+        for var_name, var_value in list(globals().items()):
+            if isinstance(var_value, plt.Figure) and not var_name.startswith('_'):
+                fig_var_names[var_value.number] = var_name
+    except:
+        pass
+
     for fig_num in plt.get_fignums():
         fig = plt.figure(fig_num)
+
+        # Try to get custom chart ID from various sources
+        fig_label = fig.get_label() or None
+        saved_filename = getattr(fig, '_jetflow_chart_id', None)
+        var_name = fig_var_names.get(fig_num)
+
         for ax_idx, ax in enumerate(fig.get_axes()):
             shared_x_ids = [id(other) for other in fig.get_axes() if other != ax and ax.get_shared_x_axes().joined(ax, other)]
             axis_data = {
                 'fig_num': fig_num, 'ax_idx': ax_idx, 'ax_id': id(ax),
+                'fig_label': fig_label,
+                'saved_filename': saved_filename,
+                'var_name': var_name,
                 'title': ax.get_title() or None, 'xlabel': ax.get_xlabel() or None, 'ylabel': ax.get_ylabel() or None,
                 'xscale': ax.get_xscale(), 'yscale': ax.get_yscale(), 'shared_x_ids': shared_x_ids,
                 'lines': [], 'patches': [], 'collections': [],

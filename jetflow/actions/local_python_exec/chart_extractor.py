@@ -27,13 +27,34 @@ class LocalChartExtractor:
         raw_axes = []
         target_nums = {int(n) for n in fig_nums}
 
+        # Try to find variable names for figures
+        fig_var_names = {}
+        try:
+            import inspect
+            frame = inspect.currentframe()
+            while frame:
+                for var_name, var_value in frame.f_locals.items():
+                    if isinstance(var_value, plt.Figure) and not var_name.startswith('_'):
+                        fig_var_names[var_value.number] = var_name
+                frame = frame.f_back
+        except:
+            pass
+
         for fig_num in plt.get_fignums():
             if fig_num not in target_nums:
                 continue
 
             fig = plt.figure(fig_num)
+            fig_label = fig.get_label() or None
+            saved_filename = getattr(fig, '_jetflow_chart_id', None)
+            var_name = fig_var_names.get(fig_num)
+
             for ax_idx, ax in enumerate(fig.get_axes()):
-                raw_axes.append(self._extract_axis_data(fig_num, ax_idx, ax, fig.get_axes()))
+                axis_data = self._extract_axis_data(fig_num, ax_idx, ax, fig.get_axes())
+                axis_data['fig_label'] = fig_label
+                axis_data['saved_filename'] = saved_filename
+                axis_data['var_name'] = var_name
+                raw_axes.append(axis_data)
 
         return raw_axes
 

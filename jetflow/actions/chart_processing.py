@@ -85,8 +85,19 @@ def _extract_chart_metadata(axis_group: List[Dict]) -> Dict[str, Any]:
         if ax.get('ylabel') and not ylabel:
             ylabel = ax['ylabel']
 
+    # Determine chart_id with priority: saved_filename > var_name > fig_label > auto-generated
+    chart_id = None
+    if first_ax.get('saved_filename'):
+        chart_id = first_ax['saved_filename']
+    elif first_ax.get('var_name'):
+        chart_id = first_ax['var_name']
+    elif first_ax.get('fig_label'):
+        chart_id = first_ax['fig_label']
+    else:
+        chart_id = f"fig-{first_ax['fig_num']}-ax-{first_ax['ax_idx']}"
+
     return {
-        'chart_id': f"fig-{first_ax['fig_num']}-ax-{first_ax['ax_idx']}",
+        'chart_id': chart_id,
         'title': title, 'xlabel': xlabel, 'ylabel': ylabel,
         'xscale': first_ax.get('xscale', 'linear'),
         'yscale': first_ax.get('yscale', 'linear'),

@@ -119,10 +119,29 @@ class LocalSandbox:
         self._original_mpl_config = os.environ.get('MPLCONFIGDIR')
         os.environ['MPLCONFIGDIR'] = self.temp_dir
 
+        # Inject savefig tracking to capture chart IDs
+        self._original_savefig = plt.Figure.savefig
+
+        def _tracked_savefig(fig_self, fname, *args, **kwargs):
+            # Extract filename without path or extension
+            filename = os.path.basename(str(fname))
+            if '.' in filename:
+                filename = filename.rsplit('.', 1)[0]
+            # Store on figure for later extraction
+            fig_self._jetflow_chart_id = filename
+            return self._original_savefig(fig_self, fname, *args, **kwargs)
+
+        plt.Figure.savefig = _tracked_savefig
+
     def _restore_matplotlib(self) -> None:
         """Restore matplotlib configuration."""
         if not HAS_MATPLOTLIB:
             return
+
+        # Restore original savefig
+        if hasattr(self, '_original_savefig'):
+            plt.Figure.savefig = self._original_savefig
+
         if self._original_mpl_config is not None:
             os.environ['MPLCONFIGDIR'] = self._original_mpl_config
         elif 'MPLCONFIGDIR' in os.environ:

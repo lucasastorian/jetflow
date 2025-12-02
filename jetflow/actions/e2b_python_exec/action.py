@@ -33,6 +33,26 @@ class E2BPythonExec:
         self._charts = E2BChartExtractor(self.sandbox)
         self.sandbox.run_code("import matplotlib\nmatplotlib.use('Agg')")
 
+        # Inject savefig tracking to capture chart IDs
+        tracking_code = """
+import matplotlib.pyplot as plt
+import os
+
+_original_savefig = plt.Figure.savefig
+
+def _tracked_savefig(self, fname, *args, **kwargs):
+    # Extract filename without path or extension
+    filename = os.path.basename(str(fname))
+    if '.' in filename:
+        filename = filename.rsplit('.', 1)[0]
+    # Store on figure for later extraction
+    self._jetflow_chart_id = filename
+    return _original_savefig(self, fname, *args, **kwargs)
+
+plt.Figure.savefig = _tracked_savefig
+"""
+        self.sandbox.run_code(tracking_code)
+
     def __stop__(self) -> None:
         self.sandbox.stop()
         self._charts = None
@@ -55,10 +75,15 @@ class E2BPythonExec:
         parts = []
 
         if charts:
-            s = f"📊 **Charts**: {len(charts)}"
             if self.embeddable_charts:
-                s += "\n" + "\n".join(f"  - {c.type}: **{c.title or 'Untitled'}**" for c in charts)
-            parts.append(s)
+                # Provide explicit embedding instructions
+                chart_lines = [f"📊 **Created {len(charts)} chart(s)**:\n"]
+                for c in charts:
+                    chart_lines.append(f"**{c.title or 'Untitled'}** ({c.type} chart)")
+                    chart_lines.append(f"  → To embed: `<chart id=\"{c.chart_id}\"></chart>`\n")
+                parts.append("\n".join(chart_lines))
+            else:
+                parts.append(f"📊 **Charts**: {len(charts)}")
 
         if exec_result.results:
             for r in exec_result.results:

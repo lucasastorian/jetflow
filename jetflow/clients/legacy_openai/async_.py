@@ -27,7 +27,7 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
 
     def __init__(
         self,
-        model: str = "gpt-4o",
+        model: str = "gpt-5-mini",
         api_key: str = None,
         base_url: str = None,
         temperature: float = 1.0,
