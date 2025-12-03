@@ -13,6 +13,27 @@ from jetflow.models.message import Message, Action
 from jetflow.models.response import ActionResponse, ActionResult, ActionFollowUp
 
 
+def _copy_class_attributes(wrapper_cls: type, source_cls: type):
+    """Preserve metadata and helper attributes from the original class on the wrapper.
+
+    Without this, class-level utilities (e.g., static/class methods referenced as
+    MyAction.helper()) disappear once the decorator swaps in the wrapper class.
+    """
+    # Basic identity metadata
+    wrapper_cls.__name__ = source_cls.__name__
+    wrapper_cls.__qualname__ = source_cls.__qualname__
+    wrapper_cls.__module__ = source_cls.__module__
+    wrapper_cls.__doc__ = source_cls.__doc__
+
+    # Copy over non-dunder attributes that aren't already defined on the wrapper
+    for name, attr in source_cls.__dict__.items():
+        if name.startswith('__'):
+            continue
+        if hasattr(wrapper_cls, name):
+            continue
+        setattr(wrapper_cls, name, attr)
+
+
 def _build_response_from_result(result: Union[ActionResult, Any], action: Action) -> ActionResponse:
     """Build ActionResponse from action result (ActionResult or any other type)"""
     if isinstance(result, ActionResult):
@@ -192,6 +213,7 @@ def _wrap_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> Type['
                 )
 
     # Set class attributes after class definition
+    _copy_class_attributes(ClassAction, cls)
     ClassAction.name = schema.__name__
     ClassAction.schema = schema
     ClassAction._is_exit = exit
@@ -331,6 +353,7 @@ def _wrap_async_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> 
                 )
 
     # Set class attributes after class definition
+    _copy_class_attributes(AsyncClassAction, cls)
     AsyncClassAction.name = schema.__name__
     AsyncClassAction.schema = schema
     AsyncClassAction._is_exit = exit
