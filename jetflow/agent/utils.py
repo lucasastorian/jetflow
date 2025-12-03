@@ -118,30 +118,45 @@ def _build_response(agent, timer: Timer, success: bool) -> AgentResponse:
 
     if not agent.messages:
         return AgentResponse(
-            content="",
             messages=[],
             usage=calculate_usage([], agent.client.provider, agent.client.model),
             duration=0.0,
             iterations=agent.num_iter,
-            success=success
+            success=success,
+            content=""
         )
 
     last_message = agent.messages[-1]
     citations = None
+    output = None
+
     if last_message.role == 'assistant':
         used_citations = agent.client.get_used_citations(last_message.content)
         if used_citations:
             last_message.citations = used_citations
             citations = used_citations
 
+        # Extract parsed output from exit action (or last action if require_action=True)
+        if last_message.actions:
+            last_action = last_message.actions[-1]
+            # Find the matching action definition to get the schema
+            action_lookup = {a.name: a for a in agent.actions}
+            if last_action.name in action_lookup:
+                action_def = action_lookup[last_action.name]
+                try:
+                    output = action_def.schema(**last_action.body)
+                except Exception:
+                    pass  # If parsing fails, output stays None
+
     return AgentResponse(
-        content=last_message.content,
         messages=agent.messages.copy(),
         usage=calculate_usage(agent.messages, agent.client.provider, agent.client.model),
         duration=(end_time - timer.start_time).total_seconds(),
         iterations=agent.num_iter,
         success=success,
-        citations=citations
+        content=last_message.content or None,
+        citations=citations,
+        parsed=output
     )
 
 

@@ -48,10 +48,9 @@ class Agent:
 
         self.logger = logger if logger is not None else VerboseLogger(verbose)
 
-        # Context management
         self.context_config = context_config or ContextConfig()
         self._context_manager = ContextManager(self.context_config)
-        self._cache_marker_index: Optional[int] = None  # Track where to place cache marker
+        self._cache_marker_index: Optional[int] = None
 
         self.messages: List[Message] = []
         self.num_iter = 0

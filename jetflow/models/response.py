@@ -1,7 +1,9 @@
 """Response types for agent and action execution"""
 
 from dataclasses import dataclass
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING, Any
+
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from jetflow.models.message import Message
@@ -52,17 +54,18 @@ class ActionResult:
 @dataclass
 class AgentResponse:
     """Response from agent execution"""
-    content: str
     messages: List['Message']
     usage: 'Usage'
     duration: float
     iterations: int
     success: bool
+    content: Optional[str] = None  # None when require_action=True with no text
     citations: dict = None  # Dict[int, dict] - citation ID → metadata
+    parsed: BaseModel = None  # Parsed exit action params (when exit=True or require_action=True)
 
     def __str__(self) -> str:
         """Allow print(response) to show final answer"""
-        return self.content
+        return self.content or ""
 
 
 @dataclass
