@@ -268,6 +268,49 @@ df = pd.DataFrame({
 
 
 @skip_if_no_e2b
+def test_import_export_dataframe():
+    """Test import_dataframe and extract_dataframe roundtrip"""
+    print("\n=== Test: Import/Export DataFrame ===")
+
+    executor = E2BPythonExec()
+    executor.__start__()
+
+    # Test data - list of dicts (like df.to_dict('records'))
+    original_data = [
+        {'symbol': 'AAPL', 'price': 150.25, 'volume': 1000000},
+        {'symbol': 'GOOGL', 'price': 2800.50, 'volume': 500000},
+        {'symbol': 'MSFT', 'price': 300.75, 'volume': 750000},
+    ]
+
+    # Import the data
+    result = executor.import_dataframe('stock_data', original_data)
+    print(f"   Import result: {result}")
+
+    assert 'stock_data loaded' in result, f"Should confirm import, got: {result}"
+    assert '(3,' in result, f"Should show 3 rows, got: {result}"
+
+    # Verify data is accessible in sandbox
+    verify_result = executor.run_code("print(stock_data.head())")
+    assert 'AAPL' in verify_result, f"Should contain AAPL, got: {verify_result}"
+
+    # Extract it back
+    extracted_data = executor.extract_dataframe('stock_data')
+
+    executor.__stop__()
+
+    # Verify roundtrip
+    assert extracted_data is not None, "Should extract DataFrame"
+    assert len(extracted_data) == 3, f"Expected 3 rows, got {len(extracted_data)}"
+    assert extracted_data[0]['symbol'] == 'AAPL', f"Expected AAPL, got {extracted_data[0]['symbol']}"
+    assert extracted_data[1]['price'] == 2800.50, f"Expected 2800.50, got {extracted_data[1]['price']}"
+
+    print(f"✅ Import/Export roundtrip successful")
+    print(f"   Original: {original_data[0]}")
+    print(f"   Extracted: {extracted_data[0]}")
+    return True
+
+
+@skip_if_no_e2b
 def test_extract_variable():
     """Extract simple variables using extract_variable()"""
     print("\n=== Test: Extract Variable ===")
@@ -841,6 +884,7 @@ if __name__ == "__main__":
         ("DataFrame Display", test_dataframe_creation_and_formatting),
         ("CAGR Calculation", test_dataframe_cagr_calculation),
         ("Extract DataFrame", test_extract_dataframe),
+        ("Import/Export DataFrame", test_import_export_dataframe),
         ("Extract Variable", test_extract_variable),
         ("Manual Code Execution", test_manual_code_execution),
         ("Variable Persistence", test_variable_persistence),

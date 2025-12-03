@@ -136,8 +136,23 @@ plt.Figure.savefig = _tracked_savefig
         return "\n".join(parts) if parts else "(no output)"
 
     def extract_dataframe(self, var: str):
+        """Extract a DataFrame from the sandbox as a list of records."""
         code = f"import json,pandas as pd;print(json.dumps({var}.to_dict('records') if isinstance({var},pd.DataFrame) else None))"
         return self._json(code)
+
+    def import_dataframe(self, var: str, df: Union['pd.DataFrame', List[dict]]) -> str:
+        """Import a DataFrame into the sandbox.
+
+        Args:
+            var: Variable name to assign the DataFrame to in the sandbox
+            df: Either a pandas DataFrame or a list of dicts (result of df.to_dict('records'))
+
+        Returns:
+            Output from the sandbox confirming the import
+        """
+        records = df.to_dict('records') if hasattr(df, 'to_dict') else df
+        code = f"import pandas as pd; {var} = pd.DataFrame({json.dumps(records)}); print(f'{var} loaded: {{{var}.shape}}')"
+        return self.run_code(code)
 
     def extract_variable(self, var: str):
         return self._json(f"import json;print(json.dumps({var}))")
