@@ -1,6 +1,7 @@
 """Async citation middleware for LLM clients"""
 
-from typing import List, AsyncIterator, AsyncGenerator, Optional, TYPE_CHECKING
+from typing import List, AsyncIterator, AsyncGenerator, Optional, Type, TYPE_CHECKING
+from pydantic import BaseModel
 
 from jetflow.clients.base import AsyncBaseClient
 from jetflow.models.events import StreamEvent, ContentDelta, MessageEnd
@@ -108,3 +109,12 @@ class AsyncCitationMiddleware(AsyncBaseClient):
             stream=stream,
             context_cache_index=context_cache_index
         )
+
+    async def extract(
+        self,
+        schema: Type[BaseModel],
+        query: str,
+        system_prompt: str = "Extract the requested information.",
+    ) -> BaseModel:
+        """Pass through to wrapped client"""
+        return await self.client.extract(schema, query, system_prompt)

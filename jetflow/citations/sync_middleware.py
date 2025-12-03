@@ -1,6 +1,7 @@
 """Sync citation middleware for LLM clients"""
 
-from typing import List, Iterator, Optional, TYPE_CHECKING
+from typing import List, Iterator, Optional, Type, TYPE_CHECKING
+from pydantic import BaseModel
 
 from jetflow.clients.base import BaseClient
 from jetflow.models.events import StreamEvent, ContentDelta, MessageEnd
@@ -108,3 +109,12 @@ class SyncCitationMiddleware(BaseClient):
             stream=stream,
             context_cache_index=context_cache_index
         )
+
+    def extract(
+        self,
+        schema: Type[BaseModel],
+        query: str,
+        system_prompt: str = "Extract the requested information.",
+    ) -> BaseModel:
+        """Pass through to wrapped client"""
+        return self.client.extract(schema, query, system_prompt)
