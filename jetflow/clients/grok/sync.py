@@ -1,7 +1,8 @@
 """Sync Grok (xAI) client - wrapper around OpenAI Responses API client"""
 
 import os
-from typing import Literal, List, Iterator, Optional
+from typing import Literal, List, Iterator, Optional, Type
+from pydantic import BaseModel
 from jetflow.clients.openai.sync import OpenAIClient
 from jetflow.clients.grok.utils import build_grok_params
 from jetflow.clients.base import ToolChoice
@@ -105,3 +106,20 @@ class GrokClient(OpenAIClient):
         )
 
         yield from self._stream_events_with_retry(params, actions, logger)
+
+    def extract(
+        self,
+        schema: Type[BaseModel],
+        query: str,
+        system_prompt: str = "Extract the requested information.",
+    ) -> BaseModel:
+        """Extract structured data using legacy ChatCompletions (Grok doesn't support Responses API for structured outputs)."""
+        completion = self.client.beta.chat.completions.parse(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query},
+            ],
+            response_format=schema,
+        )
+        return completion.choices[0].message.parsed
