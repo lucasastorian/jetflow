@@ -20,6 +20,7 @@ from jetflow.models import (
 )
 from jetflow.models.chart import Chart, ChartSeries
 from jetflow.chain import Chain, AsyncChain
+from jetflow.extract import Extract, AsyncExtract
 from jetflow.citations import CitationExtractor, AsyncCitationMiddleware, SyncCitationMiddleware
 from jetflow.utils.usage import Usage
 
@@ -52,6 +53,8 @@ __all__ = [
     "ContextConfig",
     "Chain",
     "AsyncChain",
+    "Extract",
+    "AsyncExtract",
     "action",
     "Message",
     "Action",

@@ -6,6 +6,47 @@ from jetflow.models.message import Message
 
 
 BETAS = ["interleaved-thinking-2025-05-14", "effort-2025-11-24"]
+
+
+def make_schema_strict(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Add additionalProperties: false to all object types in a JSON schema.
+
+    Anthropic structured outputs require additionalProperties to be explicitly
+    set to false for all object types in the schema.
+    """
+    if not isinstance(schema, dict):
+        return schema
+
+    result = schema.copy()
+
+    # If this is an object type, add additionalProperties: false
+    if result.get("type") == "object":
+        result["additionalProperties"] = False
+
+    # Recursively process nested schemas
+    if "properties" in result:
+        result["properties"] = {
+            k: make_schema_strict(v) for k, v in result["properties"].items()
+        }
+
+    if "items" in result:
+        result["items"] = make_schema_strict(result["items"])
+
+    if "$defs" in result:
+        result["$defs"] = {
+            k: make_schema_strict(v) for k, v in result["$defs"].items()
+        }
+
+    if "anyOf" in result:
+        result["anyOf"] = [make_schema_strict(s) for s in result["anyOf"]]
+
+    if "oneOf" in result:
+        result["oneOf"] = [make_schema_strict(s) for s in result["oneOf"]]
+
+    if "allOf" in result:
+        result["allOf"] = [make_schema_strict(s) for s in result["allOf"]]
+
+    return result
 THINKING_MODELS = [
     'claude-opus-4-5',
     'claude-opus-4-1',

@@ -1,7 +1,9 @@
 """Base client interface for LLM providers"""
 
 from abc import ABC, abstractmethod
-from typing import List, Iterator, AsyncIterator, TYPE_CHECKING, Optional
+from typing import List, Iterator, AsyncIterator, TYPE_CHECKING, Optional, Type
+
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from jetflow.models.message import Message
@@ -71,6 +73,27 @@ class BaseClient(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def extract(
+        self,
+        schema: Type[BaseModel],
+        query: str,
+        system_prompt: str = "Extract the requested information.",
+    ) -> BaseModel:
+        """Extract structured data matching the schema from the query.
+
+        Uses provider-native structured output when available.
+
+        Args:
+            schema: Pydantic model defining the output structure
+            query: Input text to extract from
+            system_prompt: Instructions for extraction
+
+        Returns:
+            Parsed Pydantic model instance
+        """
+        raise NotImplementedError
+
 
 class AsyncBaseClient(ABC):
     """Base class for async LLM clients"""
@@ -130,5 +153,26 @@ class AsyncBaseClient(ABC):
             stream: Whether the underlying client request should use streaming
             enable_caching: Enable prompt caching (Anthropic only)
             context_cache_index: Message index after last truncation for cache placement (Anthropic only)
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def extract(
+        self,
+        schema: Type[BaseModel],
+        query: str,
+        system_prompt: str = "Extract the requested information.",
+    ) -> BaseModel:
+        """Extract structured data matching the schema from the query.
+
+        Uses provider-native structured output when available.
+
+        Args:
+            schema: Pydantic model defining the output structure
+            query: Input text to extract from
+            system_prompt: Instructions for extraction
+
+        Returns:
+            Parsed Pydantic model instance
         """
         raise NotImplementedError

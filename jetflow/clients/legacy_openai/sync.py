@@ -11,7 +11,8 @@ Compatible with OpenAI-compatible providers:
 import os
 import openai
 from jiter import from_json
-from typing import Literal, List, Iterator, Optional
+from typing import Literal, List, Iterator, Optional, Type
+from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from jetflow.action import BaseAction
@@ -253,3 +254,20 @@ class LegacyOpenAIClient(BaseClient):
             apply_legacy_usage(response.usage, completion)
 
         return [completion]
+
+    def extract(
+        self,
+        schema: Type[BaseModel],
+        query: str,
+        system_prompt: str = "Extract the requested information.",
+    ) -> BaseModel:
+        """Extract structured data using ChatCompletions structured output."""
+        completion = self.client.beta.chat.completions.parse(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query},
+            ],
+            response_format=schema,
+        )
+        return completion.choices[0].message.parsed

@@ -5,14 +5,15 @@ import httpx
 import anthropic
 from jiter import from_json
 from anthropic import AsyncStream
-from typing import Literal, List, AsyncIterator, Optional
+from typing import Literal, List, AsyncIterator, Optional, Type
+from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from jetflow.action import BaseAction
 from jetflow.models.message import Message, Action, Thought
 from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
 from jetflow.clients.base import AsyncBaseClient
-from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, process_completion, REASONING_BUDGET_MAP
+from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, process_completion, REASONING_BUDGET_MAP, make_schema_strict
 
 
 class AsyncAnthropicClient(AsyncBaseClient):
@@ -334,3 +335,25 @@ class AsyncAnthropicClient(AsyncBaseClient):
 
         completion.status = 'completed'
         return [completion]
+
+    async def extract(
+        self,
+        schema: Type[BaseModel],
+        query: str,
+        system_prompt: str = "Extract the requested information.",
+    ) -> BaseModel:
+        """Extract structured data using Anthropic's native structured output."""
+        response = await self.client.beta.messages.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            betas=["structured-outputs-2025-11-13"],
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": query}
+            ],
+            output_format={
+                "type": "json_schema",
+                "schema": make_schema_strict(schema.model_json_schema()),
+            }
+        )
+        return schema.model_validate_json(response.content[0].text)

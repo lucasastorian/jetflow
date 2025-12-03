@@ -3,7 +3,8 @@
 import os
 import uuid
 from google import genai
-from typing import List, AsyncIterator, Optional
+from typing import List, AsyncIterator, Optional, Type
+from pydantic import BaseModel
 
 from jetflow.action import BaseAction
 from jetflow.models.message import Message, Action, Thought
@@ -238,3 +239,22 @@ class AsyncGeminiClient(AsyncBaseClient):
 
         completion.status = "completed"
         yield MessageEnd(message=completion)
+
+    async def extract(
+        self,
+        schema: Type[BaseModel],
+        query: str,
+        system_prompt: str = "Extract the requested information.",
+    ) -> BaseModel:
+        """Extract structured data using Gemini's native structured output."""
+        response = await self.client.aio.models.generate_content(
+            model=self.model,
+            contents=[
+                {"role": "user", "parts": [{"text": f"{system_prompt}\n\n{query}"}]}
+            ],
+            config={
+                "response_mime_type": "application/json",
+                "response_json_schema": schema.model_json_schema(),
+            },
+        )
+        return schema.model_validate_json(response.text)

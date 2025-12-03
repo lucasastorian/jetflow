@@ -5,7 +5,8 @@ import httpx
 import openai
 from jiter import from_json
 from openai import AsyncStream
-from typing import Literal, List, AsyncIterator, Optional
+from typing import Literal, List, AsyncIterator, Optional, Type
+from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from jetflow.action import BaseAction
@@ -450,3 +451,20 @@ class AsyncOpenAIClient(AsyncBaseClient):
 
         messages.append(completion)
         return messages
+
+    async def extract(
+        self,
+        schema: Type[BaseModel],
+        query: str,
+        system_prompt: str = "Extract the requested information.",
+    ) -> BaseModel:
+        """Extract structured data using OpenAI's native Structured Outputs."""
+        response = await self.client.responses.parse(
+            model=self.model,
+            input=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query},
+            ],
+            text_format=schema,
+        )
+        return response.output_parsed
