@@ -150,11 +150,19 @@ def _wrap_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> Type['
 
     class ClassAction(BaseAction):
         def __init__(self, *args, **kwargs):
-            self._instance = cls(*args, **kwargs)
+            # Use object.__setattr__ to set _instance without triggering our custom __setattr__
+            object.__setattr__(self, '_instance', cls(*args, **kwargs))
 
         def __getattr__(self, name):
             """Forward attribute/method access to wrapped instance"""
             return getattr(self._instance, name)
+
+        def __setattr__(self, name, value):
+            """Forward attribute writes to wrapped instance (except _instance itself)"""
+            if name == '_instance':
+                object.__setattr__(self, name, value)
+            else:
+                setattr(self._instance, name, value)
 
         def __start__(self):
             """Forward __start__ lifecycle hook to wrapped instance"""
@@ -294,11 +302,19 @@ def _wrap_async_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> 
 
     class AsyncClassAction(AsyncBaseAction):
         def __init__(self, *args, **kwargs):
-            self._instance = cls(*args, **kwargs)
+            # Use object.__setattr__ to set _instance without triggering our custom __setattr__
+            object.__setattr__(self, '_instance', cls(*args, **kwargs))
 
         def __getattr__(self, name):
             """Forward attribute/method access to wrapped instance"""
             return getattr(self._instance, name)
+
+        def __setattr__(self, name, value):
+            """Forward attribute writes to wrapped instance (except _instance itself)"""
+            if name == '_instance':
+                object.__setattr__(self, name, value)
+            else:
+                setattr(self._instance, name, value)
 
         async def __start__(self):
             """Forward __start__ lifecycle hook to wrapped instance"""

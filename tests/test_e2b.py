@@ -335,6 +335,7 @@ def test_import_dataframe_with_agent():
         executor = E2BPythonExec(persistent=False, embeddable_charts=False)
         result = executor.import_dataframe('cash_flow', cash_flow_data)
         print(f"   Import result: {result}")
+        print(f"   DEBUG: _started={executor._started}, _manually_started={executor._manually_started}")
 
         assert 'cash_flow loaded' in result, f"Should confirm import, got: {result}"
 
@@ -357,6 +358,7 @@ def test_import_dataframe_with_agent():
 
         print(f"\n   Agent iterations: {response.iterations}")
         print(f"   Agent response: {(response.content or '')[:300]}...")
+        print(f"   DEBUG after agent: _started={executor._started}, _manually_started={executor._manually_started}")
         # Agent may or may not complete with text - the key test is sandbox survival
 
         # CRITICAL: Sandbox should still be alive after agent completes
