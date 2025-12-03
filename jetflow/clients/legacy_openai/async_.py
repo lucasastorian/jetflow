@@ -19,7 +19,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from jetflow.action import BaseAction
 from jetflow.models.message import Message, Action
 from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ActionStart, ActionDelta, ActionEnd, StreamEvent
-from jetflow.clients.base import AsyncBaseClient
+from jetflow.clients.base import AsyncBaseClient, ToolChoice
 from jetflow.clients.legacy_openai.utils import build_legacy_params, apply_legacy_usage
 
 
@@ -52,7 +52,7 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: 'VerboseLogger' = None,
         stream: bool = False,
         enable_caching: bool = False,
@@ -61,7 +61,7 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         """Non-streaming completion - single HTTP request/response"""
         params = build_legacy_params(
             self.model, self.temperature, system_prompt, messages, actions,
-            allowed_actions, self.reasoning_effort, require_action=require_action, stream=stream
+            allowed_actions, self.reasoning_effort, tool_choice=tool_choice, stream=stream
         )
 
         return await self._complete_with_retry(params, logger)
@@ -73,7 +73,7 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: 'VerboseLogger' = None,
         stream: bool = True,
         enable_caching: bool = False,
@@ -82,7 +82,7 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         """Streaming completion - yields events in real-time"""
         params = build_legacy_params(
             self.model, self.temperature, system_prompt, messages, actions,
-            allowed_actions, self.reasoning_effort, require_action=require_action, stream=stream
+            allowed_actions, self.reasoning_effort, tool_choice=tool_choice, stream=stream
         )
 
         async for event in self._stream_events_with_retry(params, logger):

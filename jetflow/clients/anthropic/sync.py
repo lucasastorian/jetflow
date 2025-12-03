@@ -12,7 +12,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from jetflow.action import BaseAction
 from jetflow.models.message import Message, Action, Thought
 from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
-from jetflow.clients.base import BaseClient
+from jetflow.clients.base import BaseClient, ToolChoice
 from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, process_completion, REASONING_BUDGET_MAP, make_schema_strict
 
 
@@ -50,7 +50,7 @@ class AnthropicClient(BaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: 'VerboseLogger' = None,
         stream: bool = False,
         enable_caching: bool = False,
@@ -68,7 +68,7 @@ class AnthropicClient(BaseClient):
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget,
-            require_action=require_action, stream=stream, effort=self.effort,
+            tool_choice=tool_choice, stream=stream, effort=self.effort,
             enable_caching=should_cache, cache_ttl=self.cache_ttl,
             context_cache_index=context_cache_index
         )
@@ -81,7 +81,7 @@ class AnthropicClient(BaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: 'VerboseLogger' = None,
         stream: bool = True,
         enable_caching: bool = False,
@@ -99,11 +99,11 @@ class AnthropicClient(BaseClient):
         params = build_message_params(
             self.model, self.temperature, self.max_tokens, system_prompt,
             messages, actions, allowed_actions, self.reasoning_budget,
-            require_action=require_action, stream=stream, effort=self.effort,
+            tool_choice=tool_choice, stream=stream, effort=self.effort,
             enable_caching=should_cache, cache_ttl=self.cache_ttl,
             context_cache_index=context_cache_index
         )
-        yield from self._stream_events_with_retry(params, logger, require_action=require_action)
+        yield from self._stream_events_with_retry(params, logger, tool_choice=tool_choice)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -117,12 +117,12 @@ class AnthropicClient(BaseClient):
         )),
         reraise=True
     )
-    def _stream_events_with_retry(self, params: dict, logger, require_action: bool = False) -> Iterator[StreamEvent]:
+    def _stream_events_with_retry(self, params: dict, logger, tool_choice: ToolChoice = "auto") -> Iterator[StreamEvent]:
         """Create and consume a streaming response with retries, yielding events"""
         response = self.client.beta.messages.create(**params)
-        yield from self._stream_completion_events(response, logger, require_action=require_action)
+        yield from self._stream_completion_events(response, logger, tool_choice=tool_choice)
 
-    def _stream_completion_events(self, response, logger, require_action: bool = False) -> Iterator[StreamEvent]:
+    def _stream_completion_events(self, response, logger, tool_choice: ToolChoice = "auto") -> Iterator[StreamEvent]:
         """Stream a chat completion and yield events"""
         completion = Message(
             role="assistant",
@@ -193,8 +193,8 @@ class AnthropicClient(BaseClient):
                     )
 
                 elif event.delta.type == 'text_delta':
-                    # Skip content deltas when require_action=True (Anthropic sometimes generates short text before tools)
-                    if not require_action:
+                    # Skip content deltas when tool_choice="required" (Anthropic sometimes generates short text before tools)
+                    if tool_choice != "required":
                         completion.content += event.delta.text
                         if logger:
                             logger.log_content_delta(event.delta.text)

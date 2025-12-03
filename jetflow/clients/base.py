@@ -1,7 +1,7 @@
 """Base client interface for LLM providers"""
 
 from abc import ABC, abstractmethod
-from typing import List, Iterator, AsyncIterator, TYPE_CHECKING, Optional, Type
+from typing import List, Iterator, AsyncIterator, TYPE_CHECKING, Optional, Type, Literal
 
 from pydantic import BaseModel
 
@@ -10,6 +10,9 @@ if TYPE_CHECKING:
     from jetflow.action import BaseAction
     from jetflow.models.events import StreamEvent
     from jetflow.utils.verbose_logger import VerboseLogger
+
+# Internal tool choice type - used by clients
+ToolChoice = Literal["auto", "required", "none"]
 
 
 class BaseClient(ABC):
@@ -26,7 +29,7 @@ class BaseClient(ABC):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: Optional['VerboseLogger'] = None,
         stream: bool = False,
         enable_caching: bool = False,
@@ -39,7 +42,7 @@ class BaseClient(ABC):
 
         Args:
             allowed_actions: Restrict which actions can be called (None = all, [] = none)
-            require_action: Force the model to call an action (tool_choice="required")
+            tool_choice: "auto" (LLM decides), "required" (must call tool), "none" (no tools)
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
             enable_caching: Enable prompt caching (Anthropic only)
@@ -55,7 +58,7 @@ class BaseClient(ABC):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: Optional['VerboseLogger'] = None,
         stream: bool = True,
         enable_caching: bool = False,
@@ -65,7 +68,7 @@ class BaseClient(ABC):
 
         Args:
             allowed_actions: Restrict which actions can be called (None = all, [] = none)
-            require_action: Force the model to call an action (tool_choice="required")
+            tool_choice: "auto" (LLM decides), "required" (must call tool), "none" (no tools)
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
             enable_caching: Enable prompt caching (Anthropic only)
@@ -109,7 +112,7 @@ class AsyncBaseClient(ABC):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: Optional['VerboseLogger'] = None,
         stream: bool = False,
         enable_caching: bool = False,
@@ -122,7 +125,7 @@ class AsyncBaseClient(ABC):
 
         Args:
             allowed_actions: Restrict which actions can be called (None = all, [] = none)
-            require_action: Force the model to call an action (tool_choice="required")
+            tool_choice: "auto" (LLM decides), "required" (must call tool), "none" (no tools)
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
             enable_caching: Enable prompt caching (Anthropic only)
@@ -138,7 +141,7 @@ class AsyncBaseClient(ABC):
         actions: List['BaseAction'],
         allowed_actions: List['BaseAction'] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: Optional['VerboseLogger'] = None,
         stream: bool = True,
         enable_caching: bool = False,
@@ -148,7 +151,7 @@ class AsyncBaseClient(ABC):
 
         Args:
             allowed_actions: Restrict which actions can be called (None = all, [] = none)
-            require_action: Force the model to call an action (tool_choice="required")
+            tool_choice: "auto" (LLM decides), "required" (must call tool), "none" (no tools)
             logger: VerboseLogger instance for consistent logging (optional)
             stream: Whether the underlying client request should use streaming
             enable_caching: Enable prompt caching (Anthropic only)

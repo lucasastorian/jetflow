@@ -3,6 +3,7 @@
 from typing import List, Literal
 from jetflow.action import BaseAction
 from jetflow.models.message import Message
+from jetflow.clients.base import ToolChoice
 from jetflow.clients.openai.utils import build_response_params as openai_build_params
 
 
@@ -13,7 +14,7 @@ def build_grok_params(
     actions: List[BaseAction],
     allowed_actions: List[BaseAction] = None,
     enable_web_search: bool = False,
-    require_action: bool = None,
+    tool_choice: ToolChoice = "auto",
     temperature: float = 1.0,
     reasoning_effort: Literal['low', 'high'] = 'low',
     stream: bool = True,
@@ -31,7 +32,7 @@ def build_grok_params(
         actions=actions,
         allowed_actions=allowed_actions,
         enable_web_search=enable_web_search,
-        require_action=require_action,
+        tool_choice=tool_choice,
         temperature=temperature,
         use_flex=False,
         reasoning_effort=reasoning_effort,

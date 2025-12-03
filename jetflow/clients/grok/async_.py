@@ -4,6 +4,7 @@ import os
 from typing import Literal, List, AsyncIterator, Optional
 from jetflow.clients.openai.async_ import AsyncOpenAIClient
 from jetflow.clients.grok.utils import build_grok_params
+from jetflow.clients.base import ToolChoice
 from jetflow.action import BaseAction
 from jetflow.models.message import Message
 from jetflow.models.events import StreamEvent
@@ -54,7 +55,7 @@ class AsyncGrokClient(AsyncOpenAIClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: 'VerboseLogger' = None,
         stream: bool = False,
         enable_caching: bool = False,
@@ -68,7 +69,7 @@ class AsyncGrokClient(AsyncOpenAIClient):
             actions,
             allowed_actions,
             enable_web_search,
-            require_action,
+            tool_choice,
             self.temperature,
             self.reasoning_effort,
             stream=stream,
@@ -83,7 +84,7 @@ class AsyncGrokClient(AsyncOpenAIClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: 'VerboseLogger' = None,
         stream: bool = True,
         enable_caching: bool = False,
@@ -97,7 +98,7 @@ class AsyncGrokClient(AsyncOpenAIClient):
             actions,
             allowed_actions,
             enable_web_search,
-            require_action,
+            tool_choice,
             self.temperature,
             self.reasoning_effort,
             stream=stream,

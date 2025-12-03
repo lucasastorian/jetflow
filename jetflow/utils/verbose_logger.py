@@ -122,9 +122,9 @@ class VerboseLogger(BaseLogger):
 
         print(f"\n{self._c('▶', 'cyan')} {self._c(action_name, 'cyan')}", flush=True)
 
-        # Show first 3 params
+        # Show first 5 params
         if params:
-            items = list(params.items())[:3]
+            items = list(params.items())[:5]
             for k, v in items:
                 v_str = str(v)
 
@@ -140,8 +140,8 @@ class VerboseLogger(BaseLogger):
                         v_str = v_str[:200] + "..."
                     print(f"  {self._c('→', 'dim')} {k}={v_str}", flush=True)
 
-            if len(params) > 3:
-                print(f"  {self._c('→', 'dim')} ...{len(params) - 3} more param(s)", flush=True)
+            if len(params) > 5:
+                print(f"  {self._c('→', 'dim')} ...{len(params) - 5} more param(s)", flush=True)
 
     def log_action_end(self, summary: str = None, content: str = "", error: bool = False):
         """Log action completion with summary and accurate token count"""

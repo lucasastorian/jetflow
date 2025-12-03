@@ -3,6 +3,7 @@
 from typing import List, Dict, Any, Literal, Optional
 from jetflow.action import BaseAction
 from jetflow.models.message import Message
+from jetflow.clients.base import ToolChoice
 
 
 def build_legacy_params(
@@ -13,14 +14,14 @@ def build_legacy_params(
     actions: List[BaseAction],
     allowed_actions: Optional[List[BaseAction]],
     reasoning_effort: Optional[Literal['minimal', 'low', 'medium', 'high']],
-    require_action: bool = None,
+    tool_choice: ToolChoice = "auto",
     stream: bool = True
 ) -> Dict[str, Any]:
     """Build parameters for legacy OpenAI ChatCompletions API
 
     Args:
         allowed_actions: Restrict which actions can be called (None = all, [] = none)
-        require_action: True=force call, False=disable calls, None=auto
+        tool_choice: "auto" (LLM decides), "required" (must call tool), "none" (no tools)
     """
     formatted_messages = [{"role": "system", "content": system_prompt}] + [
         message.legacy_openai_format() for message in messages
@@ -42,7 +43,7 @@ def build_legacy_params(
     if reasoning_effort:
         params["reasoning_effort"] = reasoning_effort
 
-    # Handle tool_choice based on allowed_actions and require_action
+    # Handle tool_choice based on allowed_actions (takes precedence) then tool_choice
     if allowed_actions is not None:
         if len(allowed_actions) == 0:
             # Empty list = disable function calling
@@ -63,13 +64,11 @@ def build_legacy_params(
                     for action in allowed_actions
                 ]
             }
-    elif require_action is True:
-        # No restrictions but must call a function
+    elif tool_choice == "required":
         params['tool_choice'] = "required"
-    elif require_action is False:
-        # Disable function calling
+    elif tool_choice == "none":
         params['tool_choice'] = "none"
-    # If require_action is None, defaults to auto
+    # tool_choice == "auto" is the default, no need to set
 
     return params
 

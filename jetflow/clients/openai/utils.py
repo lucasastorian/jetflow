@@ -3,6 +3,7 @@
 from typing import List, Literal
 from jetflow.action import BaseAction
 from jetflow.models.message import Message
+from jetflow.clients.base import ToolChoice
 
 
 def supports_thinking(model: str) -> bool:
@@ -18,7 +19,7 @@ def build_response_params(
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        require_action: bool = None,
+        tool_choice: ToolChoice = "auto",
         temperature: float = 1.0,
         use_flex: bool = False,
         reasoning_effort: Literal['minimal', 'low', 'medium', 'high'] = 'medium',
@@ -28,7 +29,7 @@ def build_response_params(
 
     Args:
         allowed_actions: Restrict which actions can be called (None = all, [] = none)
-        require_action: True=force call, False=disable calls, None=auto
+        tool_choice: "auto" (LLM decides), "required" (must call tool), "none" (no tools)
     """
     items = [item for message in messages for item in message.openai_format()]
 
@@ -57,7 +58,7 @@ def build_response_params(
     if tools:
         params['tools'] = tools
 
-        # Handle tool_choice based on allowed_actions and require_action
+        # Handle tool_choice based on allowed_actions (takes precedence) then tool_choice
         if allowed_actions is not None:
             if len(allowed_actions) == 0:
                 # Empty list = disable function calling
@@ -75,13 +76,11 @@ def build_response_params(
                         for action in allowed_actions
                     ]
                 }
-        elif require_action is True:
-            # No restrictions but must call a function
+        elif tool_choice == "required":
             params['tool_choice'] = "required"
-        elif require_action is False:
-            # Disable function calling
+        elif tool_choice == "none":
             params['tool_choice'] = "none"
-        # If require_action is None, defaults to auto
+        # tool_choice == "auto" is the default, no need to set
 
     return params
 

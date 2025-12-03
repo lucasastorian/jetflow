@@ -13,7 +13,7 @@ from jetflow.models.events import (
     ThoughtStart, ThoughtDelta, ThoughtEnd,
     ActionStart, ActionEnd
 )
-from jetflow.clients.base import BaseClient
+from jetflow.clients.base import BaseClient, ToolChoice
 from jetflow.clients.gemini.utils import build_gemini_config, messages_to_contents
 
 
@@ -40,14 +40,14 @@ class GeminiClient(BaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: 'VerboseLogger' = None,
         stream: bool = False,
         enable_caching: bool = False,
         context_cache_index: Optional[int] = None,
     ) -> List[Message]:
         """Non-streaming completion"""
-        config = build_gemini_config(system_prompt, actions, self.thinking_budget, allowed_actions, require_action)
+        config = build_gemini_config(system_prompt, actions, self.thinking_budget, allowed_actions, tool_choice)
         contents = messages_to_contents(messages)
 
         response = self.client.models.generate_content(
@@ -65,14 +65,14 @@ class GeminiClient(BaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: 'VerboseLogger' = None,
         stream: bool = True,
         enable_caching: bool = False,
         context_cache_index: Optional[int] = None,
     ) -> Iterator[StreamEvent]:
         """Streaming completion - yields events"""
-        config = build_gemini_config(system_prompt, actions, self.thinking_budget, allowed_actions, require_action)
+        config = build_gemini_config(system_prompt, actions, self.thinking_budget, allowed_actions, tool_choice)
         contents = messages_to_contents(messages)
 
         response_stream = self.client.models.generate_content_stream(

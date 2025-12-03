@@ -29,12 +29,10 @@ class AsyncAgent:
     def __init__(self, client: AsyncBaseClient,
                  actions: List[Union[Type[BaseAction], Type[AsyncBaseAction], BaseAction, AsyncBaseAction]] = None,
                  system_prompt: Union[str, Callable[[], str]] = "", max_iter: int = 20,
-                 require_action: bool = None, logger: BaseLogger = None, verbose: bool = True,
+                 require_action: bool = False, logger: BaseLogger = None, verbose: bool = True,
                  max_tokens_before_exit: int = 200000, context_config: ContextConfig = None):
         if max_iter < 1:
             raise ValueError("max_iter must be >= 1")
-        if require_action is False:
-            raise ValueError("require_action=False is not supported at Agent level. Use require_action=None (default) or True.")
         validate_client(client, is_async=True)
 
         actions = actions or []
@@ -370,10 +368,10 @@ class AsyncAgent:
         return False
 
     def _get_final_step_allowed_actions(self) -> List[BaseAction]:
-        if self.require_action is True:
+        if self.require_action:
             # Force exit via exit actions only
             return [a for a in self.actions if getattr(a, '_is_exit', False)]
-        # require_action=False or None: return [] to force mode=NONE (text response)
+        # require_action=False: return [] to force tool_choice="none" (text response)
         return []
 
     def _build_final_response(self, timer: Timer, success: bool) -> AgentResponse:

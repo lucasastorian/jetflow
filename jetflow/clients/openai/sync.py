@@ -11,7 +11,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from jetflow.action import BaseAction
 from jetflow.models.message import Message, Action, Thought, WebSearch
 from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
-from jetflow.clients.base import BaseClient
+from jetflow.clients.base import BaseClient, ToolChoice
 from jetflow.clients.openai.utils import build_response_params, apply_usage_to_message
 
 
@@ -47,7 +47,7 @@ class OpenAIClient(BaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: 'VerboseLogger' = None,
         stream: bool = False,
         enable_caching: bool = False,
@@ -61,7 +61,7 @@ class OpenAIClient(BaseClient):
             actions,
             allowed_actions,
             enable_web_search,
-            require_action,
+            tool_choice,
             self.temperature,
             self.use_flex,
             self.reasoning_effort,
@@ -77,7 +77,7 @@ class OpenAIClient(BaseClient):
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
-        require_action: bool = False,
+        tool_choice: ToolChoice = "auto",
         logger: 'VerboseLogger' = None,
         stream: bool = True,
         enable_caching: bool = False,
@@ -91,7 +91,7 @@ class OpenAIClient(BaseClient):
             actions,
             allowed_actions,
             enable_web_search,
-            require_action,
+            tool_choice,
             self.temperature,
             self.use_flex,
             self.reasoning_effort,

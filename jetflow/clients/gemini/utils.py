@@ -5,6 +5,7 @@ from typing import List
 
 from jetflow.action import BaseAction
 from jetflow.models.message import Message
+from jetflow.clients.base import ToolChoice
 
 # Dummy signature for cross-provider compatibility (non-Gemini thoughts)
 # See: https://ai.google.dev/gemini-api/docs/thinking#thought-signatures
@@ -16,19 +17,19 @@ def build_gemini_config(
     actions: List[BaseAction],
     thinking_budget: int = -1,
     allowed_actions: List[BaseAction] = None,
-    require_action: bool = None,
+    tool_choice: ToolChoice = "auto",
 ) -> types.GenerateContentConfig:
     """Build Gemini GenerateContentConfig from parameters
 
-    allowed_actions behavior (takes precedence over require_action):
-    - None: Use require_action logic
+    allowed_actions behavior (takes precedence over tool_choice):
+    - None: Use tool_choice logic
     - []: NONE mode (function calling disabled)
     - [action1, action2]: ANY mode with allowed_function_names restricted
 
-    require_action behavior:
-    - True: ANY mode (model MUST call a function)
-    - False: NONE mode (model CANNOT call functions)
-    - None: AUTO mode (model decides)
+    tool_choice behavior:
+    - "required": ANY mode (model MUST call a function)
+    - "none": NONE mode (model CANNOT call functions)
+    - "auto": AUTO mode (model decides)
     """
     tools = None
     tool_config = None
@@ -53,17 +54,17 @@ def build_gemini_config(
                         allowed_function_names=allowed_names
                     )
                 )
-        elif require_action is True:
+        elif tool_choice == "required":
             # Must call a function
             tool_config = types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(mode="ANY")
             )
-        elif require_action is False:
+        elif tool_choice == "none":
             # Cannot call functions - force text response
             tool_config = types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(mode="NONE")
             )
-        # If require_action is None, defaults to AUTO
+        # tool_choice == "auto" defaults to AUTO
 
     thinking_config = None
     if thinking_budget != 0:

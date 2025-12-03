@@ -3,7 +3,7 @@
 from typing import List, AsyncIterator, AsyncGenerator, Optional, Type, TYPE_CHECKING
 from pydantic import BaseModel
 
-from jetflow.clients.base import AsyncBaseClient
+from jetflow.clients.base import AsyncBaseClient, ToolChoice
 from jetflow.models.events import StreamEvent, ContentDelta, MessageEnd
 from jetflow.citations.state import CitationState
 
@@ -11,6 +11,13 @@ if TYPE_CHECKING:
     from jetflow.models.message import Message
     from jetflow.action import BaseAction
     from jetflow.utils.base_logger import BaseLogger
+
+
+def _translate_require_action(require_action: bool) -> ToolChoice:
+    """Translate user-facing require_action bool to internal tool_choice."""
+    if require_action is True:
+        return "required"
+    return "auto"
 
 
 class AsyncCitationMiddleware(AsyncBaseClient):
@@ -58,13 +65,16 @@ class AsyncCitationMiddleware(AsyncBaseClient):
         self._state.reset_stream_state()
         content_buffer = ""
 
+        # Translate user-facing require_action to internal tool_choice
+        tool_choice = _translate_require_action(require_action)
+
         async for event in self.client.stream(  # type: ignore[misc]
             messages=messages,
             system_prompt=system_prompt,
             actions=actions,
             allowed_actions=allowed_actions,
             enable_web_search=enable_web_search,
-            require_action=require_action,
+            tool_choice=tool_choice,
             logger=logger,
             stream=stream,
             enable_caching=enable_caching,
@@ -97,13 +107,16 @@ class AsyncCitationMiddleware(AsyncBaseClient):
         context_cache_index: Optional[int] = None,
     ) -> List['Message']:
         """Pass through to wrapped client"""
+        # Translate user-facing require_action to internal tool_choice
+        tool_choice = _translate_require_action(require_action)
+
         return await self.client.complete(
             messages=messages,
             system_prompt=system_prompt,
             actions=actions,
             allowed_actions=allowed_actions,
             enable_web_search=enable_web_search,
-            require_action=require_action,
+            tool_choice=tool_choice,
             logger=logger,
             enable_caching=enable_caching,
             stream=stream,

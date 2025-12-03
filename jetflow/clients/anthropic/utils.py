@@ -3,6 +3,7 @@
 from typing import List, Optional, Dict, Any, Literal
 from jetflow.action import BaseAction
 from jetflow.models.message import Message
+from jetflow.clients.base import ToolChoice
 
 
 BETAS = ["interleaved-thinking-2025-05-14", "effort-2025-11-24"]
@@ -156,7 +157,7 @@ def build_message_params(
     actions: List[BaseAction],
     allowed_actions: Optional[List[BaseAction]],
     reasoning_budget: int,
-    require_action: bool = None,
+    tool_choice: ToolChoice = "auto",
     stream: bool = True,
     effort: Optional[Literal['low', 'medium', 'high']] = None,
     enable_caching: bool = False,
@@ -167,7 +168,7 @@ def build_message_params(
 
     Args:
         allowed_actions: Restrict which actions can be called (None = all, [] = none)
-        require_action: True=force call, False=disable calls, None=auto
+        tool_choice: "auto" (LLM decides), "required" (must call tool), "none" (no tools)
         effort: Token usage control (low/medium/high). Only for Claude Opus 4.5.
         enable_caching: Whether to add cache_control markers for prompt caching
         cache_ttl: Cache time-to-live, either '5m' or '1h'
@@ -198,7 +199,7 @@ def build_message_params(
             "budget_tokens": reasoning_budget
         }
 
-    # Handle tool_choice based on allowed_actions and require_action
+    # Handle tool_choice based on allowed_actions (takes precedence) then tool_choice
     # NOTE: With extended thinking, only "auto" and "none" are allowed
     if allowed_actions is not None:
         if len(allowed_actions) == 0:
@@ -215,13 +216,13 @@ def build_message_params(
             # Multiple allowed actions = force one of them
             params['tool_choice'] = {"type": "any"}
             params['tools'] = [action.anthropic_schema for action in allowed_actions]
-    elif require_action is True and not thinking_enabled:
+    elif tool_choice == "required" and not thinking_enabled:
         # No restrictions but must call a function (only without thinking)
         params['tool_choice'] = {"type": "any"}
-    elif require_action is False:
+    elif tool_choice == "none":
         # Disable function calling
         params['tool_choice'] = {"type": "none"}
-    # If require_action is None, defaults to auto
+    # tool_choice == "auto" is the default, no need to set
 
     # Add cache control markers if caching is enabled
     if enable_caching:
