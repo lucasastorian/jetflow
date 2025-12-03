@@ -296,7 +296,7 @@ def test_import_export_dataframe():
     # Extract it back
     extracted_data = executor.extract_dataframe('stock_data')
 
-    executor.__stop__()
+    executor.stop()
 
     # Verify roundtrip
     assert extracted_data is not None, "Should extract DataFrame"
@@ -308,6 +308,70 @@ def test_import_export_dataframe():
     print(f"   Original: {original_data[0]}")
     print(f"   Extracted: {extracted_data[0]}")
     return True
+
+
+@skip_if_no_e2b
+def test_import_dataframe_with_agent():
+    """Test that import_dataframe works with nested agent (sandbox survives agent lifecycle)"""
+    print("\n=== Test: Import DataFrame with Agent ===")
+    import asyncio
+
+    # Sample cash flow statement data (simplified from META)
+    cash_flow_data = [
+        {'label': 'Net Income', 'FY 2022': 23200000000, 'FY 2023': 39100000000, 'FY 2024': 62360000000},
+        {'label': 'Depreciation and amortization', 'FY 2022': 8690000000, 'FY 2023': 11180000000, 'FY 2024': 15500000000},
+        {'label': 'Share-based compensation', 'FY 2022': 11990000000, 'FY 2023': 14030000000, 'FY 2024': 16690000000},
+        {'label': 'Net Cash from Operating Activities', 'FY 2022': 50480000000, 'FY 2023': 71110000000, 'FY 2024': 91330000000},
+        {'label': 'Payments for Property, Plant and Equipment', 'FY 2022': -31430000000, 'FY 2023': -27270000000, 'FY 2024': -37260000000},
+        {'label': 'Net Cash from Investing Activities', 'FY 2022': -28970000000, 'FY 2023': -24500000000, 'FY 2024': -47150000000},
+        {'label': 'Net Cash from Financing Activities', 'FY 2022': -22140000000, 'FY 2023': -19500000000, 'FY 2024': -40780000000},
+    ]
+
+    async def run_test():
+        from jetflow import AsyncAgent
+        from jetflow.clients.anthropic import AsyncAnthropicClient
+
+        # Create executor and import data BEFORE agent
+        executor = E2BPythonExec(persistent=False, embeddable_charts=False)
+        result = executor.import_dataframe('cash_flow', cash_flow_data)
+        print(f"   Import result: {result}")
+
+        assert 'cash_flow loaded' in result, f"Should confirm import, got: {result}"
+
+        # Verify data is there before agent
+        verify_before = executor.run_code("print(cash_flow.shape); print(cash_flow['label'].tolist())")
+        print(f"   Data before agent: {verify_before[:200]}")
+        assert 'Net Income' in verify_before, "Data should be accessible before agent"
+
+        # Create agent with the executor
+        agent = AsyncAgent(
+            client=AsyncAnthropicClient(model="claude-haiku-4-5"),
+            actions=[executor],
+            system_prompt="You have access to a DataFrame called 'cash_flow'. Use PythonExec to analyze it.",
+            max_iter=2,
+            verbose=True
+        )
+
+        # Run agent - it should be able to access the pre-loaded data
+        response = await agent.run("Calculate the year-over-year growth rate for Net Cash from Operating Activities from 2022 to 2024. Print the results.")
+
+        print(f"\n   Agent iterations: {response.iterations}")
+        print(f"   Agent response: {(response.content or '')[:300]}...")
+        # Agent may or may not complete with text - the key test is sandbox survival
+
+        # CRITICAL: Sandbox should still be alive after agent completes
+        verify_after = executor.run_code("print('Sandbox alive!'); print(cash_flow.shape)")
+        print(f"   Data after agent: {verify_after}")
+        assert 'Sandbox alive' in verify_after, f"Sandbox should survive agent lifecycle, got: {verify_after}"
+        assert '(7,' in verify_after, f"DataFrame should still have 7 rows, got: {verify_after}"
+
+        # Clean up manually
+        executor.stop()
+
+        print("✅ Import DataFrame with Agent - sandbox survived!")
+        return True
+
+    return asyncio.run(run_test())
 
 
 @skip_if_no_e2b
@@ -885,6 +949,7 @@ if __name__ == "__main__":
         ("CAGR Calculation", test_dataframe_cagr_calculation),
         ("Extract DataFrame", test_extract_dataframe),
         ("Import/Export DataFrame", test_import_export_dataframe),
+        ("Import DataFrame with Agent", test_import_dataframe_with_agent),
         ("Extract Variable", test_extract_variable),
         ("Manual Code Execution", test_manual_code_execution),
         ("Variable Persistence", test_variable_persistence),

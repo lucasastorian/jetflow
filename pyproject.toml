@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jetflow"
-version = "1.0.51"
+version = "1.0.52"
 description = "Lightweight, production-ready framework for building agentic workflows with LLMs"
 readme = "README.md"
 requires-python = ">=3.10"

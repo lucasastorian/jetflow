@@ -28,6 +28,7 @@ class E2BPythonExec:
         self.embeddable_charts = embeddable_charts
         self._charts: Optional[E2BChartExtractor] = None
         self._started = False
+        self._manually_started = False  # Track if user started manually (to prevent agent from stopping)
 
     def __start__(self) -> None:
         if self._started:
@@ -60,6 +61,9 @@ plt.Figure.savefig = _tracked_savefig
 
     def __stop__(self) -> None:
         if not self._started:
+            return
+        # Don't stop if user manually started (they own the lifecycle)
+        if self._manually_started:
             return
         self._started = False
 
@@ -166,6 +170,7 @@ plt.Figure.savefig = _tracked_savefig
         """
         if not self._started:
             self.__start__()
+            self._manually_started = True  # User called import, they own the lifecycle
 
         records = df.to_dict('records') if hasattr(df, 'to_dict') else df
         code = f"import pandas as pd; {var} = pd.DataFrame({json.dumps(records)}); print(f'{var} loaded: {{{var}.shape}}')"
@@ -211,3 +216,12 @@ plt.Figure.savefig = _tracked_savefig
 
     def delete_file(self, path: str) -> None:
         self.sandbox.delete_file(path)
+
+    def stop(self) -> None:
+        """Manually stop the sandbox. Call this when done if you used import_dataframe."""
+        if not self._started:
+            return
+        self._started = False
+        self._manually_started = False
+        self.sandbox.stop()
+        self._charts = None
