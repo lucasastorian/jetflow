@@ -27,8 +27,13 @@ class E2BPythonExec:
                                    timeout=timeout, api_key=api_key)
         self.embeddable_charts = embeddable_charts
         self._charts: Optional[E2BChartExtractor] = None
+        self._started = False
 
     def __start__(self) -> None:
+        if self._started:
+            return  # Already started, don't reinitialize
+        self._started = True
+
         self.sandbox.start()
         self._charts = E2BChartExtractor(self.sandbox)
         self.sandbox.run_code("import matplotlib\nmatplotlib.use('Agg')")
@@ -54,6 +59,10 @@ plt.Figure.savefig = _tracked_savefig
         self.sandbox.run_code(tracking_code)
 
     def __stop__(self) -> None:
+        if not self._started:
+            return
+        self._started = False
+
         self.sandbox.stop()
         self._charts = None
 
@@ -137,6 +146,11 @@ plt.Figure.savefig = _tracked_savefig
 
     def extract_dataframe(self, var: str):
         """Extract a DataFrame from the sandbox as a list of records."""
+        if not self._started:
+            if not self.sandbox.persistent:
+                raise RuntimeError("Cannot extract from stopped non-persistent sandbox. Use persistent=True to extract data after agent completes.")
+            self.__start__()  # Resume persistent sandbox
+
         code = f"import json,pandas as pd;print(json.dumps({var}.to_dict('records') if isinstance({var},pd.DataFrame) else None))"
         return self._json(code)
 
@@ -150,11 +164,20 @@ plt.Figure.savefig = _tracked_savefig
         Returns:
             Output from the sandbox confirming the import
         """
+        if not self._started:
+            self.__start__()
+
         records = df.to_dict('records') if hasattr(df, 'to_dict') else df
         code = f"import pandas as pd; {var} = pd.DataFrame({json.dumps(records)}); print(f'{var} loaded: {{{var}.shape}}')"
         return self.run_code(code)
 
     def extract_variable(self, var: str):
+        """Extract a variable from the sandbox as JSON."""
+        if not self._started:
+            if not self.sandbox.persistent:
+                raise RuntimeError("Cannot extract from stopped non-persistent sandbox. Use persistent=True to extract data after agent completes.")
+            self.__start__()  # Resume persistent sandbox
+
         return self._json(f"import json;print(json.dumps({var}))")
 
     def _json(self, code: str):
