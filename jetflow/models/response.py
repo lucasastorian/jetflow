@@ -58,6 +58,7 @@ class AgentResponse:
     duration: float
     iterations: int
     success: bool
+    citations: dict = None  # Dict[int, dict] - citation ID → metadata
 
     def __str__(self) -> str:
         """Allow print(response) to show final answer"""

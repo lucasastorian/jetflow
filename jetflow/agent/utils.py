@@ -127,10 +127,12 @@ def _build_response(agent, timer: Timer, success: bool) -> AgentResponse:
         )
 
     last_message = agent.messages[-1]
+    citations = None
     if last_message.role == 'assistant':
         used_citations = agent.client.get_used_citations(last_message.content)
         if used_citations:
             last_message.citations = used_citations
+            citations = used_citations
 
     return AgentResponse(
         content=last_message.content,
@@ -138,7 +140,8 @@ def _build_response(agent, timer: Timer, success: bool) -> AgentResponse:
         usage=calculate_usage(agent.messages, agent.client.provider, agent.client.model),
         duration=(end_time - timer.start_time).total_seconds(),
         iterations=agent.num_iter,
-        success=success
+        success=success,
+        citations=citations
     )
 
 
