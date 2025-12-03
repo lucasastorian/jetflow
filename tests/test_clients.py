@@ -5,7 +5,8 @@ Tests all combinations:
 - Anthropic (claude-haiku-4-5): sync/async × streaming/non-streaming
 - OpenAI (gpt-5-mini): sync/async × streaming/non-streaming
 - LegacyOpenAI (gpt-4o-mini): sync/async × streaming/non-streaming
-- Grok (grok-4-fast-non-reasoning): sync/async × streaming/non-streaming [if XAI_API_KEY set]
+- Grok (grok-4-fast): sync/async × streaming/non-streaming [if XAI_API_KEY set]
+- Groq (llama-3.3-70b-versatile): sync/async × streaming/non-streaming [if GROQ_API_KEY set]
 - Gemini (gemini-2.5-flash): sync/async × streaming/non-streaming [if GEMINI_API_KEY or GOOGLE_API_KEY set]
 
 Dataset: Nvidia Income Statement (FY 2022-2025)
@@ -19,6 +20,7 @@ from jetflow.clients.anthropic import AnthropicClient, AsyncAnthropicClient
 from jetflow.clients.openai import OpenAIClient, AsyncOpenAIClient
 from jetflow.clients.legacy_openai import LegacyOpenAIClient, AsyncLegacyOpenAIClient
 from jetflow.clients.grok import GrokClient, AsyncGrokClient
+from jetflow.clients.groq import GroqClient, AsyncGroqClient
 from jetflow.clients.gemini import GeminiClient, AsyncGeminiClient
 from jetflow.models.response import ActionResult
 from pydantic import BaseModel, Field
@@ -144,6 +146,14 @@ if os.getenv("XAI_API_KEY"):
         "name": "Grok",
         "sync_client": GrokClient(model="grok-4-fast"),
         "async_client": AsyncGrokClient(model="grok-4-fast"),
+    })
+
+# Add Groq if API key is available
+if os.getenv("GROQ_API_KEY"):
+    CLIENTS.append({
+        "name": "Groq",
+        "sync_client": GroqClient(model="llama-3.3-70b-versatile"),
+        "async_client": AsyncGroqClient(model="llama-3.3-70b-versatile"),
     })
 
 # Add Gemini if API key is available

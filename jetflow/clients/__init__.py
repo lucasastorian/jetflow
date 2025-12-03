@@ -30,3 +30,9 @@ try:
     __all__.extend(["GeminiClient", "AsyncGeminiClient"])
 except ImportError:
     pass
+
+try:
+    from jetflow.clients.groq import GroqClient, AsyncGroqClient
+    __all__.extend(["GroqClient", "AsyncGroqClient"])
+except ImportError:
+    pass

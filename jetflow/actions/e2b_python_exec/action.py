@@ -173,7 +173,12 @@ plt.Figure.savefig = _tracked_savefig
             self._manually_started = True  # User called import, they own the lifecycle
 
         records = df.to_dict('records') if hasattr(df, 'to_dict') else df
-        code = f"import pandas as pd; {var} = pd.DataFrame({json.dumps(records)}); print(f'{var} loaded: {{{var}.shape}}')"
+
+        # Write JSON to temp file in sandbox, then read it with pandas
+        # This properly handles JSON booleans (true/false) and null values
+        tmp_path = f"/tmp/{var}_import.json"
+        self.sandbox.write_file(tmp_path, json.dumps(records))
+        code = f"import pandas as pd; {var} = pd.read_json('{tmp_path}'); print(f'{var} loaded: {{{var}.shape}}')"
         return self.run_code(code)
 
     def extract_variable(self, var: str):

@@ -1,14 +1,18 @@
 """Sync Grok (xAI) client - wrapper around OpenAI Responses API client"""
 
 import os
+import json
 from typing import Literal, List, Iterator, Optional, Type
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from jetflow.clients.openai.sync import OpenAIClient
 from jetflow.clients.grok.utils import build_grok_params
 from jetflow.clients.base import ToolChoice
 from jetflow.action import BaseAction
 from jetflow.models.message import Message
 from jetflow.models.events import StreamEvent
+
+# Max retries for JSON extraction errors
+MAX_EXTRACT_RETRIES = 2
 
 
 class GrokClient(OpenAIClient):
@@ -113,13 +117,61 @@ class GrokClient(OpenAIClient):
         query: str,
         system_prompt: str = "Extract the requested information.",
     ) -> BaseModel:
-        """Extract structured data using legacy ChatCompletions (Grok doesn't support Responses API for structured outputs)."""
-        completion = self.client.beta.chat.completions.parse(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": query},
-            ],
-            response_format=schema,
-        )
-        return completion.choices[0].message.parsed
+        """Extract structured data with retry logic for JSON parsing errors.
+
+        Grok sometimes outputs trailing text after valid JSON, causing parsing failures.
+        This method retries with error feedback to help the model correct its output.
+        """
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query},
+        ]
+
+        last_error = None
+        for attempt in range(MAX_EXTRACT_RETRIES + 1):
+            try:
+                completion = self.client.beta.chat.completions.parse(
+                    model=self.model,
+                    messages=messages,
+                    response_format=schema,
+                )
+                return completion.choices[0].message.parsed
+
+            except (ValidationError, json.JSONDecodeError) as e:
+                last_error = e
+                if attempt < MAX_EXTRACT_RETRIES:
+                    # Get the raw content that failed to parse
+                    error_msg = str(e)
+
+                    # Add the failed response and error feedback to messages for retry
+                    messages.append({
+                        "role": "assistant",
+                        "content": getattr(e, 'input_value', '') or "Invalid JSON output"
+                    })
+                    messages.append({
+                        "role": "user",
+                        "content": f"Your response failed JSON validation: {error_msg}\n\n"
+                                   f"Please output ONLY valid JSON matching the schema, with no additional text before or after."
+                    })
+                    continue
+
+            except Exception as e:
+                # For other errors (like API errors), check if it's a parsing issue
+                error_str = str(e)
+                if "json" in error_str.lower() or "trailing" in error_str.lower() or "invalid" in error_str.lower():
+                    last_error = e
+                    if attempt < MAX_EXTRACT_RETRIES:
+                        messages.append({
+                            "role": "assistant",
+                            "content": "Invalid JSON output"
+                        })
+                        messages.append({
+                            "role": "user",
+                            "content": f"Your response failed JSON validation: {error_str}\n\n"
+                                       f"Please output ONLY valid JSON matching the schema, with no additional text before or after."
+                        })
+                        continue
+                raise
+
+        # All retries exhausted
+        raise last_error
