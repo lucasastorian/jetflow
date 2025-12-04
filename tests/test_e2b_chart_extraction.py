@@ -294,6 +294,67 @@ axes[1].set_title('Projected Growth')
         assert chart2.title == 'Projected Growth'
         assert len(chart2.series[0].y) == 6  # All 6 data points
 
+    def test_charts_with_plt_close(self, executor):
+        """Extract charts even when plt.close() is called immediately after creation"""
+        code = """
+import matplotlib.pyplot as plt
+
+# Chart 1 - created and closed
+fig1, ax1 = plt.subplots()
+ax1.bar(['Q1', 'Q2', 'Q3'], [100, 120, 150], label='Revenue')
+ax1.set_title('Revenue Chart')
+ax1.set_ylabel('Revenue ($M)')
+plt.savefig('/tmp/revenue.png')
+plt.close()
+
+# Chart 2 - created and closed
+fig2, ax2 = plt.subplots()
+ax2.plot([1, 2, 3, 4], [10, 20, 15, 25], label='Growth')
+ax2.set_title('Growth Chart')
+plt.savefig('/tmp/growth.png')
+plt.close()
+
+# Chart 3 - created and closed with stacked bars
+fig3, ax3 = plt.subplots()
+costs = [20, 25, 30]
+profits = [80, 75, 70]
+ax3.bar(['Q1', 'Q2', 'Q3'], costs, label='Costs')
+ax3.bar(['Q1', 'Q2', 'Q3'], profits, bottom=costs, label='Profits')
+ax3.set_title('Cost Structure')
+ax3.legend()
+plt.savefig('/tmp/costs.png')
+plt.close()
+
+print("All charts created and closed")
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        assert len(result.metadata['charts']) == 3
+
+        # Chart 1 - bar chart with savefig ID
+        chart1 = Chart(**result.metadata['charts'][0])
+        assert chart1.chart_id == 'revenue'
+        assert chart1.title == 'Revenue Chart'
+        assert chart1.type == 'bar'
+        assert len(chart1.series) == 1
+        assert chart1.series[0].label == 'Revenue'
+
+        # Chart 2 - line chart
+        chart2 = Chart(**result.metadata['charts'][1])
+        assert chart2.chart_id == 'growth'
+        assert chart2.title == 'Growth Chart'
+        assert chart2.type == 'line'
+
+        # Chart 3 - stacked bar with labels preserved
+        chart3 = Chart(**result.metadata['charts'][2])
+        assert chart3.chart_id == 'costs'
+        assert chart3.title == 'Cost Structure'
+        assert len(chart3.series) == 2
+        labels = [s.label for s in chart3.series]
+        assert 'Costs' in labels
+        assert 'Profits' in labels
+
 
 class TestE2BIncrementalDiffing:
     """Test incremental chart diffing in E2B"""

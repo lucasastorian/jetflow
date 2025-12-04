@@ -39,23 +39,96 @@ class E2BPythonExec:
         self._charts = E2BChartExtractor(self.sandbox)
         self.sandbox.run_code("import matplotlib\nmatplotlib.use('Agg')")
 
-        # Inject savefig tracking to capture chart IDs
+        # Inject savefig tracking to capture chart IDs and close tracking to extract before close
         tracking_code = """
 import matplotlib.pyplot as plt
 import os
+import json
 
 _original_savefig = plt.Figure.savefig
+_original_close = plt.close
+_jetflow_pending_charts = []
 
 def _tracked_savefig(self, fname, *args, **kwargs):
-    # Extract filename without path or extension
     filename = os.path.basename(str(fname))
     if '.' in filename:
         filename = filename.rsplit('.', 1)[0]
-    # Store on figure for later extraction
     self._jetflow_chart_id = filename
     return _original_savefig(self, fname, *args, **kwargs)
 
+def _get_bar_labels(ax):
+    labels = []
+    try:
+        from matplotlib.container import BarContainer
+        for container in ax.containers:
+            if isinstance(container, BarContainer):
+                label = container.get_label()
+                if label and not label.startswith('_'):
+                    labels.append(label)
+    except:
+        pass
+    return labels
+
+def _extract_figure_data(fig):
+    fig_label = fig.get_label() or None
+    saved_filename = getattr(fig, '_jetflow_chart_id', None)
+    subtitle = getattr(fig, 'subtitle', None)
+    data_source = getattr(fig, 'data_source', None)
+    citations = getattr(fig, 'citations', [])
+
+    axes_data = []
+    for ax_idx, ax in enumerate(fig.get_axes()):
+        shared_x_ids = [id(other) for other in fig.get_axes() if other != ax and ax.get_shared_x_axes().joined(ax, other)]
+        axis_data = {
+            'fig_num': fig.number, 'ax_idx': ax_idx, 'ax_id': id(ax),
+            'fig_label': fig_label, 'saved_filename': saved_filename, 'var_name': None,
+            'subtitle': subtitle, 'data_source': data_source, 'citations': citations,
+            'title': ax.get_title() or None, 'xlabel': ax.get_xlabel() or None, 'ylabel': ax.get_ylabel() or None,
+            'xscale': ax.get_xscale(), 'yscale': ax.get_yscale(), 'shared_x_ids': shared_x_ids,
+            'lines': [], 'patches': [], 'collections': [],
+            'bar_labels': _get_bar_labels(ax),
+            'xtick_labels': [t.get_text() for t in ax.get_xticklabels()]
+        }
+        for line in ax.get_lines():
+            xdata, ydata = line.get_xdata(), line.get_ydata()
+            axis_data['lines'].append({
+                'x': xdata.tolist() if hasattr(xdata, 'tolist') else list(xdata),
+                'y': ydata.tolist() if hasattr(ydata, 'tolist') else list(ydata),
+                'label': line.get_label()
+            })
+        for patch in ax.patches:
+            axis_data['patches'].append({
+                'x': patch.get_x(), 'y': patch.get_y(),
+                'width': patch.get_width(), 'height': patch.get_height()
+            })
+        for coll in ax.collections:
+            offsets = coll.get_offsets()
+            if len(offsets) > 0:
+                axis_data['collections'].append({
+                    'x': offsets[:, 0].tolist() if hasattr(offsets[:, 0], 'tolist') else list(offsets[:, 0]),
+                    'y': offsets[:, 1].tolist() if hasattr(offsets[:, 0], 'tolist') else list(offsets[:, 1])
+                })
+        axes_data.append(axis_data)
+    return axes_data
+
+def _tracked_close(fig=None):
+    global _jetflow_pending_charts
+    if fig is None:
+        # Close all - extract all open figures
+        for fig_num in plt.get_fignums():
+            _jetflow_pending_charts.extend(_extract_figure_data(plt.figure(fig_num)))
+    elif isinstance(fig, plt.Figure):
+        _jetflow_pending_charts.extend(_extract_figure_data(fig))
+    elif isinstance(fig, int):
+        if fig in plt.get_fignums():
+            _jetflow_pending_charts.extend(_extract_figure_data(plt.figure(fig)))
+    elif fig == 'all':
+        for fig_num in plt.get_fignums():
+            _jetflow_pending_charts.extend(_extract_figure_data(plt.figure(fig_num)))
+    return _original_close(fig)
+
 plt.Figure.savefig = _tracked_savefig
+plt.close = _tracked_close
 """
         self.sandbox.run_code(tracking_code)
 
@@ -72,17 +145,43 @@ plt.Figure.savefig = _tracked_savefig
 
     def __call__(self, params: PythonExec) -> ActionResult:
         try:
+            # Clear pending charts from previous runs
+            self.sandbox.run_code("_jetflow_pending_charts = []")
             pre = self._charts.get_figure_hashes() if self._charts else {}
             result = self.sandbox.run_code(params.code)
         except Exception as e:
             return ActionResult(content=f"**Error**: {e}")
 
+        # Get charts that were captured before plt.close() was called by user code
+        pending_charts = self._get_pending_charts()
+
+        # Get charts from figures that are still open (not closed by user)
         new_figs = self._charts.get_new_figures(pre) if self._charts else set()
-        charts = self._charts.extract(new_figs) if new_figs else []
+        open_charts = self._charts.extract(new_figs) if new_figs else []
+
+        # Silently close remaining figures without triggering extraction
         if new_figs:
-            self._charts.close_figures(new_figs)
+            self.sandbox.run_code(f"import matplotlib.pyplot as plt\nfor n in [{','.join(new_figs)}]:\n    try: _original_close(n)\n    except: pass")
+
+        # Combine: pending (closed by user) + open (still open)
+        charts = pending_charts + open_charts
 
         return self._format(result, charts)
+
+    def _get_pending_charts(self) -> list:
+        """Retrieve charts that were extracted before plt.close() was called."""
+        from jetflow.actions.chart_processing import group_axes_by_twins, process_axis_group_to_chart
+        try:
+            code = "import json; print(json.dumps(_jetflow_pending_charts, default=str))"
+            r = self.sandbox.run_code(code)
+            if r.logs and r.logs.stdout:
+                raw_axes = json.loads("\n".join(r.logs.stdout).strip())
+                if raw_axes:
+                    axis_groups = group_axes_by_twins(raw_axes)
+                    return [c for c in (process_axis_group_to_chart(g) for g in axis_groups) if c]
+        except:
+            pass
+        return []
 
     def _format(self, exec_result, charts) -> ActionResult:
         parts = []
