@@ -492,5 +492,57 @@ ax.set_title('Chart 1 (Updated)')  # Changed title
         assert chart.series[0].y == [10, 25, 15, 30]  # New data
 
 
+class TestSeabornChartExtraction:
+    """Tests for seaborn chart extraction edge cases."""
+
+    @pytest.fixture
+    def executor(self):
+        """Create E2B executor for testing."""
+        exec_instance = E2BPythonExec(persistent=False)
+        exec_instance.__start__()
+        yield exec_instance
+        exec_instance.__stop__()
+
+    def test_seaborn_lineplot_with_categorical_x(self, executor):
+        """Extract seaborn lineplot with categorical x-axis labels."""
+        code = """
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+data = {
+    'Quarter': ['Q1 2024', 'Q2 2024', 'Q3 2024', 'Q1 2025', 'Q2 2025', 'Q3 2025'],
+    'Margin': [18.5, 18.5, 20.1, 16.2, 17.2, 17.0]
+}
+
+df = pd.DataFrame(data)
+fig, ax = plt.subplots()
+
+sns.lineplot(data=df, x='Quarter', y='Margin', marker='o', label='Gross Margin', ax=ax)
+ax.axhline(y=19.0, color='gray', linestyle='--', label='2024 Avg')
+
+ax.set_xlabel('Quarter')
+ax.set_ylabel('Gross Margin (%)')
+ax.set_title('Margin Trend')
+plt.savefig('margin_trend.png')
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        chart = Chart(**result.metadata['charts'][0])
+
+        # Should be line type, not mixed (axhline filtered)
+        assert chart.type == 'line'
+        assert chart.title == 'Margin Trend'
+
+        # Should have only 1 series (axhline filtered, spurious scatter filtered)
+        assert len(chart.series) == 1
+        assert chart.series[0].label == 'Gross Margin'
+
+        # X-values should be categorical labels, not 0,1,2,3...
+        assert chart.series[0].x == ['Q1 2024', 'Q2 2024', 'Q3 2024', 'Q1 2025', 'Q2 2025', 'Q3 2025']
+        assert chart.series[0].y == [18.5, 18.5, 20.1, 16.2, 17.2, 17.0]
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v', '-s'])

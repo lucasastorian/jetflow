@@ -101,20 +101,27 @@ def _extract_series_from_axis(ax: Dict, axis_idx: int, series_count: int) -> Lis
     from jetflow.models.chart import ChartSeries
 
     series = []
+    xtick_labels = ax.get('xtick_labels', [])
+    non_empty_labels = [l for l in xtick_labels if l.strip()] if xtick_labels else []
 
     # Filter out axhline/axvline (constant horizontal/vertical lines used for reference)
     data_lines = [l for l in ax.get('lines', []) if not _is_reference_line(l)]
 
     for line_data in data_lines:
         label = _generate_label(line_data.get('label'), ax.get('ylabel'), len(data_lines), series_count + len(series))
-        series.append(ChartSeries(type='line', label=label, x=line_data['x'], y=line_data['y'], axis=axis_idx))
+        x_values = _map_x_to_labels(line_data['x'], non_empty_labels)
+        series.append(ChartSeries(type='line', label=label, x=x_values, y=line_data['y'], axis=axis_idx))
 
     if ax.get('patches'):
         series.extend(_extract_bar_series(ax, axis_idx, series_count + len(series)))
 
-    for coll_data in ax.get('collections', []):
-        label = _generate_label(None, ax.get('ylabel'), len(ax.get('collections', [])), series_count + len(series))
-        series.append(ChartSeries(type='scatter', label=label, x=coll_data['x'], y=coll_data['y'], axis=axis_idx))
+    # Filter out spurious scatter points (e.g., seaborn legend handles at origin)
+    valid_collections = [c for c in ax.get('collections', []) if not _is_spurious_collection(c)]
+
+    for coll_data in valid_collections:
+        label = _generate_label(None, ax.get('ylabel'), len(valid_collections), series_count + len(series))
+        x_values = _map_x_to_labels(coll_data['x'], non_empty_labels)
+        series.append(ChartSeries(type='scatter', label=label, x=x_values, y=coll_data['y'], axis=axis_idx))
 
     return series
 
@@ -230,6 +237,44 @@ def _build_simple_series(x_groups, x_positions, non_empty_labels, bar_labels, ax
     y_data = [x_groups[x][0]['height'] for x in x_positions]
     label = bar_labels[0] if bar_labels else (ax.get('ylabel') or f'series-{series_count + 1}')
     return [ChartSeries(type='bar', label=label, x=list(x_values), y=y_data, axis=axis_idx)]
+
+
+def _map_x_to_labels(x_values: List, labels: List[str]) -> List:
+    """Map numeric x-values to categorical labels if applicable.
+
+    Only maps when x-values are sequential 0-based indices (0, 1, 2, 3...)
+    which is how seaborn/matplotlib encodes categorical data.
+    """
+    if not labels or not x_values:
+        return x_values
+
+    # Only map if x-values look like 0-based sequential indices
+    try:
+        indices = [int(round(x)) for x in x_values]
+        # Check if they're close to integers
+        if not all(abs(x - round(x)) < 0.01 for x in x_values):
+            return x_values
+        # Check if they start at 0 and are sequential (categorical encoding)
+        if indices != list(range(len(indices))):
+            return x_values
+        # Check indices are in range
+        if not all(0 <= idx < len(labels) for idx in indices):
+            return x_values
+        return [labels[idx] for idx in indices]
+    except (TypeError, ValueError):
+        pass
+
+    return x_values
+
+
+def _is_spurious_collection(coll_data: Dict) -> bool:
+    """Check if a collection is a spurious artifact (e.g., legend handle at origin)."""
+    x, y = coll_data.get('x', []), coll_data.get('y', [])
+    # Single point at or near origin is likely a legend handle artifact
+    if len(x) == 1 and len(y) == 1:
+        if abs(x[0]) < 0.01 and abs(y[0]) < 0.01:
+            return True
+    return False
 
 
 def _is_reference_line(line_data: Dict) -> bool:
