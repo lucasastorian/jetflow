@@ -186,6 +186,114 @@ plt.title('Revenue + Margin')
         assert chart.series[0].type == 'bar'
         assert chart.series[1].type == 'line'
 
+    def test_stacked_bar_chart_with_labels(self, executor):
+        """Extract stacked bar chart with proper labels via E2B"""
+        code = """
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots()
+
+quarters = ['Q1', 'Q2', 'Q3', 'Q4']
+costs = [20, 25, 22, 28]
+profits = [80, 75, 78, 72]
+
+ax.bar(range(4), costs, label='COGS % of Revenue')
+ax.bar(range(4), profits, bottom=costs, label='Gross Profit % of Revenue')
+ax.set_xticks(range(4))
+ax.set_xticklabels(quarters)
+ax.set_ylabel('% of Revenue')
+ax.set_title('Cost Structure Evolution')
+ax.legend()
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        chart = Chart(**result.metadata['charts'][0])
+
+        assert chart.type == 'bar'
+        assert chart.title == 'Cost Structure Evolution'
+        assert len(chart.series) == 2
+
+        # Check that labels are preserved (not series-1, series-2)
+        labels = [s.label for s in chart.series]
+        assert 'COGS % of Revenue' in labels
+        assert 'Gross Profit % of Revenue' in labels
+
+        # Check x-axis labels
+        assert chart.series[0].x == ['Q1', 'Q2', 'Q3', 'Q4']
+
+    def test_grouped_bar_chart_with_labels(self, executor):
+        """Extract grouped bar chart with proper labels via E2B"""
+        code = """
+import matplotlib.pyplot as plt
+import numpy as np
+
+fig, ax = plt.subplots()
+
+quarters = ['Q1', 'Q2', 'Q3', 'Q4']
+x = np.arange(4)
+width = 0.35
+
+revenue_2024 = [100, 120, 150, 140]
+revenue_2025 = [110, 135, 160, 155]
+
+ax.bar(x - width/2, revenue_2024, width, label='2024')
+ax.bar(x + width/2, revenue_2025, width, label='2025')
+ax.set_xticks(x)
+ax.set_xticklabels(quarters)
+ax.set_ylabel('Revenue ($M)')
+ax.set_title('Year over Year Revenue')
+ax.legend()
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        chart = Chart(**result.metadata['charts'][0])
+
+        assert chart.type == 'bar'
+        assert chart.title == 'Year over Year Revenue'
+        assert len(chart.series) == 2
+
+        # Check that labels are preserved
+        labels = [s.label for s in chart.series]
+        assert '2024' in labels
+        assert '2025' in labels
+
+    def test_subplot_bar_charts(self, executor):
+        """Extract bar charts from subplots with all data points via E2B"""
+        code = """
+import matplotlib.pyplot as plt
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+# First subplot - simple bar
+quarters = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6']
+values = [10, 20, 15, 25, 30, 22]
+axes[0].bar(range(6), values)
+axes[0].set_xticks(range(6))
+axes[0].set_xticklabels(quarters)
+axes[0].set_title('Six Quarters of Data')
+
+# Second subplot - another bar
+axes[1].bar(range(6), [v * 1.5 for v in values])
+axes[1].set_xticks(range(6))
+axes[1].set_xticklabels(quarters)
+axes[1].set_title('Projected Growth')
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        assert len(result.metadata['charts']) == 2
+
+        chart1 = Chart(**result.metadata['charts'][0])
+        assert chart1.title == 'Six Quarters of Data'
+        assert len(chart1.series) == 1
+        assert len(chart1.series[0].y) == 6  # All 6 data points
+
+        chart2 = Chart(**result.metadata['charts'][1])
+        assert chart2.title == 'Projected Growth'
+        assert len(chart2.series[0].y) == 6  # All 6 data points
+
 
 class TestE2BIncrementalDiffing:
     """Test incremental chart diffing in E2B"""

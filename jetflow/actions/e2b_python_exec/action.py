@@ -89,7 +89,6 @@ plt.Figure.savefig = _tracked_savefig
 
         if charts:
             if self.embeddable_charts:
-                # Provide explicit embedding instructions
                 chart_lines = [f"📊 **Created {len(charts)} chart(s)**:\n"]
                 for c in charts:
                     chart_lines.append(f"**{c.title or 'Untitled'}** ({c.type} chart)")

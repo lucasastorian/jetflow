@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from jetflow.models.chart import Chart
 
 
-FIGURE_HASH_CODE = """
+_FIGURE_HASH_CODE = """
 import json
 import matplotlib.pyplot as plt
 import hashlib
@@ -52,14 +52,34 @@ for fig_num in plt.get_fignums():
 print(json.dumps(result))
 """
 
-RAW_DATA_EXTRACTION = """
+_RAW_DATA_EXTRACTION = """
 import json
 import matplotlib.pyplot as plt
 
+def get_bar_labels(ax):
+    labels = []
+    try:
+        from matplotlib.container import BarContainer
+        for container in ax.containers:
+            if isinstance(container, BarContainer):
+                label = container.get_label()
+                if label and not label.startswith('_'):
+                    labels.append(label)
+    except:
+        pass
+    if not labels:
+        try:
+            from matplotlib.container import BarContainer
+            handles, lbls = ax.get_legend_handles_labels()
+            for handle, label in zip(handles, lbls):
+                if isinstance(handle, BarContainer):
+                    labels.append(label)
+        except:
+            pass
+    return labels
+
 def dump_raw_axes():
     raw_axes = []
-
-    # Try to find variable names for figures by inspecting globals
     fig_var_names = {}
     try:
         for var_name, var_value in list(globals().items()):
@@ -70,13 +90,9 @@ def dump_raw_axes():
 
     for fig_num in plt.get_fignums():
         fig = plt.figure(fig_num)
-
-        # Try to get custom chart ID from various sources
         fig_label = fig.get_label() or None
         saved_filename = getattr(fig, '_jetflow_chart_id', None)
         var_name = fig_var_names.get(fig_num)
-
-        # Extract LLM-attached metadata
         subtitle = getattr(fig, 'subtitle', None)
         data_source = getattr(fig, 'data_source', None)
         citations = getattr(fig, 'citations', [])
@@ -85,15 +101,12 @@ def dump_raw_axes():
             shared_x_ids = [id(other) for other in fig.get_axes() if other != ax and ax.get_shared_x_axes().joined(ax, other)]
             axis_data = {
                 'fig_num': fig_num, 'ax_idx': ax_idx, 'ax_id': id(ax),
-                'fig_label': fig_label,
-                'saved_filename': saved_filename,
-                'var_name': var_name,
-                'subtitle': subtitle,
-                'data_source': data_source,
-                'citations': citations,
+                'fig_label': fig_label, 'saved_filename': saved_filename, 'var_name': var_name,
+                'subtitle': subtitle, 'data_source': data_source, 'citations': citations,
                 'title': ax.get_title() or None, 'xlabel': ax.get_xlabel() or None, 'ylabel': ax.get_ylabel() or None,
                 'xscale': ax.get_xscale(), 'yscale': ax.get_yscale(), 'shared_x_ids': shared_x_ids,
                 'lines': [], 'patches': [], 'collections': [],
+                'bar_labels': get_bar_labels(ax),
                 'xtick_labels': [t.get_text() for t in ax.get_xticklabels()]
             }
             for line in ax.get_lines():
@@ -104,13 +117,16 @@ def dump_raw_axes():
                     'label': line.get_label()
                 })
             for patch in ax.patches:
-                axis_data['patches'].append({'x': patch.get_x(), 'width': patch.get_width(), 'height': patch.get_height()})
+                axis_data['patches'].append({
+                    'x': patch.get_x(), 'y': patch.get_y(),
+                    'width': patch.get_width(), 'height': patch.get_height()
+                })
             for coll in ax.collections:
                 offsets = coll.get_offsets()
                 if len(offsets) > 0:
                     axis_data['collections'].append({
                         'x': offsets[:, 0].tolist() if hasattr(offsets[:, 0], 'tolist') else list(offsets[:, 0]),
-                        'y': offsets[:, 1].tolist() if hasattr(offsets[:, 1], 'tolist') else list(offsets[:, 1])
+                        'y': offsets[:, 1].tolist() if hasattr(offsets[:, 0], 'tolist') else list(offsets[:, 1])
                     })
             raw_axes.append(axis_data)
     return raw_axes
@@ -126,12 +142,12 @@ class E2BChartExtractor:
     """Extracts chart data from E2B sandbox matplotlib figures."""
 
     def __init__(self, executor):
-        self.executor = executor
+        self._executor = executor
 
     def get_figure_hashes(self) -> Dict[str, str]:
         """Get hash fingerprints of all current matplotlib figures."""
         try:
-            result = self.executor.run_code(FIGURE_HASH_CODE)
+            result = self._executor.run_code(_FIGURE_HASH_CODE)
             if result.logs and result.logs.stdout:
                 output = "\n".join(result.logs.stdout).strip()
                 return json.loads(output)
@@ -142,14 +158,10 @@ class E2BChartExtractor:
     def get_new_figures(self, pre_hashes: Dict[str, str]) -> Set[str]:
         """Get figure numbers that are new or modified since pre_hashes."""
         post_hashes = self.get_figure_hashes()
-        new_or_modified = set()
-
-        for fig_num, post_hash in post_hashes.items():
-            pre_hash = pre_hashes.get(fig_num)
-            if pre_hash is None or pre_hash != post_hash:
-                new_or_modified.add(fig_num)
-
-        return new_or_modified
+        return {
+            fig_num for fig_num, post_hash in post_hashes.items()
+            if pre_hashes.get(fig_num) != post_hash
+        }
 
     def close_figures(self, fig_nums: Set[str]) -> None:
         """Close specified figures."""
@@ -157,7 +169,7 @@ class E2BChartExtractor:
             return
         try:
             code = f"import matplotlib.pyplot as plt\nfor n in [{','.join(fig_nums)}]:\n    try: plt.close(n)\n    except: pass"
-            self.executor.run_code(code)
+            self._executor.run_code(code)
         except:
             pass
 
@@ -174,22 +186,18 @@ class E2BChartExtractor:
                 return []
 
         axis_groups = group_axes_by_twins(raw_axes)
-        charts = [process_axis_group_to_chart(group) for group in axis_groups]
-        return [c for c in charts if c]
+        return [c for c in (process_axis_group_to_chart(g) for g in axis_groups) if c]
 
     def _fetch_raw_axes(self) -> List[Dict[str, Any]]:
         """Execute extraction code in E2B and return raw axis data."""
         try:
-            result = self.executor.run_code(RAW_DATA_EXTRACTION)
+            result = self._executor.run_code(_RAW_DATA_EXTRACTION)
             if not result.logs or not result.logs.stdout:
                 return []
-
             output = "\n".join(result.logs.stdout).strip()
             data = json.loads(output)
-
             if isinstance(data, dict) and 'error' in data:
                 return []
-
             return data if isinstance(data, list) else []
         except:
             return []
