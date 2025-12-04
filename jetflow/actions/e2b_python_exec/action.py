@@ -40,13 +40,17 @@ class E2BPythonExec:
         self.sandbox.run_code("import matplotlib\nmatplotlib.use('Agg')")
 
         # Inject savefig tracking to capture chart IDs and close tracking to extract before close
+        # Guard against re-injection on persistent sandbox resume
         tracking_code = """
 import matplotlib.pyplot as plt
 import os
 import json
 
-_original_savefig = plt.Figure.savefig
-_original_close = plt.close
+if not hasattr(plt, '_jetflow_tracking_installed'):
+    _original_savefig = plt.Figure.savefig
+    _original_close = plt.close
+    plt._jetflow_tracking_installed = True
+
 _jetflow_pending_charts = []
 
 def _tracked_savefig(self, fname, *args, **kwargs):
@@ -127,8 +131,12 @@ def _tracked_close(fig=None):
             _jetflow_pending_charts.extend(_extract_figure_data(plt.figure(fig_num)))
     return _original_close(fig)
 
-plt.Figure.savefig = _tracked_savefig
-plt.close = _tracked_close
+if not hasattr(plt.Figure, '_jetflow_savefig_patched'):
+    plt.Figure.savefig = _tracked_savefig
+    plt.Figure._jetflow_savefig_patched = True
+if not hasattr(plt, '_jetflow_close_patched'):
+    plt.close = _tracked_close
+    plt._jetflow_close_patched = True
 """
         self.sandbox.run_code(tracking_code)
 

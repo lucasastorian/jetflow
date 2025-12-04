@@ -492,6 +492,53 @@ ax.set_title('Chart 1 (Updated)')  # Changed title
         assert chart.series[0].y == [10, 25, 15, 30]  # New data
 
 
+class TestPersistentSandboxRestart:
+    """Tests for persistent sandbox that survives multiple start/stop cycles."""
+
+    def test_no_recursion_on_sandbox_resume(self):
+        """Ensure tracking code doesn't cause recursion when sandbox is resumed."""
+        # Simulate persistent sandbox with multiple __start__ calls
+        exec_instance = E2BPythonExec(persistent=True, session_id="test-recursion-guard")
+
+        # First start
+        exec_instance.__start__()
+
+        # First chart
+        code1 = """
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+ax.plot([1, 2, 3], [10, 20, 30], label='Data')
+ax.set_title('Chart 1')
+plt.savefig('chart1.png')
+"""
+        result1 = exec_instance(PythonExec(code=code1))
+        assert 'charts' in result1.metadata
+        assert len(result1.metadata['charts']) == 1
+
+        # Simulate sandbox resume - call __start__ again (this was causing recursion)
+        exec_instance._started = False  # Simulate stopped state
+        exec_instance.__start__()  # Re-start - should NOT cause recursion
+
+        # Second chart after resume - should work without RecursionError
+        code2 = """
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+ax.bar(['A', 'B', 'C'], [5, 10, 15], label='Revenue')
+ax.set_title('Chart 2')
+plt.savefig('chart2.png')
+"""
+        result2 = exec_instance(PythonExec(code=code2))
+
+        # If we get here without RecursionError, test passes
+        assert 'charts' in result2.metadata
+        assert len(result2.metadata['charts']) == 1
+        chart = Chart(**result2.metadata['charts'][0])
+        assert chart.chart_id == 'chart2'
+        assert chart.type == 'bar'
+
+        exec_instance.stop()
+
+
 class TestSeabornChartExtraction:
     """Tests for seaborn chart extraction edge cases."""
 
