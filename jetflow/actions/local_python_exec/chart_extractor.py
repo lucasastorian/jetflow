@@ -78,7 +78,8 @@ class LocalChartExtractor:
             'patches': self._extract_patches(ax),
             'collections': self._extract_collections(ax),
             'bar_labels': self._extract_bar_labels(ax),
-            'xtick_labels': [t.get_text() for t in ax.get_xticklabels()]
+            'xtick_labels': [t.get_text() for t in ax.get_xticklabels()],
+            'ytick_labels': [t.get_text() for t in ax.get_yticklabels()]
         }
 
     def _extract_lines(self, ax) -> List[Dict]:

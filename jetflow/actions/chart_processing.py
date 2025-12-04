@@ -135,6 +135,19 @@ def _extract_bar_series(ax: Dict, axis_idx: int, series_count: int) -> List['Cha
 
     bar_labels = ax.get('bar_labels', [])
     parsed = _parse_patches(patches)
+
+    # Detect horizontal vs vertical bars
+    is_horizontal = _is_horizontal_bar(parsed)
+
+    if is_horizontal:
+        # For horizontal bars: group by y_center, value is width, labels from yticks
+        y_groups = _group_by_y_center(parsed)
+        y_positions = sorted(y_groups.keys())
+        ytick_labels = ax.get('ytick_labels', [])
+        non_empty_labels = [l for l in ytick_labels if l.strip()] if ytick_labels else []
+        return _build_horizontal_bar_series(y_groups, y_positions, non_empty_labels, bar_labels, ax, series_count, axis_idx, ChartSeries)
+
+    # Vertical bars: original logic
     x_groups = _group_by_x_center(parsed)
     x_positions = sorted(x_groups.keys())
 
@@ -175,6 +188,52 @@ def _group_by_x_center(patches: List[Dict]) -> Dict[float, List[Dict]]:
     for p in patches:
         groups.setdefault(p['x_center'], []).append(p)
     return groups
+
+
+def _group_by_y_center(patches: List[Dict]) -> Dict[float, List[Dict]]:
+    """Group patches by their y-center position (for horizontal bars)."""
+    groups: Dict[float, List[Dict]] = {}
+    for p in patches:
+        y_center = round(p['bottom'] + p['height'] / 2, 6)
+        groups.setdefault(y_center, []).append(p)
+    return groups
+
+
+def _is_horizontal_bar(parsed: List[Dict]) -> bool:
+    """Detect if bars are horizontal (barh) vs vertical (bar).
+
+    Horizontal bars: all have x=0 (or same x), width varies (the value), height is constant (bar thickness)
+    Vertical bars: x varies (positions), width is constant (bar thickness), height varies (the value)
+    """
+    if not parsed:
+        return False
+
+    # Check if all bars start at x=0 (common for horizontal bars)
+    x_values = [p['x'] for p in parsed]
+    heights = [p['height'] for p in parsed]
+    widths = [p['width'] for p in parsed]
+
+    # If all x values are the same (typically 0) and heights are similar but widths vary -> horizontal
+    x_variance = max(x_values) - min(x_values) if x_values else 0
+    height_variance = max(heights) - min(heights) if heights else 0
+    width_variance = max(widths) - min(widths) if widths else 0
+
+    # Horizontal bars: x is constant (0), height is constant (bar thickness ~0.8), width varies (values)
+    # Vertical bars: x varies (positions), width is constant (bar thickness), height varies (values)
+    if x_variance < 0.01 and height_variance < 0.01 and width_variance > 0.1:
+        return True
+
+    return False
+
+
+def _build_horizontal_bar_series(y_groups, y_positions, non_empty_labels, bar_labels, ax, series_count, axis_idx, ChartSeries):
+    """Build series for horizontal bar charts (barh)."""
+    # For simple horizontal bars: one bar per y-position, value is width
+    y_values = non_empty_labels[:len(y_positions)] if non_empty_labels else y_positions
+    x_data = [y_groups[y][0]['width'] for y in y_positions]  # width is the value
+
+    label = bar_labels[0] if bar_labels else (ax.get('xlabel') or f'series-{series_count + 1}')
+    return [ChartSeries(type='bar', label=label, x=list(y_values), y=x_data, axis=axis_idx)]
 
 
 def _detect_bar_type(x_groups: Dict, x_positions: List, bar_labels: List, parsed: List, num_categories: int) -> str:

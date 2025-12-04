@@ -668,6 +668,37 @@ print('Done')
         assert chart2.type == 'line'
         assert len(chart2.series) == 4
 
+    def test_horizontal_bar_chart(self, executor):
+        """Extract horizontal bar chart (barh) with correct values."""
+        code = """
+import matplotlib.pyplot as plt
+
+categories = ['OpenAI', 'Azure AI', 'M365 Copilot', 'GitHub Copilot', 'Internal R&D']
+values = [30, 25, 20, 12, 10]
+
+fig, ax = plt.subplots()
+ax.barh(categories, values, alpha=0.8)
+ax.set_xlabel('Estimated % of Capacity Demand')
+ax.set_title('Demand Drivers')
+ax.axvline(x=0, color='black', linewidth=2)
+
+plt.savefig('demand_drivers.png')
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        assert len(result.metadata['charts']) == 1
+
+        chart = Chart(**result.metadata['charts'][0])
+        assert chart.title == 'Demand Drivers'
+        assert chart.type == 'bar'
+        assert len(chart.series) == 1
+
+        # X values should be the category labels (from yticks for horizontal bars)
+        assert chart.series[0].x == ['OpenAI', 'Azure AI', 'M365 Copilot', 'GitHub Copilot', 'Internal R&D']
+        # Y values should be the actual data values (width of bars)
+        assert chart.series[0].y == [30, 25, 20, 12, 10]
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v', '-s'])
