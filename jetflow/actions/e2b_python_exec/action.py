@@ -49,6 +49,7 @@ import json
 if not hasattr(plt, '_jetflow_tracking_installed'):
     _original_savefig = plt.Figure.savefig
     _original_close = plt.close
+    _original_show = plt.show
     plt._jetflow_tracking_installed = True
 
 _jetflow_pending_charts = []
@@ -131,12 +132,31 @@ def _tracked_close(fig=None):
             _jetflow_pending_charts.extend(_extract_figure_data(plt.figure(fig_num)))
     return _original_close(fig)
 
+def _tracked_show(*args, **kwargs):
+    global _jetflow_pending_charts
+    # Extract all open figures before show, then close them
+    # (prevents duplicates when figures aren't auto-closed by backend)
+    figs_to_close = list(plt.get_fignums())
+    for fig_num in figs_to_close:
+        _jetflow_pending_charts.extend(_extract_figure_data(plt.figure(fig_num)))
+    result = _original_show(*args, **kwargs)
+    # Close figures after show to prevent duplicate extraction
+    for fig_num in figs_to_close:
+        try:
+            _original_close(fig_num)
+        except:
+            pass
+    return result
+
 if not hasattr(plt.Figure, '_jetflow_savefig_patched'):
     plt.Figure.savefig = _tracked_savefig
     plt.Figure._jetflow_savefig_patched = True
 if not hasattr(plt, '_jetflow_close_patched'):
     plt.close = _tracked_close
     plt._jetflow_close_patched = True
+if not hasattr(plt, '_jetflow_show_patched'):
+    plt.show = _tracked_show
+    plt._jetflow_show_patched = True
 """
         self.sandbox.run_code(tracking_code)
 

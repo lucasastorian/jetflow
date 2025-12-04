@@ -590,6 +590,84 @@ plt.savefig('margin_trend.png')
         assert chart.series[0].x == ['Q1 2024', 'Q2 2024', 'Q3 2024', 'Q1 2025', 'Q2 2025', 'Q3 2025']
         assert chart.series[0].y == [18.5, 18.5, 20.1, 16.2, 17.2, 17.0]
 
+    def test_charts_with_plt_show(self, executor):
+        """Extract multiple charts when plt.show() is used instead of savefig."""
+        code = """
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+# Set style
+sns.set_style('whitegrid')
+
+# Data
+data = {
+    'Period': ['H1 2023', 'H1 2024', 'H1 2025'],
+    'North America': [16.872, 17.616, 16.589],
+    'EAME': [6.951, 5.849, 5.686],
+    'Asia/Pacific': [6.176, 5.745, 5.372],
+    'Latin America': [3.181, 3.278, 3.171]
+}
+
+df = pd.DataFrame(data)
+regions = ['North America', 'EAME', 'Asia/Pacific', 'Latin America']
+
+# Create stacked bar chart
+fig, ax = plt.subplots()
+
+colors = ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D']
+bottom = np.zeros(3)
+for i, region in enumerate(regions):
+    values = df[region].values
+    ax.bar(df['Period'], values, bottom=bottom, label=region, color=colors[i])
+    bottom += values
+
+ax.set_ylabel('Revenue ($ Billions)')
+ax.set_xlabel('Period')
+ax.set_title('Revenue by Region')
+ax.legend()
+
+plt.tight_layout()
+plt.show()
+
+# Create trend line chart
+fig2, ax2 = plt.subplots()
+
+for i, region in enumerate(regions):
+    ax2.plot(df['Period'], df[region], marker='o', label=region, color=colors[i])
+
+ax2.set_ylabel('Revenue ($ Billions)')
+ax2.set_xlabel('Period')
+ax2.set_title('Revenue Trends')
+ax2.legend()
+
+plt.tight_layout()
+plt.show()
+
+print('Done')
+"""
+        result = executor(PythonExec(code=code))
+
+        # Should extract 2 charts even though plt.show() was used
+        assert 'charts' in result.metadata
+        assert len(result.metadata['charts']) == 2
+
+        # Chart 1 - stacked bar
+        chart1 = Chart(**result.metadata['charts'][0])
+        assert chart1.title == 'Revenue by Region'
+        assert chart1.type == 'bar'
+        assert len(chart1.series) == 4
+        labels = [s.label for s in chart1.series]
+        assert 'North America' in labels
+        assert 'EAME' in labels
+
+        # Chart 2 - line chart
+        chart2 = Chart(**result.metadata['charts'][1])
+        assert chart2.title == 'Revenue Trends'
+        assert chart2.type == 'line'
+        assert len(chart2.series) == 4
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v', '-s'])
