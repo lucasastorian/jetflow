@@ -107,7 +107,8 @@ def dump_raw_axes():
                 'xscale': ax.get_xscale(), 'yscale': ax.get_yscale(), 'shared_x_ids': shared_x_ids,
                 'lines': [], 'patches': [], 'collections': [],
                 'bar_labels': get_bar_labels(ax),
-                'xtick_labels': [t.get_text() for t in ax.get_xticklabels()]
+                'xtick_labels': [t.get_text() for t in ax.get_xticklabels()],
+                'ytick_labels': [t.get_text() for t in ax.get_yticklabels()]
             }
             for line in ax.get_lines():
                 xdata, ydata = line.get_xdata(), line.get_ydata()
