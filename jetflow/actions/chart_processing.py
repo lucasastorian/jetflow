@@ -102,8 +102,11 @@ def _extract_series_from_axis(ax: Dict, axis_idx: int, series_count: int) -> Lis
 
     series = []
 
-    for line_data in ax.get('lines', []):
-        label = _generate_label(line_data.get('label'), ax.get('ylabel'), len(ax.get('lines', [])), series_count + len(series))
+    # Filter out axhline/axvline (constant horizontal/vertical lines used for reference)
+    data_lines = [l for l in ax.get('lines', []) if not _is_reference_line(l)]
+
+    for line_data in data_lines:
+        label = _generate_label(line_data.get('label'), ax.get('ylabel'), len(data_lines), series_count + len(series))
         series.append(ChartSeries(type='line', label=label, x=line_data['x'], y=line_data['y'], axis=axis_idx))
 
     if ax.get('patches'):
@@ -206,7 +209,12 @@ def _build_stacked_series(x_groups, x_positions, non_empty_labels, bar_labels, s
 
 def _build_grouped_series(parsed, bar_labels, non_empty_labels, axis_idx, ChartSeries):
     bars_per_series = len(parsed) // len(bar_labels)
-    x_values = non_empty_labels[:bars_per_series] if non_empty_labels else list(range(bars_per_series))
+
+    # Use xtick labels if we have enough of them, otherwise generate indices
+    if len(non_empty_labels) >= bars_per_series:
+        x_values = non_empty_labels[:bars_per_series]
+    else:
+        x_values = list(range(bars_per_series))
 
     series = []
     for idx, label in enumerate(bar_labels):
@@ -222,6 +230,21 @@ def _build_simple_series(x_groups, x_positions, non_empty_labels, bar_labels, ax
     y_data = [x_groups[x][0]['height'] for x in x_positions]
     label = bar_labels[0] if bar_labels else (ax.get('ylabel') or f'series-{series_count + 1}')
     return [ChartSeries(type='bar', label=label, x=list(x_values), y=y_data, axis=axis_idx)]
+
+
+def _is_reference_line(line_data: Dict) -> bool:
+    """Check if a line is a reference line (axhline/axvline) rather than data."""
+    x, y = line_data.get('x', []), line_data.get('y', [])
+    if len(x) < 2 or len(y) < 2:
+        return False
+    # axhline: all y values are the same (horizontal line)
+    # axvline: all x values are the same (vertical line)
+    # These typically span the full axis range with just 2 points
+    if len(set(y)) == 1 and len(x) == 2:
+        return True
+    if len(set(x)) == 1 and len(y) == 2:
+        return True
+    return False
 
 
 def _generate_label(artist_label: str, ylabel: str, num_artists: int, series_count: int) -> str:

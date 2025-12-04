@@ -294,6 +294,59 @@ axes[1].set_title('Projected Growth')
         assert chart2.title == 'Projected Growth'
         assert len(chart2.series[0].y) == 6  # All 6 data points
 
+    def test_grouped_bar_with_axhline(self, executor):
+        """Extract grouped bar chart with axhline reference line"""
+        code = """
+import matplotlib.pyplot as plt
+import numpy as np
+
+quarters = ['Q1 2024', 'Q2 2024', 'Q3 2024', 'Q1 2025', 'Q2 2025', 'Q3 2025']
+foa_income = [17.664, 19.114, 21.778, 19.891, 21.55, 24.968]
+rl_loss = [-3.846, -4.488, -4.428, -4.336, -5.11, -4.428]
+total = [f + r for f, r in zip(foa_income, rl_loss)]
+
+fig, ax = plt.subplots(figsize=(12, 6))
+x = np.arange(len(quarters))
+width = 0.25
+
+ax.bar(x - width, foa_income, width, label='Family of Apps', color='#4267B2')
+ax.bar(x, rl_loss, width, label='Reality Labs', color='#FF6B35')
+ax.bar(x + width, total, width, label='Total', color='#00A86B')
+
+ax.set_xlabel('Quarter')
+ax.set_ylabel('Operating Income ($B)')
+ax.set_title('Segment Profitability')
+ax.set_xticks(x)
+ax.set_xticklabels(quarters)
+ax.legend()
+ax.axhline(y=0, color='black', linestyle='-', linewidth=0.8)
+ax.grid(axis='y', alpha=0.3)
+
+plt.savefig('segment_profitability.png')
+plt.close()
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        assert len(result.metadata['charts']) == 1
+
+        chart = Chart(**result.metadata['charts'][0])
+        assert chart.chart_id == 'segment_profitability'
+        assert chart.title == 'Segment Profitability'
+        assert chart.type == 'bar'  # Should NOT be 'mixed' - axhline should be filtered
+
+        # Should have 3 bar series, not 4 (no spurious line from axhline)
+        assert len(chart.series) == 3
+        labels = [s.label for s in chart.series]
+        assert 'Family of Apps' in labels
+        assert 'Reality Labs' in labels
+        assert 'Total' in labels
+
+        # Each series should have 6 data points (all quarters)
+        for s in chart.series:
+            assert len(s.y) == 6, f"Series {s.label} has {len(s.y)} points, expected 6"
+            assert len(s.x) == 6, f"Series {s.label} has {len(s.x)} x values, expected 6"
+
     def test_charts_with_plt_close(self, executor):
         """Extract charts even when plt.close() is called immediately after creation"""
         code = """
