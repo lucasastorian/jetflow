@@ -103,5 +103,5 @@ class E2BPythonExecWithSteps(BaseE2BPythonExec):
         lines = [f"📝 **Analysis steps** ({len(steps)}):"]
         for i, step in enumerate(steps):
             citation_id = citation_start + i
-            lines.append(f"  <{citation_id}> {step}")
+            lines.append(f"  {step} <{citation_id}>")
         return "\n".join(lines)
