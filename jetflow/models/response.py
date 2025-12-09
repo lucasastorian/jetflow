@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Response types for agent and action execution"""
 
 from dataclasses import dataclass
@@ -14,7 +16,7 @@ if TYPE_CHECKING:
 @dataclass
 class ActionFollowUp:
     """Follow-up actions to execute after an action completes"""
-    actions: List['BaseAction']
+    actions: List[BaseAction]
     force: bool  # If True, execute immediately (vertical). If False, available next iteration (horizontal)
 
 
@@ -33,7 +35,7 @@ class StepResult:
 @dataclass
 class ActionResponse:
     """Response from an action execution"""
-    message: 'Message'
+    message: Message
     follow_up: Optional[ActionFollowUp] = None
     summary: str = None  # Optional summary for logging (from ActionResult.summary)
     result: dict = None  # Structured result for UI rendering (from ActionResult.metadata)
@@ -43,7 +45,7 @@ class ActionResponse:
 class ActionResult:
     """User-facing return type for actions (alternative to returning string)"""
     content: str
-    follow_up_actions: List['BaseAction'] = None
+    follow_up_actions: List[BaseAction] = None
     force_follow_up: bool = False
     metadata: dict = None
     summary: str = None
@@ -54,8 +56,8 @@ class ActionResult:
 @dataclass
 class AgentResponse:
     """Response from agent execution"""
-    messages: List['Message']
-    usage: 'Usage'
+    messages: List[Message]
+    usage: Usage
     duration: float
     iterations: int
     success: bool
@@ -72,8 +74,8 @@ class AgentResponse:
 class ChainResponse:
     """Response from chain execution"""
     content: str
-    messages: List['Message']
-    usage: 'Usage'
+    messages: List[Message]
+    usage: Usage
     duration: float
     success: bool
 

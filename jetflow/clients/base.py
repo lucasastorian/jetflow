@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Base client interface for LLM providers"""
 
 from abc import ABC, abstractmethod
@@ -24,17 +26,17 @@ class BaseClient(ABC):
     @abstractmethod
     def complete(
         self,
-        messages: List['Message'],
+        messages: List[Message],
         system_prompt: str,
-        actions: List['BaseAction'],
-        allowed_actions: List['BaseAction'] = None,
+        actions: List[BaseAction],
+        allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         tool_choice: ToolChoice = "auto",
-        logger: Optional['VerboseLogger'] = None,
+        logger: Optional[VerboseLogger] = None,
         stream: bool = False,
         enable_caching: bool = False,
         context_cache_index: Optional[int] = None,
-    ) -> List['Message']:
+    ) -> List[Message]:
         """Non-streaming completion - single HTTP request/response.
 
         Returns list to support multi-message responses (e.g., web searches in OpenAI).
@@ -53,17 +55,17 @@ class BaseClient(ABC):
     @abstractmethod
     def stream(
         self,
-        messages: List['Message'],
+        messages: List[Message],
         system_prompt: str,
-        actions: List['BaseAction'],
-        allowed_actions: List['BaseAction'] = None,
+        actions: List[BaseAction],
+        allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         tool_choice: ToolChoice = "auto",
-        logger: Optional['VerboseLogger'] = None,
+        logger: Optional[VerboseLogger] = None,
         stream: bool = True,
         enable_caching: bool = False,
         context_cache_index: Optional[int] = None,
-    ) -> Iterator['StreamEvent']:
+    ) -> Iterator[StreamEvent]:
         """Streaming completion - yields events in real-time (sync).
 
         Args:
@@ -107,17 +109,17 @@ class AsyncBaseClient(ABC):
     @abstractmethod
     async def complete(
         self,
-        messages: List['Message'],
+        messages: List[Message],
         system_prompt: str,
-        actions: List['BaseAction'],
-        allowed_actions: List['BaseAction'] = None,
+        actions: List[BaseAction],
+        allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         tool_choice: ToolChoice = "auto",
-        logger: Optional['VerboseLogger'] = None,
+        logger: Optional[VerboseLogger] = None,
         stream: bool = False,
         enable_caching: bool = False,
         context_cache_index: Optional[int] = None,
-    ) -> List['Message']:
+    ) -> List[Message]:
         """Non-streaming completion - single HTTP request/response (async).
 
         Returns list to support multi-message responses (e.g., web searches in OpenAI).
@@ -136,17 +138,17 @@ class AsyncBaseClient(ABC):
     @abstractmethod
     async def stream(
         self,
-        messages: List['Message'],
+        messages: List[Message],
         system_prompt: str,
-        actions: List['BaseAction'],
-        allowed_actions: List['BaseAction'] = None,
+        actions: List[BaseAction],
+        allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         tool_choice: ToolChoice = "auto",
-        logger: Optional['VerboseLogger'] = None,
+        logger: Optional[VerboseLogger] = None,
         stream: bool = True,
         enable_caching: bool = False,
         context_cache_index: Optional[int] = None,
-    ) -> AsyncIterator['StreamEvent']:
+    ) -> AsyncIterator[StreamEvent]:
         """Streaming completion - yields events in real-time (async).
 
         Args:

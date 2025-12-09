@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Action decorator and base action implementations"""
 
 from abc import ABC, abstractmethod
@@ -8,7 +10,6 @@ if TYPE_CHECKING:
     from jetflow.models.message import Action, Message
     from jetflow.models.response import ActionResponse
 
-# Type variables for the decorator
 F = TypeVar('F', bound=Callable)
 C = TypeVar('C', bound=Type)
 
@@ -26,7 +27,6 @@ class ActionSchemaMixin:
     def openai_schema(self) -> dict:
         schema = self.schema.model_json_schema()
 
-        # Use custom tool format if enabled (for raw string inputs)
         if self._use_custom:
             return {
                 "type": "custom",
@@ -34,7 +34,6 @@ class ActionSchemaMixin:
                 "description": schema.get("description", "")
             }
 
-        # Standard function call format
         return {
             "type": "function",
             "name": self.name,
@@ -81,7 +80,7 @@ class BaseAction(ActionSchemaMixin, ABC):
     """Base class for sync actions"""
 
     @abstractmethod
-    def __call__(self, action: 'Action', state: 'AgentState' = None, citation_start: int = 1) -> 'ActionResponse':
+    def __call__(self, action: Action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
         raise NotImplementedError
 
 
@@ -89,7 +88,7 @@ class AsyncBaseAction(ActionSchemaMixin, ABC):
     """Base class for async actions"""
 
     @abstractmethod
-    async def __call__(self, action: 'Action', state: 'AgentState' = None, citation_start: int = 1) -> 'ActionResponse':
+    async def __call__(self, action: Action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
         raise NotImplementedError
 
 
@@ -98,14 +97,12 @@ def _validate_custom_field(schema: type[BaseModel], custom_field: str):
     schema_fields = schema.model_json_schema().get("properties", {})
     required_fields = schema.model_json_schema().get("required", [])
 
-    # Check that custom_field exists in schema
     if custom_field not in schema_fields:
         raise ValueError(
             f"custom_field '{custom_field}' not found in schema. "
             f"Available fields: {list(schema_fields.keys())}"
         )
 
-    # Check that schema has exactly one required field
     if len(required_fields) != 1 or required_fields[0] != custom_field:
         raise ValueError(
             f"custom_field only works with single-field Pydantic models. "
@@ -113,7 +110,6 @@ def _validate_custom_field(schema: type[BaseModel], custom_field: str):
             f"Ensure the schema has exactly one required field matching custom_field."
         )
 
-    # Check that the field is a string type
     field_def = schema_fields[custom_field]
     field_type = field_def.get("type")
     if field_type != "string":
@@ -130,12 +126,14 @@ def action(
     custom_field: str = None
 ) -> Callable[[F], Type[BaseAction]]: ...
 
+
 @overload
 def action(
     schema: type[BaseModel],
     exit: bool = False,
     custom_field: str = None
 ) -> Callable[[C], Type[BaseAction]]: ...
+
 
 def action(
     schema: type[BaseModel],
@@ -170,22 +168,17 @@ def action(
         _wrap_async_function_action, _wrap_async_class_action
     )
 
-    # Validate custom_field configuration
     if custom_field is not None:
         _validate_custom_field(schema, custom_field)
 
     def decorator(target: Union[F, C]) -> Type[Union[BaseAction, AsyncBaseAction]]:
-        # Determine if target is sync or async
         if isinstance(target, type):
-            # Class-based action: check if __call__ is async
             is_async = asyncio.iscoroutinefunction(target.__call__)
             wrapper = _wrap_async_class_action(target, schema, exit) if is_async else _wrap_class_action(target, schema, exit)
         else:
-            # Function-based action: check if function is async
             is_async = asyncio.iscoroutinefunction(target)
             wrapper = _wrap_async_function_action(target, schema, exit) if is_async else _wrap_function_action(target, schema, exit)
 
-        # Set custom tool properties
         wrapper._use_custom = (custom_field is not None)
         wrapper._custom_field = custom_field
         return wrapper

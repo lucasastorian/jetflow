@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Sync citation middleware for LLM clients"""
 
 from typing import List, Iterator, Optional, Type, TYPE_CHECKING
@@ -50,13 +52,13 @@ class SyncCitationMiddleware(BaseClient):
 
     def stream(
         self,
-        messages: List['Message'],
+        messages: List[Message],
         system_prompt: str,
-        actions: List['BaseAction'],
-        allowed_actions: List['BaseAction'] = None,
+        actions: List[BaseAction],
+        allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         require_action: bool = False,
-        logger: Optional['BaseLogger'] = None,
+        logger: Optional[BaseLogger] = None,
         stream: bool = True,
         enable_caching: bool = False,
         context_cache_index: Optional[int] = None,
@@ -95,17 +97,17 @@ class SyncCitationMiddleware(BaseClient):
 
     def complete(
         self,
-        messages: List['Message'],
+        messages: List[Message],
         system_prompt: str,
-        actions: List['BaseAction'],
-        allowed_actions: List['BaseAction'] = None,
+        actions: List[BaseAction],
+        allowed_actions: List[BaseAction] = None,
         enable_web_search: bool = False,
         require_action: bool = False,
-        logger: Optional['BaseLogger'] = None,
+        logger: Optional[BaseLogger] = None,
         stream: bool = False,
         enable_caching: bool = True,
         context_cache_index: Optional[int] = None,
-    ) -> List['Message']:
+    ) -> List[Message]:
         """Pass through to wrapped client"""
         # Translate user-facing require_action to internal tool_choice
         tool_choice = _translate_require_action(require_action)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Streaming event types for real-time agent execution"""
 
 from dataclasses import dataclass
@@ -83,10 +85,10 @@ class ActionExecutionStart:
 class ActionExecuted:
     """Action execution completes with result"""
     action_id: str  # ID of the action that was executed
-    action: 'Action' = None  # The mutated action object with .result and .sources populated
+    action: Action = None  # The mutated action object with .result and .sources populated
     message: Message = None  # The tool response message (role="tool")
     summary: str = None  # Optional summary for display/logging
-    follow_up: 'ActionFollowUp' = None  # Follow-up actions from this execution
+    follow_up: ActionFollowUp = None  # Follow-up actions from this execution
     is_exit: bool = False  # Whether this was an exit action
 
 

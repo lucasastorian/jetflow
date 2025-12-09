@@ -19,6 +19,7 @@ from jetflow.models.events import (
 )
 from jetflow.models.response import AgentResponse, ActionResponse, ActionResult, ActionFollowUp, StepResult
 from jetflow.models.chart import Chart, ChartSeries
+from jetflow.models.citations import CodeExecutionCitation
 
 __all__ = [
     # Message types
@@ -50,4 +51,6 @@ __all__ = [
     # Chart types
     'Chart',
     'ChartSeries',
+    # Citation types
+    'CodeExecutionCitation',
 ]

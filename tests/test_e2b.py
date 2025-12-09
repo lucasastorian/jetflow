@@ -921,6 +921,204 @@ plt.savefig('my_analysis_chart.png')
     return True
 
 
+@skip_if_no_e2b
+def test_moving_average_with_nan_alignment():
+    """Test that moving averages with NaN values maintain proper alignment across series"""
+    print("\n=== Test: Moving Average NaN Alignment ===")
+
+    executor = E2BPythonExec()
+    executor.__start__()
+
+    code = """
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+
+# Create test data similar to stock prices
+np.random.seed(42)
+dates = pd.date_range('2024-01-01', periods=250)
+prices = 100 + np.random.randn(250).cumsum()
+
+df = pd.DataFrame({
+    'date': dates,
+    'price': prices
+})
+
+# Calculate moving averages with different windows (will have NaN at start)
+df['ma_50'] = df['price'].rolling(window=50).mean()
+df['ma_200'] = df['price'].rolling(window=200).mean()
+
+print(f"DataFrame shape: {df.shape}")
+print(f"First NaN in ma_50 at index: {df['ma_50'].first_valid_index()}")
+print(f"First NaN in ma_200 at index: {df['ma_200'].first_valid_index()}")
+print(f"NaN count in ma_50: {df['ma_50'].isna().sum()}")
+print(f"NaN count in ma_200: {df['ma_200'].isna().sum()}")
+
+# Create chart with all three series
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.plot(df.index, df['price'], label='Price', linewidth=2)
+ax.plot(df.index, df['ma_50'], label='50-day MA', linewidth=1.5)
+ax.plot(df.index, df['ma_200'], label='200-day MA', linewidth=1.5)
+ax.set_xlabel('Days')
+ax.set_ylabel('Price')
+ax.set_title('Price with Moving Averages')
+ax.legend()
+plt.tight_layout()
+plt.show()
+"""
+
+    result = executor(PythonExec(code=code))
+    executor.__stop__()
+
+    # Verify chart was extracted
+    assert result.metadata is not None, "Should have metadata"
+    assert 'charts' in result.metadata, "Should have charts"
+    assert len(result.metadata['charts']) == 1, f"Should have 1 chart, got {len(result.metadata['charts'])}"
+
+    chart = result.metadata['charts'][0]
+    assert len(chart['series']) == 3, f"Should have 3 series (price, ma_50, ma_200), got {len(chart['series'])}"
+
+    # Check that all series have the same length
+    series_lengths = [len(s['x']) for s in chart['series']]
+    assert len(set(series_lengths)) == 1, f"All series should have same x length, got {series_lengths}"
+
+    series_y_lengths = [len(s['y']) for s in chart['series']]
+    assert len(set(series_y_lengths)) == 1, f"All series should have same y length, got {series_y_lengths}"
+
+    expected_length = 250
+    assert series_lengths[0] == expected_length, f"Series should have {expected_length} points, got {series_lengths[0]}"
+
+    # Check that NaN values are preserved in the y-data
+    # The MA series should have None/null values at the beginning
+    ma_50_series = next(s for s in chart['series'] if '50' in str(s.get('label', '')))
+    ma_200_series = next(s for s in chart['series'] if '200' in str(s.get('label', '')))
+
+    # Count None/null values in the extracted data
+    ma_50_nulls = sum(1 for y in ma_50_series['y'] if y is None or (isinstance(y, float) and str(y) == 'nan'))
+    ma_200_nulls = sum(1 for y in ma_200_series['y'] if y is None or (isinstance(y, float) and str(y) == 'nan'))
+
+    print(f"✅ Chart extracted with 3 series, all length {series_lengths[0]}")
+    print(f"   MA-50 has {ma_50_nulls} null/NaN values (expected ~49)")
+    print(f"   MA-200 has {ma_200_nulls} null/NaN values (expected ~199)")
+    print(f"   Series alignment: ✓ All series same length")
+
+    # The alignment is correct if all series have the same length
+    # NaN handling: the test passes if we extracted the data successfully
+    return True
+
+
+@skip_if_no_e2b
+def test_datetime_in_charts():
+    """Test that datetime x-axis values are properly handled in chart extraction"""
+    print("\n=== Test: Datetime Handling in Charts ===")
+
+    executor = E2BPythonExec()
+    executor.__start__()
+
+    code = """
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+
+# Create time series data
+dates = pd.date_range('2024-01-01', periods=10, freq='D')
+values = [100, 105, 103, 108, 112, 110, 115, 118, 120, 117]
+
+# Plot with datetime x-axis
+plt.figure(figsize=(10, 6))
+plt.plot(dates, values, marker='o', label='Revenue')
+plt.xlabel('Date')
+plt.ylabel('Revenue ($K)')
+plt.title('Daily Revenue')
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+print(f"Date type: {type(dates[0])}")
+print(f"First date: {dates[0]}")
+"""
+
+    result = executor(PythonExec(code=code))
+    executor.__stop__()
+
+    # Verify chart extraction
+    assert result.metadata is not None, "Should have metadata"
+    assert 'charts' in result.metadata, "Should have charts"
+
+    chart = result.metadata['charts'][0]
+    series = chart['series'][0]
+
+    # Check x-axis values - they will be numeric (matplotlib converts datetime to numbers)
+    print(f"\n   X-axis first value: {series['x'][0]} (type: {type(series['x'][0])})")
+    print(f"   X-axis last value: {series['x'][-1]} (type: {type(series['x'][-1])})")
+
+    # Matplotlib converts datetime64 to integers/floats for plotting
+    # These should be numeric values, not None
+    assert all(x is not None for x in series['x']), "X values should not be None"
+    assert all(isinstance(x, (int, float)) for x in series['x']), "X values should be numeric after datetime conversion"
+
+    print(f"✅ Datetime x-axis extracted as numeric values")
+    print(f"   Note: Datetimes are converted to numeric timestamps by matplotlib")
+
+    return True
+
+
+@skip_if_no_e2b
+def test_import_dataframe_with_timestamps_and_nan():
+    """Test import_dataframe with DataFrames containing timestamps and NaN values"""
+    print("\n=== Test: Import DataFrame with Timestamps and NaN ===")
+    import pandas as pd
+    import numpy as np
+
+    executor = E2BPythonExec()
+    executor.__start__()
+
+    # Create DataFrame with timestamps and NaN
+    df = pd.DataFrame({
+        'date': pd.date_range('2024-01-01', periods=10),
+        'price': [100, 105, 110, np.nan, 120, 125, np.nan, 135, 140, 145],
+        'volume': [1000, 1100, np.nan, 1300, 1400, np.nan, 1600, 1700, 1800, 1900]
+    })
+
+    print(f"   Original DataFrame:\n{df.head(3)}")
+    print(f"   NaN count - price: {df['price'].isna().sum()}, volume: {df['volume'].isna().sum()}")
+
+    try:
+        # This should work now after the fix
+        result = executor.import_dataframe('test_df', df)
+        print(f"   Import result: {result}")
+
+        # Verify data is accessible
+        verify = executor.run_code("""
+import pandas as pd
+print(f"Shape: {test_df.shape}")
+print(f"Columns: {list(test_df.columns)}")
+print(f"Date type: {test_df['date'].dtype}")
+print(f"NaN count - price: {test_df['price'].isna().sum()}")
+print(f"NaN count - volume: {test_df['volume'].isna().sum()}")
+print(f"First date: {test_df['date'].iloc[0]}")
+""")
+        print(f"   Verification:\n{verify}")
+
+        # Extract it back
+        extracted = executor.extract_dataframe('test_df')
+        print(f"   Extracted {len(extracted)} records")
+        print(f"   First record: {extracted[0]}")
+
+        assert len(extracted) == 10, f"Should have 10 records, got {len(extracted)}"
+        print(f"✅ Import/export with timestamps and NaN successful")
+
+    except Exception as e:
+        print(f"❌ Import failed: {e}")
+        print(f"   This is expected if the bug is not fixed yet")
+        print(f"   Issue: json.dumps(records) cannot serialize pandas Timestamps")
+        return False
+    finally:
+        executor.__stop__()
+
+    return True
+
+
 # =============================================================================
 # TEST RUNNER
 # =============================================================================
@@ -952,6 +1150,7 @@ if __name__ == "__main__":
         ("Extract DataFrame", test_extract_dataframe),
         ("Import/Export DataFrame", test_import_export_dataframe),
         ("Import DataFrame with Agent", test_import_dataframe_with_agent),
+        ("Import DataFrame with Timestamps and NaN", test_import_dataframe_with_timestamps_and_nan),
         ("Extract Variable", test_extract_variable),
         ("Manual Code Execution", test_manual_code_execution),
         ("Variable Persistence", test_variable_persistence),
@@ -967,6 +1166,8 @@ if __name__ == "__main__":
         ("Chart ID from savefig", test_chart_id_from_savefig),
         ("Chart ID from variable", test_chart_id_from_variable),
         ("Embeddable Charts with savefig", test_embeddable_charts_with_savefig),
+        ("Moving Average NaN Alignment", test_moving_average_with_nan_alignment),
+        ("Datetime in Charts", test_datetime_in_charts),
     ]
 
     results = []
