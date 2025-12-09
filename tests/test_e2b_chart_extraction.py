@@ -3,6 +3,9 @@
 Tests the full E2B action with chart extraction:
 - Line, bar, scatter, mixed charts
 - Twin-axis (dual y-axis) charts
+- Pie charts
+- Area charts
+- Styling extraction (color, linestyle, marker)
 - Incremental diffing (only extract new/modified)
 - Chart metadata in ActionResult
 
@@ -63,8 +66,8 @@ plt.title('Sales')
 
         assert chart.type == 'line'
         assert chart.title == 'Sales'
-        assert chart.x_label == 'Quarter'
-        assert chart.y_label == 'Revenue ($M)'
+        assert chart.x_axis.label == 'Quarter'
+        assert chart.y_axes[0].label == 'Revenue ($M)'
         assert len(chart.series) == 1
         assert chart.series[0].label == 'Revenue'
         assert chart.series[0].x == [1, 2, 3, 4]
@@ -111,6 +114,140 @@ plt.title('Scatter Plot')
         assert len(chart.series) == 1
         assert chart.series[0].type == 'scatter'
 
+    def test_scatter_with_regression_line(self, executor):
+        """Extract scatter plot with regression/trend line via E2B"""
+        code = """
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Sample data
+x = np.array([1, 2, 3, 4, 5, 6, 7, 8])
+y = np.array([2.1, 4.3, 5.8, 8.1, 9.5, 12.2, 13.8, 16.1])
+
+# Scatter points
+plt.figure(1)
+plt.scatter(x, y, color='blue', label='Data Points')
+
+# Regression line
+coeffs = np.polyfit(x, y, 1)
+trend_line = np.poly1d(coeffs)
+plt.plot(x, trend_line(x), color='red', linestyle='--', label='Trend Line')
+
+plt.xlabel('Marketing Spend ($M)')
+plt.ylabel('Revenue ($M)')
+plt.title('Revenue vs Marketing Spend')
+plt.legend()
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        chart = Chart(**result.metadata['charts'][0])
+
+        # Should be mixed (scatter + line)
+        assert chart.type == 'mixed'
+        assert chart.title == 'Revenue vs Marketing Spend'
+        assert len(chart.series) == 2
+
+        # Check series types
+        types = {s.type for s in chart.series}
+        assert 'scatter' in types
+        assert 'line' in types
+
+        # Check trend line label is preserved
+        labels = [s.label for s in chart.series]
+        assert 'Trend Line' in labels
+
+        # Trend line should have dashed style
+        trend_series = next(s for s in chart.series if s.type == 'line')
+        assert trend_series.style.line_style == 'dashed'
+        assert trend_series.style.color is not None
+
+    def test_chart_with_reference_lines_captured(self, executor):
+        """Verify axhline/axvline reference lines are captured separately"""
+        code = """
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots()
+
+# Actual data line
+ax.plot([1, 2, 3, 4], [10, 20, 15, 25], label='Revenue', color='blue')
+
+# Reference lines (should be captured as reference_lines, not series)
+ax.axhline(y=15, color='gray', linestyle='--', label='Target')  # Horizontal
+ax.axvline(x=2.5, color='red', linestyle=':', label='Cutoff')   # Vertical
+
+ax.set_title('Chart with Reference Lines')
+plt.savefig('ref_lines.png')
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        chart = Chart(**result.metadata['charts'][0])
+
+        # Should only have 1 series (data line), not 3
+        assert chart.type == 'line'
+        assert len(chart.series) == 1
+        assert chart.series[0].label == 'Revenue'
+
+        # Reference lines should be captured separately
+        assert len(chart.reference_lines) == 2
+
+        # Check horizontal reference line
+        h_lines = [r for r in chart.reference_lines if r.orientation == 'horizontal']
+        assert len(h_lines) == 1
+        assert h_lines[0].value == 15
+        assert h_lines[0].label == 'Target'
+        assert h_lines[0].style.line_style == 'dashed'
+
+        # Check vertical reference line
+        v_lines = [r for r in chart.reference_lines if r.orientation == 'vertical']
+        assert len(v_lines) == 1
+        assert v_lines[0].value == 2.5
+        assert v_lines[0].label == 'Cutoff'
+        assert v_lines[0].style.line_style == 'dotted'
+
+    def test_chart_with_tilted_annotation_line(self, executor):
+        """Verify tilted/angled lines are NOT filtered (they're data)"""
+        code = """
+import matplotlib.pyplot as plt
+import numpy as np
+
+fig, ax = plt.subplots()
+
+# Bar data
+quarters = ['Q1', 'Q2', 'Q3', 'Q4']
+revenue = [100, 120, 140, 160]
+ax.bar(range(4), revenue, label='Revenue')
+ax.set_xticks(range(4))
+ax.set_xticklabels(quarters)
+
+# Tilted trend line (NOT axhline/axvline - should be kept)
+x_trend = np.array([0, 3])
+y_trend = np.array([95, 170])  # Tilted line
+ax.plot(x_trend, y_trend, color='red', linestyle='--', linewidth=2, label='Growth Trend')
+
+ax.set_title('Revenue with Trend')
+plt.savefig('tilted_line.png')
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        chart = Chart(**result.metadata['charts'][0])
+
+        # Should be mixed (bar + line)
+        assert chart.type == 'mixed'
+        assert len(chart.series) == 2
+
+        # Check both series exist
+        types = {s.type for s in chart.series}
+        assert 'bar' in types
+        assert 'line' in types
+
+        # The tilted line should be present
+        line_series = next(s for s in chart.series if s.type == 'line')
+        assert line_series.label == 'Growth Trend'
+        assert line_series.style.line_style == 'dashed'
+
     def test_twin_axis_chart(self, executor):
         """Extract chart with dual y-axes (twinx) via E2B"""
         code = """
@@ -141,13 +278,18 @@ plt.title('Revenue & Margin')
         # Should be 1 chart with 2 series
         assert chart.type == 'line'
         assert chart.title == 'Revenue & Margin'
-        assert chart.y_label is None  # Multi-axis = no single y_label
+
+        # Check y_axes has both labels
+        assert len(chart.y_axes) == 2
+        assert chart.y_axes[0].label == 'Revenue ($M)'
+        assert chart.y_axes[1].label == 'Margin (%)'
+
         assert len(chart.series) == 2
 
         # Series on different axes
-        assert chart.series[0].axis == 0
+        assert chart.series[0].y_axis == 0
         assert chart.series[0].label == 'Revenue'
-        assert chart.series[1].axis == 1
+        assert chart.series[1].y_axis == 1
         assert chart.series[1].label == 'Margin %'
 
     def test_mixed_chart(self, executor):
@@ -221,6 +363,10 @@ ax.legend()
 
         # Check x-axis labels
         assert chart.series[0].x == ['Q1', 'Q2', 'Q3', 'Q4']
+
+        # Check stacking info
+        assert chart.series[0].stack_group == 'default'
+        assert chart.series[1].stack_group == 'default'
 
     def test_grouped_bar_chart_with_labels(self, executor):
         """Extract grouped bar chart with proper labels via E2B"""
@@ -407,6 +553,170 @@ print("All charts created and closed")
         labels = [s.label for s in chart3.series]
         assert 'Costs' in labels
         assert 'Profits' in labels
+
+
+class TestE2BChartStyling:
+    """Test styling extraction from charts"""
+
+    @pytest.fixture(scope="class")
+    def executor(self):
+        """Create E2B executor for testing"""
+        exec = E2BPythonExec()
+        exec.__start__()
+        yield exec
+        exec.__stop__()
+
+    def test_line_styling(self, executor):
+        """Extract line chart with styling info"""
+        code = """
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots()
+ax.plot([1, 2, 3, 4], [10, 20, 15, 25],
+        color='#FF5733', linestyle='--', linewidth=2,
+        marker='o', markersize=8, label='Revenue')
+ax.set_title('Styled Line Chart')
+plt.savefig('styled_line.png')
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        chart = Chart(**result.metadata['charts'][0])
+
+        assert chart.type == 'line'
+        assert len(chart.series) == 1
+
+        series = chart.series[0]
+        assert series.style.color is not None  # Should have color
+        assert series.style.line_style == 'dashed'
+        assert series.style.line_width == 2
+        assert series.style.marker == 'o'
+        assert series.style.marker_size == 8
+
+    def test_bar_color_extraction(self, executor):
+        """Extract bar chart with color info"""
+        code = """
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots()
+ax.bar(['A', 'B', 'C'], [10, 20, 15], color='#4267B2', alpha=0.8, label='Sales')
+ax.set_title('Colored Bar Chart')
+plt.savefig('colored_bar.png')
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        chart = Chart(**result.metadata['charts'][0])
+
+        assert chart.type == 'bar'
+        series = chart.series[0]
+        assert series.style.color is not None  # Should have color
+
+
+class TestE2BPieChart:
+    """Test pie chart extraction"""
+
+    @pytest.fixture(scope="class")
+    def executor(self):
+        """Create E2B executor for testing"""
+        exec = E2BPythonExec()
+        exec.__start__()
+        yield exec
+        exec.__stop__()
+
+    def test_simple_pie_chart(self, executor):
+        """Extract simple pie chart via E2B"""
+        code = """
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots()
+sizes = [30, 25, 20, 15, 10]
+labels = ['Product A', 'Product B', 'Product C', 'Product D', 'Product E']
+colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF']
+
+ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%')
+ax.set_title('Revenue by Product')
+plt.savefig('pie_chart.png')
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        chart = Chart(**result.metadata['charts'][0])
+
+        assert chart.type == 'pie'
+        assert chart.title == 'Revenue by Product'
+        assert chart.pie_data is not None
+        assert len(chart.pie_data) == 5
+
+        # Check slice labels
+        slice_labels = [s.label for s in chart.pie_data]
+        assert 'Product A' in slice_labels
+        assert 'Product B' in slice_labels
+
+        # Check values sum to ~1 (proportions)
+        total = sum(s.value for s in chart.pie_data)
+        assert 0.99 < total < 1.01
+
+    def test_exploded_pie_chart(self, executor):
+        """Extract pie chart with exploded slice"""
+        code = """
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots()
+sizes = [40, 30, 20, 10]
+labels = ['A', 'B', 'C', 'D']
+explode = (0.1, 0, 0, 0)  # Explode first slice
+
+ax.pie(sizes, labels=labels, explode=explode)
+ax.set_title('Exploded Pie')
+plt.savefig('exploded_pie.png')
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        chart = Chart(**result.metadata['charts'][0])
+
+        assert chart.type == 'pie'
+        assert chart.pie_data is not None
+
+        # First slice should have explode > 0
+        assert chart.pie_data[0].explode > 0
+
+
+class TestE2BAreaChart:
+    """Test area chart extraction"""
+
+    @pytest.fixture(scope="class")
+    def executor(self):
+        """Create E2B executor for testing"""
+        exec = E2BPythonExec()
+        exec.__start__()
+        yield exec
+        exec.__stop__()
+
+    def test_simple_area_chart(self, executor):
+        """Extract simple area chart (fill_between) via E2B"""
+        code = """
+import matplotlib.pyplot as plt
+import numpy as np
+
+fig, ax = plt.subplots()
+x = np.arange(0, 10, 0.5)
+y = np.sin(x)
+
+ax.fill_between(x, y, alpha=0.5, label='Area')
+ax.set_title('Area Chart')
+plt.savefig('area_chart.png')
+"""
+        result = executor(PythonExec(code=code))
+
+        assert 'charts' in result.metadata
+        chart = Chart(**result.metadata['charts'][0])
+
+        assert chart.type == 'area'
+        assert chart.title == 'Area Chart'
+        assert len(chart.series) >= 1
+        assert chart.series[0].type == 'area'
 
 
 class TestE2BIncrementalDiffing:
@@ -692,6 +1002,7 @@ plt.savefig('demand_drivers.png')
         chart = Chart(**result.metadata['charts'][0])
         assert chart.title == 'Demand Drivers'
         assert chart.type == 'bar'
+        assert chart.orientation == 'horizontal'
         assert len(chart.series) == 1
 
         # X values should be the category labels (from yticks for horizontal bars)

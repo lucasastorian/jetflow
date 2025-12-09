@@ -3,7 +3,8 @@
 import json
 from typing import List, Dict, Any, Set, TYPE_CHECKING
 
-from jetflow.actions.chart_processing import group_axes_by_twins, process_axis_group_to_chart
+from jetflow.actions.chart_utils import group_axes_by_twins
+from jetflow.actions.chart_processing import ChartProcessor
 
 if TYPE_CHECKING:
     from jetflow.models.chart import Chart
@@ -55,6 +56,30 @@ print(json.dumps(result))
 _RAW_DATA_EXTRACTION = """
 import json
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+
+def _color_to_hex(color):
+    try:
+        if color is None:
+            return None
+        if isinstance(color, str):
+            if color.startswith('#'):
+                return color
+            return mcolors.to_hex(color)
+        if hasattr(color, '__iter__') and len(color) >= 3:
+            return mcolors.to_hex(color[:3])
+    except:
+        pass
+    return None
+
+def _linestyle_to_name(ls):
+    mapping = {
+        '-': 'solid', 'solid': 'solid',
+        '--': 'dashed', 'dashed': 'dashed',
+        ':': 'dotted', 'dotted': 'dotted',
+        '-.': 'dashdot', 'dashdot': 'dashdot',
+    }
+    return mapping.get(ls, None)
 
 def get_bar_labels(ax):
     labels = []
@@ -77,6 +102,51 @@ def get_bar_labels(ax):
         except:
             pass
     return labels
+
+def extract_pie_data(ax):
+    from matplotlib.patches import Wedge
+    wedges = [p for p in ax.patches if isinstance(p, Wedge)]
+    if not wedges:
+        return None
+    texts = ax.texts
+    labels = [t.get_text() for t in texts if t.get_text().strip()]
+    slices = []
+    for i, wedge in enumerate(wedges):
+        theta1, theta2 = wedge.theta1, wedge.theta2
+        value = (theta2 - theta1) / 360.0
+        label = labels[i] if i < len(labels) else f'slice-{i+1}'
+        center = wedge.center
+        explode = (center[0]**2 + center[1]**2)**0.5 if center != (0, 0) else 0.0
+        slices.append({
+            'label': label,
+            'value': value,
+            'color': _color_to_hex(wedge.get_facecolor()),
+            'explode': round(explode, 4),
+        })
+    return slices
+
+def extract_area_data(ax):
+    from matplotlib.collections import PolyCollection
+    areas = []
+    for coll in ax.collections:
+        if isinstance(coll, PolyCollection):
+            paths = coll.get_paths()
+            if not paths:
+                continue
+            verts = paths[0].vertices
+            if len(verts) < 4:
+                continue
+            n = len(verts) // 2
+            x_vals = verts[:n, 0].tolist()
+            y_vals = verts[:n, 1].tolist()
+            areas.append({
+                'x': x_vals,
+                'y': y_vals,
+                'label': coll.get_label() if hasattr(coll, 'get_label') else None,
+                'color': _color_to_hex(coll.get_facecolor()[0]) if len(coll.get_facecolor()) > 0 else None,
+                'alpha': coll.get_alpha(),
+            })
+    return areas if areas else None
 
 def dump_raw_axes():
     raw_axes = []
@@ -106,29 +176,64 @@ def dump_raw_axes():
                 'title': ax.get_title() or None, 'xlabel': ax.get_xlabel() or None, 'ylabel': ax.get_ylabel() or None,
                 'xscale': ax.get_xscale(), 'yscale': ax.get_yscale(), 'shared_x_ids': shared_x_ids,
                 'lines': [], 'patches': [], 'collections': [],
+                'pie_slices': None, 'area_fills': None,
                 'bar_labels': get_bar_labels(ax),
                 'xtick_labels': [t.get_text() for t in ax.get_xticklabels()],
                 'ytick_labels': [t.get_text() for t in ax.get_yticklabels()]
             }
+
+            # Extract lines with styling
             for line in ax.get_lines():
                 xdata, ydata = line.get_xdata(), line.get_ydata()
                 axis_data['lines'].append({
                     'x': xdata.tolist() if hasattr(xdata, 'tolist') else list(xdata),
                     'y': ydata.tolist() if hasattr(ydata, 'tolist') else list(ydata),
-                    'label': line.get_label()
+                    'label': line.get_label(),
+                    'color': _color_to_hex(line.get_color()),
+                    'linestyle': _linestyle_to_name(line.get_linestyle()),
+                    'linewidth': line.get_linewidth(),
+                    'marker': line.get_marker() if line.get_marker() != 'None' else None,
+                    'markersize': line.get_markersize() if line.get_marker() != 'None' else None,
+                    'alpha': line.get_alpha(),
                 })
+
+            # Extract patches (bars) with styling - skip Wedges for pie
+            from matplotlib.patches import Wedge
             for patch in ax.patches:
-                axis_data['patches'].append({
-                    'x': patch.get_x(), 'y': patch.get_y(),
-                    'width': patch.get_width(), 'height': patch.get_height()
-                })
+                if not isinstance(patch, Wedge):
+                    axis_data['patches'].append({
+                        'x': patch.get_x(), 'y': patch.get_y(),
+                        'width': patch.get_width(), 'height': patch.get_height(),
+                        'color': _color_to_hex(patch.get_facecolor()),
+                        'alpha': patch.get_alpha(),
+                    })
+
+            # Extract collections (scatter) with styling - skip PolyCollections for area
+            from matplotlib.collections import PolyCollection
             for coll in ax.collections:
+                if isinstance(coll, PolyCollection):
+                    continue
                 offsets = coll.get_offsets()
                 if len(offsets) > 0:
+                    facecolors = coll.get_facecolors()
+                    color = _color_to_hex(facecolors[0]) if len(facecolors) > 0 else None
                     axis_data['collections'].append({
                         'x': offsets[:, 0].tolist() if hasattr(offsets[:, 0], 'tolist') else list(offsets[:, 0]),
-                        'y': offsets[:, 1].tolist() if hasattr(offsets[:, 0], 'tolist') else list(offsets[:, 1])
+                        'y': offsets[:, 1].tolist() if hasattr(offsets[:, 0], 'tolist') else list(offsets[:, 1]),
+                        'color': color,
+                        'alpha': coll.get_alpha(),
                     })
+
+            # Extract pie data
+            pie_data = extract_pie_data(ax)
+            if pie_data:
+                axis_data['pie_slices'] = pie_data
+
+            # Extract area data
+            area_data = extract_area_data(ax)
+            if area_data:
+                axis_data['area_fills'] = area_data
+
             raw_axes.append(axis_data)
     return raw_axes
 
@@ -187,7 +292,7 @@ class E2BChartExtractor:
                 return []
 
         axis_groups = group_axes_by_twins(raw_axes)
-        return [c for c in (process_axis_group_to_chart(g) for g in axis_groups) if c]
+        return [c for c in (ChartProcessor(g).process() for g in axis_groups) if c]
 
     def _fetch_raw_axes(self) -> List[Dict[str, Any]]:
         """Execute extraction code in E2B and return raw axis data."""

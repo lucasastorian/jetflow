@@ -3,7 +3,8 @@
 from typing import List, Set, Dict, Any
 import matplotlib.pyplot as plt
 
-from jetflow.actions.chart_processing import group_axes_by_twins, process_axis_group_to_chart
+from jetflow.actions.chart_utils import group_axes_by_twins
+from jetflow.actions.chart_processing import ChartProcessor
 
 
 class LocalChartExtractor:
@@ -19,7 +20,7 @@ class LocalChartExtractor:
             return []
 
         axis_groups = group_axes_by_twins(raw_axes)
-        return [c for c in (process_axis_group_to_chart(g) for g in axis_groups) if c]
+        return [c for c in (ChartProcessor(g).process() for g in axis_groups) if c]
 
     def _get_raw_axes(self, fig_nums: Set[str]) -> List[Dict[str, Any]]:
         raw_axes = []

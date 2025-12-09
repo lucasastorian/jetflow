@@ -93,7 +93,8 @@ def get_pending_charts_from_sandbox(sandbox) -> List:
     Returns:
         List of Chart objects
     """
-    from jetflow.actions.chart_processing import group_axes_by_twins, process_axis_group_to_chart
+    from jetflow.actions.chart_utils import group_axes_by_twins
+    from jetflow.actions.chart_processing import ChartProcessor
     import json
 
     try:
@@ -103,7 +104,7 @@ def get_pending_charts_from_sandbox(sandbox) -> List:
             raw_axes = json.loads("\n".join(r.logs.stdout).strip())
             if raw_axes:
                 axis_groups = group_axes_by_twins(raw_axes)
-                return [c for c in (process_axis_group_to_chart(g) for g in axis_groups) if c]
+                return [c for c in (ChartProcessor(g).process() for g in axis_groups) if c]
     except:
         pass
     return []
