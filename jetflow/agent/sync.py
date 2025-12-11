@@ -29,7 +29,7 @@ class Agent:
     def __init__(self, client: BaseClient, actions: List[Union[Type[BaseAction], BaseAction]] = None,
                  system_prompt: Union[str, Callable[[], str]] = "", max_iter: int = 20, require_action: bool = False,
                  logger: BaseLogger = None, verbose: bool = True, max_tokens_before_exit: int = 200000,
-                 context_config: ContextConfig = None):
+                 context_config: ContextConfig = None, force_exit_on_max_iter: bool = False):
         if max_iter < 1:
             raise ValueError("max_iter must be >= 1")
         validate_client(client, is_async=False)
@@ -40,6 +40,7 @@ class Agent:
         self.client = SyncCitationMiddleware(client)
 
         self.max_iter = max_iter
+        self.force_exit_on_max_iter = force_exit_on_max_iter
         self.require_action = require_action
         self.max_tokens_before_exit = max_tokens_before_exit
         self._system_prompt = system_prompt
@@ -86,7 +87,10 @@ class Agent:
 
                     follow_up_actions = result.follow_ups
 
-                return self._build_final_response(timer, success=False)
+                # max_iter reached without exit
+                if self.force_exit_on_max_iter:
+                    self.logger.log_warning(f"max_iter ({self.max_iter}) reached without exit action, forcing exit")
+                return self._build_final_response(timer, success=self.force_exit_on_max_iter)
         finally:
             # Call __stop__ hooks on all actions
             self._call_lifecycle_hooks('__stop__')
@@ -127,7 +131,10 @@ class Agent:
 
                     follow_up_actions = result.follow_ups
 
-                yield self._build_final_response(timer, success=False)
+                # max_iter reached without exit
+                if self.force_exit_on_max_iter:
+                    self.logger.log_warning(f"max_iter ({self.max_iter}) reached without exit action, forcing exit")
+                yield self._build_final_response(timer, success=self.force_exit_on_max_iter)
         finally:
             self._call_lifecycle_hooks('__stop__')
 
@@ -306,7 +313,8 @@ class Agent:
             if response.message.sources:
                 called_action.sources = response.message.sources
 
-            is_exit = bool(getattr(action_impl, '_is_exit', False))
+            # Only consider it an exit if action succeeded (no error)
+            is_exit = bool(getattr(action_impl, '_is_exit', False)) and not response.message.error
 
             yield ActionExecuted(
                 action_id=called_action.id,

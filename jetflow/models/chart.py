@@ -4,8 +4,21 @@ Focused on business/financial charts: line, bar, scatter, area, pie, mixed.
 """
 
 from typing import List, Dict, Optional, Literal, Any, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+import math
 import uuid
+
+
+def _sanitize_value(v: Any) -> Any:
+    """Convert NaN/Inf to None for JSON serialization."""
+    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+        return None
+    return v
+
+
+def _sanitize_list(values: List[Any]) -> List[Any]:
+    """Sanitize a list of values."""
+    return [_sanitize_value(v) for v in values]
 
 
 # ============ Type Literals ============
@@ -40,6 +53,11 @@ class SeriesStyle(BaseModel):
     marker_size: Optional[float] = None
     alpha: Optional[float] = None
 
+    @field_validator('line_width', 'marker_size', 'alpha', mode='before')
+    @classmethod
+    def sanitize_floats(cls, v):
+        return _sanitize_value(v)
+
 
 # ============ Data Series ============
 
@@ -54,6 +72,11 @@ class ChartSeries(BaseModel):
     style: SeriesStyle = Field(default_factory=SeriesStyle)
     stack_group: Optional[str] = None
 
+    @field_validator('x', 'y', mode='before')
+    @classmethod
+    def sanitize_data(cls, v):
+        return _sanitize_list(v) if v else []
+
 
 # ============ Pie Chart Data ============
 
@@ -63,6 +86,11 @@ class PieSlice(BaseModel):
     value: float
     color: Optional[str] = None
     explode: float = 0.0
+
+    @field_validator('value', 'explode', mode='before')
+    @classmethod
+    def sanitize_floats(cls, v):
+        return _sanitize_value(v)
 
 
 # ============ Histogram Data ============
@@ -74,6 +102,11 @@ class HistogramData(BaseModel):
     bin_edges: Optional[List[float]] = Field(None, description="Pre-computed bin edges")
     density: bool = Field(False, description="Whether histogram is normalized")
 
+    @field_validator('values', 'bin_edges', mode='before')
+    @classmethod
+    def sanitize_data(cls, v):
+        return _sanitize_list(v) if v else None
+
 
 # ============ Reference Lines ============
 
@@ -83,6 +116,11 @@ class ReferenceLine(BaseModel):
     value: Any  # x-value for vertical, y-value for horizontal
     label: Optional[str] = None
     style: SeriesStyle = Field(default_factory=SeriesStyle)
+
+    @field_validator('value', mode='before')
+    @classmethod
+    def sanitize_value(cls, v):
+        return _sanitize_value(v)
 
 
 # ============ Main Chart Model ============
