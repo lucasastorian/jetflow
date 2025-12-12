@@ -4,6 +4,7 @@ from typing import List, Literal
 from jetflow.action import BaseAction
 from jetflow.models.message import Message
 from jetflow.clients.base import ToolChoice
+from jetflow.utils.server_tools import extract_server_tools
 
 
 def supports_thinking(model: str) -> bool:
@@ -18,7 +19,6 @@ def build_response_params(
         messages: List[Message],
         actions: List[BaseAction],
         allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False,
         tool_choice: ToolChoice = "auto",
         temperature: float = 1.0,
         use_flex: bool = False,
@@ -41,18 +41,19 @@ def build_response_params(
         "stream": stream
     }
 
-    # Add flex processing tier if enabled
     if use_flex:
         params["service_tier"] = "flex"
 
-    # Only include reasoning for thinking models
     if supports_thinking(model):
         params["reasoning"] = {"effort": reasoning_effort, "summary": "auto"}
 
-    # Build tools list - only include if we have actions or web search
-    tools = [action.openai_schema for action in actions]
-    if enable_web_search:
-        tools.append({"type": "web_search"})
+    # Separate server-executed tools from regular actions
+    regular_actions, server_tools = extract_server_tools(actions)
+
+    # Build tools list
+    tools = [action.openai_schema for action in regular_actions]
+    for server_tool in server_tools:
+        tools.append(server_tool.openai_schema)
 
     # Only add tools and tool_choice if we have tools
     if tools:

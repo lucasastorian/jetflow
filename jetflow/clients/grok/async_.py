@@ -3,12 +3,14 @@
 import os
 import json
 from typing import Literal, List, AsyncIterator, Optional, Type
+from jiter import from_json
 from pydantic import BaseModel, ValidationError
 from jetflow.clients.openai.async_ import AsyncOpenAIClient
+from jetflow.clients.openai.utils import apply_usage_to_message
 from jetflow.clients.grok.utils import build_grok_params
 from jetflow.clients.base import ToolChoice
 from jetflow.action import BaseAction
-from jetflow.models.message import Message
+from jetflow.models.message import Message, ActionBlock, TextBlock, ThoughtBlock
 from jetflow.models.events import StreamEvent
 
 # Max retries for JSON extraction errors
@@ -53,62 +55,14 @@ class AsyncGrokClient(AsyncOpenAIClient):
             timeout=300.0,
         )
 
-    async def complete(
-        self,
-        messages: List[Message],
-        system_prompt: str,
-        actions: List[BaseAction],
-        allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False,
-        tool_choice: ToolChoice = "auto",
-        logger: 'VerboseLogger' = None,
-        stream: bool = False,
-        enable_caching: bool = False,
-        context_cache_index: Optional[int] = None,
-    ) -> List[Message]:
-        """Non-streaming completion - uses Grok-specific param builder"""
-        params = build_grok_params(
-            self.model,
-            system_prompt,
-            messages,
-            actions,
-            allowed_actions,
-            enable_web_search,
-            tool_choice,
-            self.temperature,
-            self.reasoning_effort,
-            stream=stream,
-        )
-
+    async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> List[Message]:
+        """Non-streaming completion"""
+        params = build_grok_params(self.model, system_prompt, messages, actions, allowed_actions, tool_choice, self.temperature, self.reasoning_effort, stream=False)
         return await self._complete_with_retry(params, actions, logger)
 
-    async def stream(
-        self,
-        messages: List[Message],
-        system_prompt: str,
-        actions: List[BaseAction],
-        allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False,
-        tool_choice: ToolChoice = "auto",
-        logger: 'VerboseLogger' = None,
-        stream: bool = True,
-        enable_caching: bool = False,
-        context_cache_index: Optional[int] = None,
-    ) -> AsyncIterator[StreamEvent]:
-        """Streaming completion - uses Grok-specific param builder"""
-        params = build_grok_params(
-            self.model,
-            system_prompt,
-            messages,
-            actions,
-            allowed_actions,
-            enable_web_search,
-            tool_choice,
-            self.temperature,
-            self.reasoning_effort,
-            stream=stream,
-        )
-
+    async def stream(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> AsyncIterator[StreamEvent]:
+        """Streaming completion - yields events"""
+        params = build_grok_params(self.model, system_prompt, messages, actions, allowed_actions, tool_choice, self.temperature, self.reasoning_effort, stream=True)
         async for event in self._stream_events_with_retry(params, actions, logger):
             yield event
 
@@ -176,3 +130,77 @@ class AsyncGrokClient(AsyncOpenAIClient):
 
         # All retries exhausted
         raise last_error
+
+    def _parse_non_streaming_response(self, response, actions: List[BaseAction], logger) -> List[Message]:
+        """Parse non-streaming response with Grok-specific web search handling.
+
+        Grok Live Search returns different action types (ActionSearch, ActionOpenPage, ActionExtract)
+        that don't all have a 'query' attribute like OpenAI's web search.
+        """
+        completion = Message(role="assistant", status="completed")
+        action_lookup = {action.name: action for action in actions}
+
+        for item in response.output:
+            if item.type == 'reasoning':
+                completion.blocks.append(ThoughtBlock(
+                    id=item.id,
+                    summaries=[summary.text for summary in item.summary],
+                    provider=self.provider
+                ))
+                if logger:
+                    for summary in completion.blocks[-1].summaries:
+                        logger.log_thought(summary)
+
+            elif item.type == 'function_call':
+                try:
+                    body = from_json(item.arguments.encode()) if item.arguments else {}
+                except Exception:
+                    body = {}
+                completion.blocks.append(ActionBlock(
+                    id=item.call_id,
+                    name=item.name,
+                    status=item.status,
+                    body=body,
+                    external_id=item.id
+                ))
+
+            elif item.type == 'custom_tool_call':
+                base_action = action_lookup.get(item.name)
+                field_name = base_action._custom_field if base_action else "input"
+                body = {field_name: item.input}
+                completion.blocks.append(ActionBlock(
+                    id=item.call_id,
+                    name=item.name,
+                    status=item.status,
+                    body=body,
+                    external_id=item.id
+                ))
+
+            elif item.type == 'web_search_call':
+                # Grok returns different action types: ActionSearch (query), ActionOpenPage (url), ActionExtract
+                body = {}
+                if hasattr(item.action, 'query'):
+                    body["query"] = item.action.query
+                if hasattr(item.action, 'url'):
+                    body["url"] = item.action.url
+                completion.blocks.append(ActionBlock(
+                    id=item.id,
+                    name="web_search",
+                    status="completed",
+                    body=body,
+                    server_executed=True
+                ))
+
+            elif item.type == 'message':
+                completion.external_id = item.id
+                text = ""
+                for content_item in item.content:
+                    text += content_item.text
+                completion.blocks.append(TextBlock(text=text))
+                if logger and text:
+                    logger.log_content(text)
+
+        if response.usage:
+            apply_usage_to_message(response.usage, completion)
+
+        return [completion]

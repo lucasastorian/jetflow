@@ -10,6 +10,7 @@ from jetflow.models import AgentResponse, ActionFollowUp
 from jetflow.utils.usage import Usage
 from jetflow.utils.pricing import calculate_cost
 from jetflow.utils.timer import Timer
+from jetflow.utils.server_tools import ServerExecutedTool
 
 try:
     import tiktoken
@@ -57,22 +58,26 @@ def prepare_and_validate_actions(
     """
     instances = [a() if isinstance(a, type) else a for a in actions]
 
+    # Separate server-executed tools (like WebSearch) from regular actions
+    # Server tools don't need sync/async validation - they're never executed locally
+    regular_actions = [a for a in instances if not isinstance(a, ServerExecutedTool)]
+
     if not is_async:
-        for action in instances:
+        for action in regular_actions:
             if isinstance(action, AsyncBaseAction):
                 raise TypeError(
                     f"Agent requires sync actions, got {type(action).__name__}. "
                     "Use @action with sync functions/classes, or use AsyncAgent for async actions."
                 )
 
-    if require_action and not instances:
+    if require_action and not regular_actions:
         raise ValueError(
-            "require_action=True requires at least one action. "
+            "require_action=True requires at least one action (excluding server-executed tools). "
             "Either provide actions or set require_action=False."
         )
 
     if require_action:
-        exit_actions = [a for a in instances if getattr(a, '_is_exit', False)]
+        exit_actions = [a for a in regular_actions if getattr(a, '_is_exit', False)]
         if not exit_actions:
             raise ValueError(
                 "require_action=True requires at least one exit action. "

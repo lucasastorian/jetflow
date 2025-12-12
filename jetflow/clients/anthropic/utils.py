@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any, Literal
 from jetflow.action import BaseAction
 from jetflow.models.message import Message
 from jetflow.clients.base import ToolChoice
+from jetflow.utils.server_tools import extract_server_tools
 
 
 BETAS = ["interleaved-thinking-2025-05-14", "effort-2025-11-24"]
@@ -162,7 +163,7 @@ def build_message_params(
     effort: Optional[Literal['low', 'medium', 'high']] = None,
     enable_caching: bool = False,
     cache_ttl: Literal['5m', '1h'] = '5m',
-    context_cache_index: Optional[int] = None
+    context_cache_index: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Build request parameters for Anthropic Messages API
 
@@ -176,6 +177,14 @@ def build_message_params(
     """
     formatted_messages = [message.anthropic_format() for message in messages]
 
+    # Separate server-executed tools from regular actions
+    regular_actions, server_tools = extract_server_tools(actions)
+
+    # Build tools list
+    tools = [action.anthropic_schema for action in regular_actions]
+    for server_tool in server_tools:
+        tools.append(server_tool.anthropic_schema)
+
     params = {
         "model": model,
         "temperature": temperature,
@@ -183,7 +192,7 @@ def build_message_params(
         "system": system_prompt,
         "messages": formatted_messages,
         "betas": BETAS,
-        "tools": [action.anthropic_schema for action in actions],
+        "tools": tools,
         "stream": stream
     }
 

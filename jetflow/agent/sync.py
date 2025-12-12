@@ -223,7 +223,6 @@ class Agent:
             allowed_actions=allowed_actions,
             require_action=self.require_action,
             logger=self.logger,
-            stream=False,
             enable_caching=self._should_enable_caching(),
             context_cache_index=self._cache_marker_index
         )
@@ -233,10 +232,13 @@ class Agent:
 
         main_completion = completions[-1]
 
-        if not main_completion.actions:
+        # Filter out server-executed actions (like web_search) - they're already complete
+        executable_actions = [a for a in main_completion.actions if not a.server_executed]
+
+        if not executable_actions:
             return handle_no_actions(self.require_action, self.messages, self.logger)
 
-        return self._consume_action_events(main_completion.actions, actions)
+        return self._consume_action_events(executable_actions, actions)
 
     def _step_streaming(self, actions: List[BaseAction], system_prompt: str,
                         allowed_actions: List[BaseAction] = None) -> Iterator[Union[StreamEvent, StepResult]]:
@@ -252,7 +254,6 @@ class Agent:
             allowed_actions=allowed_actions,
             require_action=self.require_action,
             logger=self.logger,
-            stream=True,
             enable_caching=self._should_enable_caching(),
             context_cache_index=self._cache_marker_index
         ):
@@ -265,13 +266,16 @@ class Agent:
 
         main_completion = completion_messages[-1]
 
-        if not main_completion.actions:
+        # Filter out server-executed actions (like web_search) - they're already complete
+        executable_actions = [a for a in main_completion.actions if not a.server_executed]
+
+        if not executable_actions:
             follow_ups = handle_no_actions(self.require_action, self.messages, self.logger)
             yield StepResult(is_exit=(follow_ups is None), follow_ups=follow_ups or [])
             return
 
         follow_ups = []
-        for event in self._execute_actions(main_completion.actions, actions):
+        for event in self._execute_actions(executable_actions, actions):
             yield event
             if isinstance(event, ActionExecuted):
                 if event.is_exit:
@@ -287,6 +291,10 @@ class Agent:
         state = AgentState(messages=self.messages, citations=dict(self.client.citations))
 
         for called_action in called_actions:
+            # Skip server-executed actions (like web_search) - they're already handled by the provider
+            if called_action.server_executed:
+                continue
+
             action_impl = find_action(called_action.name, actions)
             if not action_impl:
                 handle_action_not_found(called_action, self.actions, self.messages, self.logger)

@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from jetflow.action import BaseAction
-from jetflow.models.message import Message, Action, Thought, WebSearch
+from jetflow.models.message import Message, TextBlock, ThoughtBlock, ActionBlock
 from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
 from jetflow.clients.base import AsyncBaseClient, ToolChoice
 from jetflow.clients.openai.utils import build_response_params, apply_usage_to_message
@@ -40,66 +40,14 @@ class AsyncOpenAIClient(AsyncBaseClient):
             timeout=900.0 if use_flex else 300.0,
         )
 
-
-
-    async def complete(
-        self,
-        messages: List[Message],
-        system_prompt: str,
-        actions: List[BaseAction],
-        allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False,
-        tool_choice: ToolChoice = "auto",
-        logger: 'VerboseLogger' = None,
-        stream: bool = False,
-        enable_caching: bool = False,
-        context_cache_index: Optional[int] = None,
-    ) -> List[Message]:
-        """Non-streaming completion - single HTTP request/response. Returns list of Messages (multiple if web searches occur)."""
-        params = build_response_params(
-            self.model,
-            system_prompt,
-            messages,
-            actions,
-            allowed_actions,
-            enable_web_search,
-            tool_choice,
-            self.temperature,
-            self.use_flex,
-            self.reasoning_effort,
-            stream=stream,
-        )
-
+    async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> List[Message]:
+        """Non-streaming completion"""
+        params = build_response_params(self.model, system_prompt, messages, actions, allowed_actions, tool_choice, self.temperature, self.use_flex, self.reasoning_effort, stream=False)
         return await self._complete_with_retry(params, actions, logger)
 
-    async def stream(
-        self,
-        messages: List[Message],
-        system_prompt: str,
-        actions: List[BaseAction],
-        allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False,
-        tool_choice: ToolChoice = "auto",
-        logger: 'VerboseLogger' = None,
-        stream: bool = True,
-        enable_caching: bool = False,
-        context_cache_index: Optional[int] = None,
-    ) -> AsyncIterator[StreamEvent]:
-        """Streaming completion - yields events in real-time"""
-        params = build_response_params(
-            self.model,
-            system_prompt,
-            messages,
-            actions,
-            allowed_actions,
-            enable_web_search,
-            tool_choice,
-            self.temperature,
-            self.use_flex,
-            self.reasoning_effort,
-            stream=stream,
-        )
-
+    async def stream(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> AsyncIterator[StreamEvent]:
+        """Streaming completion - yields events"""
+        params = build_response_params(self.model, system_prompt, messages, actions, allowed_actions, tool_choice, self.temperature, self.use_flex, self.reasoning_effort, stream=True)
         async for event in self._stream_events_with_retry(params, actions, logger):
             yield event
 
@@ -121,16 +69,9 @@ class AsyncOpenAIClient(AsyncBaseClient):
             yield event
 
     async def _stream_completion_events(self, response: AsyncStream, actions: List[BaseAction], logger) -> AsyncIterator[StreamEvent]:
-        """Stream a chat completion and yield events"""
-        completion = Message(
-            role="assistant",
-            status="in_progress",
-            content="",
-            thoughts=[],
-            actions=[]
-        )
+        """Stream a chat completion and yield events - uses blocks for ordering"""
+        completion = Message(role="assistant", status="in_progress")
         tool_call_arguments = ""
-        current_web_search = None
 
         action_lookup = {action.name: action for action in actions}
 
@@ -147,63 +88,75 @@ class AsyncOpenAIClient(AsyncBaseClient):
             elif event.type == 'response.output_item.added':
 
                 if event.item.type == 'reasoning':
-                    thought = Thought(id=event.item.id, summaries=[], provider=self.provider)
-                    completion.thoughts.append(thought)
-                    yield ThoughtStart(id=thought.id)
+                    completion.blocks.append(ThoughtBlock(id=event.item.id, summaries=[], provider=self.provider))
+                    yield ThoughtStart(id=event.item.id)
 
                 elif event.item.type == 'function_call':
                     tool_call_arguments = ""
-                    action = Action(
+                    completion.blocks.append(ActionBlock(
                         id=event.item.call_id,
                         name=event.item.name,
                         status="streaming",
                         body={},
                         external_id=event.item.id
-                    )
-                    completion.actions.append(action)
-                    yield ActionStart(id=action.id, name=action.name)
+                    ))
+                    yield ActionStart(id=event.item.call_id, name=event.item.name)
 
                 elif event.item.type == 'custom_tool_call':
-                    tool_call_arguments = ""  # Reset buffer for custom tool input
-                    action = Action(
+                    tool_call_arguments = ""
+                    completion.blocks.append(ActionBlock(
                         id=event.item.call_id,
                         name=event.item.name,
-                        status="streaming",  # Will be updated as input streams
+                        status="streaming",
                         body={},
                         external_id=event.item.id
-                    )
-                    completion.actions.append(action)
-                    yield ActionStart(id=action.id, name=action.name)
+                    ))
+                    yield ActionStart(id=event.item.call_id, name=event.item.name)
 
                 elif event.item.type == 'message':
                     completion.external_id = event.item.id
+                    # Add a text block for the message content
+                    completion.blocks.append(TextBlock(text=""))
 
                 elif event.item.type == 'web_search_call':
-                    current_web_search = Message(
-                        role="assistant",
-                        status="completed",
-                        web_search=WebSearch(id=event.item.id, query="")
-                    )
+                    # Web search is a server-executed action
+                    completion.blocks.append(ActionBlock(
+                        id=event.item.id,
+                        name="web_search",
+                        status="streaming",
+                        body={},
+                        server_executed=True
+                    ))
 
             elif event.type == 'response.reasoning_summary_part.added':
-                completion.thoughts[-1].summaries.append("")
+                # Find the last thought block and add a new summary
+                for block in reversed(completion.blocks):
+                    if isinstance(block, ThoughtBlock):
+                        block.summaries.append("")
+                        break
 
             elif event.type == 'response.reasoning_summary_text.delta':
-                completion.thoughts[-1].summaries[-1] += event.delta
+                for block in reversed(completion.blocks):
+                    if isinstance(block, ThoughtBlock) and block.summaries:
+                        block.summaries[-1] += event.delta
+                        break
                 yield ThoughtDelta(
-                    id=completion.thoughts[-1].id,
+                    id=completion.blocks[-1].id if isinstance(completion.blocks[-1], ThoughtBlock) else "",
                     delta=event.delta
                 )
 
             elif event.type == 'response.reasoning_summary_text.done':
-                completion.thoughts[-1].summaries[-1] = event.text
-                yield ThoughtEnd(
-                    id=completion.thoughts[-1].id,
-                    thought=event.text
-                )
+                for block in reversed(completion.blocks):
+                    if isinstance(block, ThoughtBlock) and block.summaries:
+                        block.summaries[-1] = event.text
+                        yield ThoughtEnd(id=block.id, thought=event.text)
+                        break
 
             elif event.type == 'response.reasoning_summary_part.done':
-                completion.thoughts[-1].summaries[-1] = event.part.text
+                for block in reversed(completion.blocks):
+                    if isinstance(block, ThoughtBlock) and block.summaries:
+                        block.summaries[-1] = event.part.text
+                        break
 
             elif event.type == 'response.function_call_arguments.delta':
                 tool_call_arguments += event.delta
@@ -216,48 +169,48 @@ class AsyncOpenAIClient(AsyncBaseClient):
                     if type(body_json) is not dict:
                         continue
 
-                    completion.actions[-1].body = body_json
-                    yield ActionDelta(
-                        id=completion.actions[-1].id,
-                        name=completion.actions[-1].name,
-                        body=body_json
-                    )
+                    for block in reversed(completion.blocks):
+                        if isinstance(block, ActionBlock) and not block.server_executed:
+                            block.body = body_json
+                            yield ActionDelta(id=block.id, name=block.name, body=body_json)
+                            break
 
                 except ValueError:
                     continue
 
             elif event.type == 'response.function_call_arguments.done':
-                completion.actions[-1].status = 'parsed'
-                yield ActionEnd(
-                    id=completion.actions[-1].id,
-                    name=completion.actions[-1].name,
-                    body=completion.actions[-1].body
-                )
+                for block in reversed(completion.blocks):
+                    if isinstance(block, ActionBlock) and block.status == 'streaming' and not block.server_executed:
+                        block.status = 'parsed'
+                        yield ActionEnd(id=block.id, name=block.name, body=block.body)
+                        break
 
             elif event.type == 'response.custom_tool_call_input.delta':
                 tool_call_arguments += event.delta
-                base_action = action_lookup.get(completion.actions[-1].name)
-                field_name = base_action._custom_field if base_action else "input"
-                completion.actions[-1].body = {field_name: tool_call_arguments}
-                yield ActionDelta(
-                    id=completion.actions[-1].id,
-                    name=completion.actions[-1].name,
-                    body=completion.actions[-1].body
-                )
+                for block in reversed(completion.blocks):
+                    if isinstance(block, ActionBlock) and not block.server_executed:
+                        base_action = action_lookup.get(block.name)
+                        field_name = base_action._custom_field if base_action else "input"
+                        block.body = {field_name: tool_call_arguments}
+                        yield ActionDelta(id=block.id, name=block.name, body=block.body)
+                        break
 
             elif event.type == 'response.custom_tool_call_input.done':
-                completion.actions[-1].status = 'parsed'
-                base_action = action_lookup.get(completion.actions[-1].name)
-                field_name = base_action._custom_field if base_action else "input"
-                completion.actions[-1].body = {field_name: event.input}
-                yield ActionEnd(
-                    id=completion.actions[-1].id,
-                    name=completion.actions[-1].name,
-                    body=completion.actions[-1].body
-                )
+                for block in reversed(completion.blocks):
+                    if isinstance(block, ActionBlock) and block.status == 'streaming' and not block.server_executed:
+                        base_action = action_lookup.get(block.name)
+                        field_name = base_action._custom_field if base_action else "input"
+                        block.body = {field_name: event.input}
+                        block.status = 'parsed'
+                        yield ActionEnd(id=block.id, name=block.name, body=block.body)
+                        break
 
             elif event.type == 'response.output_text.delta':
-                completion.content += event.delta
+                # Update the last text block
+                for block in reversed(completion.blocks):
+                    if isinstance(block, TextBlock):
+                        block.text += event.delta
+                        break
                 if logger:
                     logger.log_content_delta(event.delta)
                 yield ContentDelta(delta=event.delta)
@@ -276,40 +229,46 @@ class AsyncOpenAIClient(AsyncBaseClient):
                     except Exception:
                         body = {}
 
-                    # Find or create the action
-                    action = None
-                    for a in completion.actions:
-                        if a.id == event.item.call_id:
-                            action = a
+                    # Find the action block and update it
+                    for block in completion.blocks:
+                        if isinstance(block, ActionBlock) and block.id == event.item.call_id:
+                            block.body = body
+                            if block.status == 'streaming':
+                                block.status = 'parsed'
+                                yield ActionEnd(id=block.id, name=block.name, body=body)
                             break
-
-                    if action is None:
+                    else:
                         # Action wasn't created by output_item.added - create it now
-                        action = Action(
+                        action_block = ActionBlock(
                             id=event.item.call_id,
                             name=event.item.name,
-                            status="streaming",
-                            body={},
+                            status="parsed",
+                            body=body,
                             external_id=event.item.id if hasattr(event.item, 'id') else None
                         )
-                        completion.actions.append(action)
-                        yield ActionStart(id=action.id, name=action.name)
-
-                    # Always update with final body and emit ActionEnd
-                    action.body = body
-                    action.status = 'parsed'
-                    yield ActionEnd(id=action.id, name=action.name, body=body)
+                        completion.blocks.append(action_block)
+                        yield ActionStart(id=action_block.id, name=action_block.name)
+                        yield ActionEnd(id=action_block.id, name=action_block.name, body=body)
 
                 elif event.item.type == 'web_search_call':
-                    current_web_search.web_search.query = event.item.action.query
-                    yield MessageEnd(message=current_web_search)
-                    current_web_search = None
+                    # Update the web search action block with action details
+                    for block in completion.blocks:
+                        if isinstance(block, ActionBlock) and block.id == event.item.id and block.server_executed:
+                            # Handle different web search action types
+                            action = event.item.action
+                            if hasattr(action, 'query'):
+                                block.body = {"query": action.query}
+                            elif hasattr(action, 'url'):
+                                block.body = {"url": action.url}
+                            else:
+                                block.body = {"type": type(action).__name__}
+                            block.status = 'parsed'
+                            break
 
             elif event.type == 'response.completed':
                 apply_usage_to_message(event.response.usage, completion)
 
         completion.status = 'completed'
-
         yield MessageEnd(message=completion)
 
     @retry(
@@ -333,23 +292,12 @@ class AsyncOpenAIClient(AsyncBaseClient):
         return await self._stream_completion(stream, actions, logger)
 
     async def _stream_completion(self, response: AsyncStream, actions: List[BaseAction], logger) -> List[Message]:
-        """Stream a chat completion and return list of Messages (main message + web searches)"""
-        messages = []
+        """Stream a chat completion and return final Message"""
         completion = None
-
         async for event in self._stream_completion_events(response, actions, logger):
             if isinstance(event, MessageEnd):
-                if event.message.web_search:
-                    messages.append(event.message)
-                else:
-                    completion = event.message
-
-        if not messages:
-            return [completion] if completion else []
-
-        if completion:
-            messages.append(completion)
-        return messages
+                completion = event.message
+        return [completion] if completion else []
 
     @retry(
         stop=stop_after_attempt(3),
@@ -372,30 +320,22 @@ class AsyncOpenAIClient(AsyncBaseClient):
         return self._parse_non_streaming_response(response, actions, logger)
 
     def _parse_non_streaming_response(self, response, actions: List[BaseAction], logger) -> List[Message]:
-        """Parse a non-streaming response into Message objects"""
-        completion = Message(
-            role="assistant",
-            status="completed",
-            content="",
-            thoughts=[],
-            actions=[]
-        )
-        messages = []
+        """Parse a non-streaming response into a Message with blocks"""
+        completion = Message(role="assistant", status="completed")
 
         action_lookup = {action.name: action for action in actions}
 
         for item in response.output:
 
             if item.type == 'reasoning':
-                thought = Thought(
+                completion.blocks.append(ThoughtBlock(
                     id=item.id,
                     summaries=[summary.text for summary in item.summary],
                     provider=self.provider
-                )
-                completion.thoughts.append(thought)
+                ))
 
-                if logger and thought.summaries:
-                    for summary in thought.summaries:
+                if logger:
+                    for summary in completion.blocks[-1].summaries:
                         logger.log_thought(summary)
 
             elif item.type == 'function_call':
@@ -404,53 +344,50 @@ class AsyncOpenAIClient(AsyncBaseClient):
                 except Exception:
                     body = {}
 
-                action = Action(
+                completion.blocks.append(ActionBlock(
                     id=item.call_id,
                     name=item.name,
                     status=item.status,
                     body=body,
                     external_id=item.id
-                )
-                completion.actions.append(action)
+                ))
 
             elif item.type == 'custom_tool_call':
                 base_action = action_lookup.get(item.name)
                 field_name = base_action._custom_field if base_action else "input"
                 body = {field_name: item.input}
 
-                action = Action(
+                completion.blocks.append(ActionBlock(
                     id=item.call_id,
                     name=item.name,
                     status=item.status,
                     body=body,
                     external_id=item.id
-                )
-                completion.actions.append(action)
+                ))
 
             elif item.type == 'web_search_call':
-                web_search_msg = Message(
-                    role="assistant",
+                completion.blocks.append(ActionBlock(
+                    id=item.id,
+                    name="web_search",
                     status="completed",
-                    web_search=WebSearch(id=item.id, query=item.action.query)
-                )
-                messages.append(web_search_msg)
+                    body={"query": item.action.query},
+                    server_executed=True
+                ))
 
             elif item.type == 'message':
                 completion.external_id = item.id
+                text = ""
                 for content_item in item.content:
-                    completion.content += content_item.text
+                    text += content_item.text
+                completion.blocks.append(TextBlock(text=text))
 
-                if logger and completion.content:
-                    logger.log_content(completion.content)
+                if logger and text:
+                    logger.log_content(text)
 
         if response.usage:
             apply_usage_to_message(response.usage, completion)
 
-        if not messages:
-            return [completion]
-
-        messages.append(completion)
-        return messages
+        return [completion]
 
     async def extract(
         self,

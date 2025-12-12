@@ -8,7 +8,9 @@ to avoid triggering dependency checks. Import them directly:
 """
 
 from jetflow.actions.plan import create_plan
+from jetflow.actions.web_search import WebSearch
 
 __all__ = [
     "create_plan",
+    "WebSearch",
 ]

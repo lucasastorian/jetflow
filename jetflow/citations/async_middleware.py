@@ -50,38 +50,13 @@ class AsyncCitationMiddleware(AsyncBaseClient):
     def reset(self):
         return self._state.reset()
 
-    async def stream(
-        self,
-        messages: List[Message],
-        system_prompt: str,
-        actions: List[BaseAction],
-        allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False,
-        require_action: bool = False,
-        logger: Optional[BaseLogger] = None,
-        stream: bool = True,
-        enable_caching: bool = False,
-        context_cache_index: Optional[int] = None,
-    ) -> AsyncIterator[StreamEvent]:
+    async def stream(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, require_action: bool = False, logger: Optional[BaseLogger] = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> AsyncIterator[StreamEvent]:
         """Stream events with citation detection"""
         self._state.reset_stream_state()
         content_buffer = ""
-
-        # Translate user-facing require_action to internal tool_choice
         tool_choice = _translate_require_action(require_action)
 
-        async for event in self.client.stream(  # type: ignore[misc]
-            messages=messages,
-            system_prompt=system_prompt,
-            actions=actions,
-            allowed_actions=allowed_actions,
-            enable_web_search=enable_web_search,
-            tool_choice=tool_choice,
-            logger=logger,
-            stream=stream,
-            enable_caching=enable_caching,
-            context_cache_index=context_cache_index
-        ):
+        async for event in self.client.stream(messages=messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions, tool_choice=tool_choice, logger=logger, enable_caching=enable_caching, context_cache_index=context_cache_index):
             if isinstance(event, ContentDelta):
                 content_buffer += event.delta
                 new_citations = self._state.check_new_citations(content_buffer)
@@ -95,35 +70,10 @@ class AsyncCitationMiddleware(AsyncBaseClient):
 
             yield event
 
-    async def complete(
-        self,
-        messages: List[Message],
-        system_prompt: str,
-        actions: List[BaseAction],
-        allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False,
-        require_action: bool = False,
-        logger: Optional[BaseLogger] = None,
-        stream: bool = False,
-        enable_caching: bool = True,
-        context_cache_index: Optional[int] = None,
-    ) -> List[Message]:
+    async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, require_action: bool = False, logger: Optional[BaseLogger] = None, enable_caching: bool = True, context_cache_index: Optional[int] = None) -> List[Message]:
         """Pass through to wrapped client"""
-        # Translate user-facing require_action to internal tool_choice
         tool_choice = _translate_require_action(require_action)
-
-        return await self.client.complete(
-            messages=messages,
-            system_prompt=system_prompt,
-            actions=actions,
-            allowed_actions=allowed_actions,
-            enable_web_search=enable_web_search,
-            tool_choice=tool_choice,
-            logger=logger,
-            enable_caching=enable_caching,
-            stream=stream,
-            context_cache_index=context_cache_index
-        )
+        return await self.client.complete(messages=messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions, tool_choice=tool_choice, logger=logger, enable_caching=enable_caching, context_cache_index=context_cache_index)
 
     async def extract(
         self,

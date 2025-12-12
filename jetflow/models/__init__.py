@@ -1,6 +1,9 @@
 """Data models for Jetflow"""
 
-from jetflow.models.message import Message, Action, Thought, WebSearch
+from jetflow.models.message import (
+    Message, Action, Thought,
+    ContentBlock, TextBlock, ThoughtBlock, ActionBlock, WebSearchResultBlock
+)
 from jetflow.models.events import (
     StreamEvent,
     MessageStart,
@@ -26,7 +29,12 @@ __all__ = [
     'Message',
     'Action',
     'Thought',
-    'WebSearch',
+    # Content block types
+    'ContentBlock',
+    'TextBlock',
+    'ThoughtBlock',
+    'ActionBlock',
+    'WebSearchResultBlock',
     # Stream events
     'StreamEvent',
     'MessageStart',

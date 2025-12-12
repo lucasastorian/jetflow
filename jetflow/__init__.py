@@ -9,6 +9,7 @@ from jetflow.agent import Agent, AsyncAgent
 from jetflow.agent.state import AgentState
 from jetflow.agent.context import ContextConfig
 from jetflow.action import action
+from jetflow.actions.web_search import WebSearch
 from jetflow.models import (
     Message, Action, Thought,
     AgentResponse, ActionResult,
@@ -56,6 +57,7 @@ __all__ = [
     "Extract",
     "AsyncExtract",
     "action",
+    "WebSearch",
     "Message",
     "Action",
     "Thought",

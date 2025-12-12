@@ -6,6 +6,7 @@ from typing import List
 from jetflow.action import BaseAction
 from jetflow.models.message import Message
 from jetflow.clients.base import ToolChoice
+from jetflow.utils.server_tools import extract_server_tools
 
 # Dummy signature for cross-provider compatibility (non-Gemini thoughts)
 # See: https://ai.google.dev/gemini-api/docs/thinking#thought-signatures
@@ -34,9 +35,28 @@ def build_gemini_config(
     tools = None
     tool_config = None
 
-    if actions:
-        func_declarations = [action_to_function(a) for a in actions]
-        tools = [types.Tool(function_declarations=func_declarations)]
+    # Separate server-executed tools from regular actions
+    regular_actions, server_tools = extract_server_tools(actions)
+
+    # Build tools list
+    tools_list = []
+
+    # Add function declarations for regular actions
+    if regular_actions:
+        func_declarations = [action_to_function(a) for a in regular_actions]
+        tools_list.append(types.Tool(function_declarations=func_declarations))
+
+    # Add server tools (like google_search for WebSearch)
+    for server_tool in server_tools:
+        schema = getattr(server_tool, 'gemini_schema', None)
+        if schema:
+            # Handle google_search tool
+            if 'google_search' in schema:
+                tools_list.append(types.Tool(google_search=types.GoogleSearch()))
+
+    tools = tools_list if tools_list else None
+
+    if regular_actions:
 
         # Configure function calling mode
         if allowed_actions is not None:

@@ -50,38 +50,13 @@ class SyncCitationMiddleware(BaseClient):
     def reset(self):
         return self._state.reset()
 
-    def stream(
-        self,
-        messages: List[Message],
-        system_prompt: str,
-        actions: List[BaseAction],
-        allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False,
-        require_action: bool = False,
-        logger: Optional[BaseLogger] = None,
-        stream: bool = True,
-        enable_caching: bool = False,
-        context_cache_index: Optional[int] = None,
-    ) -> Iterator[StreamEvent]:
+    def stream(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, require_action: bool = False, logger: Optional[BaseLogger] = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Iterator[StreamEvent]:
         """Stream events with citation detection"""
         self._state.reset_stream_state()
         content_buffer = ""
-
-        # Translate user-facing require_action to internal tool_choice
         tool_choice = _translate_require_action(require_action)
 
-        for event in self.client.stream(
-            messages=messages,
-            system_prompt=system_prompt,
-            actions=actions,
-            allowed_actions=allowed_actions,
-            enable_web_search=enable_web_search,
-            tool_choice=tool_choice,
-            logger=logger,
-            stream=stream,
-            enable_caching=enable_caching,
-            context_cache_index=context_cache_index
-        ):
+        for event in self.client.stream(messages=messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions, tool_choice=tool_choice, logger=logger, enable_caching=enable_caching, context_cache_index=context_cache_index):
             if isinstance(event, ContentDelta):
                 content_buffer += event.delta
                 new_citations = self._state.check_new_citations(content_buffer)
@@ -95,35 +70,10 @@ class SyncCitationMiddleware(BaseClient):
 
             yield event
 
-    def complete(
-        self,
-        messages: List[Message],
-        system_prompt: str,
-        actions: List[BaseAction],
-        allowed_actions: List[BaseAction] = None,
-        enable_web_search: bool = False,
-        require_action: bool = False,
-        logger: Optional[BaseLogger] = None,
-        stream: bool = False,
-        enable_caching: bool = True,
-        context_cache_index: Optional[int] = None,
-    ) -> List[Message]:
+    def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, require_action: bool = False, logger: Optional[BaseLogger] = None, enable_caching: bool = True, context_cache_index: Optional[int] = None) -> List[Message]:
         """Pass through to wrapped client"""
-        # Translate user-facing require_action to internal tool_choice
         tool_choice = _translate_require_action(require_action)
-
-        return self.client.complete(
-            messages=messages,
-            system_prompt=system_prompt,
-            actions=actions,
-            allowed_actions=allowed_actions,
-            enable_web_search=enable_web_search,
-            tool_choice=tool_choice,
-            logger=logger,
-            enable_caching=enable_caching,
-            stream=stream,
-            context_cache_index=context_cache_index
-        )
+        return self.client.complete(messages=messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions, tool_choice=tool_choice, logger=logger, enable_caching=enable_caching, context_cache_index=context_cache_index)
 
     def extract(
         self,
