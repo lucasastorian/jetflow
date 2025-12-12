@@ -20,7 +20,7 @@ from jetflow.clients.anthropic import AnthropicClient, AsyncAnthropicClient
 from jetflow.clients.openai import OpenAIClient, AsyncOpenAIClient
 from jetflow.clients.gemini import GeminiClient, AsyncGeminiClient
 from jetflow.clients.grok import GrokClient, AsyncGrokClient
-from jetflow.models import WebSearchResultBlock
+from jetflow.models import ActionBlock
 
 load_dotenv()
 
@@ -77,26 +77,20 @@ if os.getenv("XAI_API_KEY"):
 
 def assert_web_search_used(response: AgentResponse, client_name: str):
     """Assert that web search was actually used in the response."""
-    from jetflow.models.message import ActionBlock
-
-    # Check for web search result blocks or server-executed web_search actions in any message
+    # Check for server-executed search actions (web_search, google_search) in any message
     web_search_found = False
     for msg in response.messages:
         for block in msg.blocks:
-            if isinstance(block, WebSearchResultBlock):
+            if isinstance(block, ActionBlock) and block.server_executed:
                 web_search_found = True
-                print(f"  Found WebSearchResultBlock with {len(block.results)} results")
-                break
-            # OpenAI returns web_search as a server-executed ActionBlock
-            if isinstance(block, ActionBlock) and block.name == "web_search" and block.server_executed:
-                web_search_found = True
-                print(f"  Found server-executed web_search ActionBlock")
+                result_count = len(block.result.get("results", [])) if block.result else 0
+                print(f"  Found server-executed {block.name} ActionBlock with {result_count} results")
                 break
         if web_search_found:
             break
 
     assert web_search_found, (
-        f"{client_name}: Expected web search to be used but found no WebSearchResultBlock or server-executed web_search ActionBlock"
+        f"{client_name}: Expected web search to be used but found no server-executed ActionBlock"
     )
 
 

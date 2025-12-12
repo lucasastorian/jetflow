@@ -260,6 +260,10 @@ class Agent:
             yield event
             if isinstance(event, MessageEnd):
                 completion_messages.append(event.message)
+            # Log server-executed actions (like web_search) that come from the client
+            elif isinstance(event, ActionExecuted) and event.action and event.action.server_executed:
+                self.logger.log_action_start(event.action.name, event.action.body)
+                self.logger.log_action_end(event.summary, event.message.content if event.message else "", False)
 
         self.messages.extend(completion_messages)
         self.num_iter += 1
@@ -291,10 +295,6 @@ class Agent:
         state = AgentState(messages=self.messages, citations=dict(self.client.citations))
 
         for called_action in called_actions:
-            # Skip server-executed actions (like web_search) - they're already handled by the provider
-            if called_action.server_executed:
-                continue
-
             action_impl = find_action(called_action.name, actions)
             if not action_impl:
                 handle_action_not_found(called_action, self.actions, self.messages, self.logger)

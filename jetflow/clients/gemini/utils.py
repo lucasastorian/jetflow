@@ -1,16 +1,47 @@
 """Gemini client utilities"""
 
+import uuid
 from google.genai import types
-from typing import List
+from typing import List, Optional
 
 from jetflow.action import BaseAction
-from jetflow.models.message import Message
+from jetflow.models.message import Message, ActionBlock
 from jetflow.clients.base import ToolChoice
 from jetflow.utils.server_tools import extract_server_tools
 
 # Dummy signature for cross-provider compatibility (non-Gemini thoughts)
 # See: https://ai.google.dev/gemini-api/docs/thinking#thought-signatures
 DUMMY_THOUGHT_SIGNATURE = "context_engineering_is_the_way_to_go"
+
+
+def parse_grounding_metadata(candidate) -> Optional[ActionBlock]:
+    """Parse grounding metadata (Google Search results) into ActionBlock."""
+    if not hasattr(candidate, 'grounding_metadata') or not candidate.grounding_metadata:
+        return None
+
+    grounding = candidate.grounding_metadata
+    results = []
+
+    if hasattr(grounding, 'grounding_chunks') and grounding.grounding_chunks:
+        for chunk in grounding.grounding_chunks:
+            if hasattr(chunk, 'web') and chunk.web:
+                results.append({
+                    'url': getattr(chunk.web, 'uri', ''),
+                    'title': getattr(chunk.web, 'title', ''),
+                })
+
+    if not results:
+        return None
+
+    return ActionBlock(
+        id=str(uuid.uuid4()),
+        name='google_search',
+        status='completed',
+        body={},
+        result={"results": results},
+        sources=[{"url": r["url"], "title": r["title"]} for r in results],
+        server_executed=True
+    )
 
 
 def build_gemini_config(

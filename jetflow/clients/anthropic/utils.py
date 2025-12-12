@@ -246,6 +246,13 @@ def build_message_params(
     return params
 
 
+def extract_web_search_results(content) -> List[Dict[str, Any]]:
+    """Extract web search results from Anthropic web_search_tool_result content."""
+    if not isinstance(content, list):
+        return []
+    return [item.model_dump() if hasattr(item, 'model_dump') else item for item in content]
+
+
 def apply_usage_to_message(usage_obj, message: Message) -> None:
     """Apply usage information from Anthropic response to Message
 

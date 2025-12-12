@@ -9,10 +9,10 @@ from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from jetflow.action import BaseAction
-from jetflow.models.message import Message, TextBlock, ThoughtBlock, ActionBlock, WebSearchResultBlock
-from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, StreamEvent
+from jetflow.models.message import Message, TextBlock, ThoughtBlock, ActionBlock
+from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, ActionExecuted, StreamEvent
 from jetflow.clients.base import BaseClient, ToolChoice
-from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, REASONING_BUDGET_MAP, make_schema_strict
+from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, extract_web_search_results, REASONING_BUDGET_MAP, make_schema_strict
 
 
 class AnthropicClient(BaseClient):
@@ -87,9 +87,15 @@ class AnthropicClient(BaseClient):
 
                 elif event.content_block.type == 'web_search_tool_result':
                     tool_use_id = getattr(event.content_block, 'tool_use_id', '')
-                    content = getattr(event.content_block, 'content', [])
-                    results = [item.model_dump() if hasattr(item, 'model_dump') else item for item in content] if isinstance(content, list) else []
-                    completion.blocks.append(WebSearchResultBlock(tool_use_id=tool_use_id, results=results))
+                    results = extract_web_search_results(getattr(event.content_block, 'content', []))
+                    for block in completion.blocks:
+                        if isinstance(block, ActionBlock) and block.id == tool_use_id and block.server_executed:
+                            block.status = 'completed'
+                            block.result = {"results": results}
+                            tool_message = Message(role='tool', content=f"Web search returned {len(results)} results", action_id=tool_use_id)
+                            tool_message.sources = [{"title": r.get("title", ""), "url": r.get("url", "")} for r in results if r.get("url")]
+                            yield ActionExecuted(action_id=tool_use_id, action=block, message=tool_message)
+                            break
 
             elif event.type == 'content_block_delta':
                 if event.delta.type == 'thinking_delta':
@@ -179,9 +185,14 @@ class AnthropicClient(BaseClient):
                 completion.blocks.append(ActionBlock(id=block.id, name=block.name, status="parsed", body=block.input, server_executed=True))
 
             elif block.type == 'web_search_tool_result':
-                content = getattr(block, 'content', [])
-                results = [item.model_dump() if hasattr(item, 'model_dump') else item for item in content] if isinstance(content, list) else []
-                completion.blocks.append(WebSearchResultBlock(tool_use_id=getattr(block, 'tool_use_id', ''), results=results))
+                tool_use_id = getattr(block, 'tool_use_id', '')
+                results = extract_web_search_results(getattr(block, 'content', []))
+                for action_block in completion.blocks:
+                    if isinstance(action_block, ActionBlock) and action_block.id == tool_use_id and action_block.server_executed:
+                        action_block.status = 'completed'
+                        action_block.result = {"results": results}
+                        action_block.sources = [{"title": r.get("title", ""), "url": r.get("url", "")} for r in results if r.get("url")]
+                        break
 
         if hasattr(response, 'usage') and response.usage:
             completion.uncached_prompt_tokens = response.usage.input_tokens or 0

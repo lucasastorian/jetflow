@@ -45,15 +45,7 @@ class ActionBlock(BaseModel):
     model_config = {"extra": "allow"}
 
 
-class WebSearchResultBlock(BaseModel):
-    """Web search results block"""
-    type: Literal["web_search_result"] = "web_search_result"
-    tool_use_id: str
-    results: List[Dict[str, Any]] = Field(default_factory=list)
-    model_config = {"extra": "allow"}
-
-
-ContentBlock = Union[TextBlock, ThoughtBlock, ActionBlock, WebSearchResultBlock]
+ContentBlock = Union[TextBlock, ThoughtBlock, ActionBlock]
 
 # Legacy aliases
 Action = ActionBlock
@@ -86,40 +78,16 @@ class Message(BaseModel):
     model_config = {"extra": "allow"}
 
     def __init__(self, **data):
-        has_blocks = 'blocks' in data and data['blocks']
-        blocks = data.get('blocks', [])
         tool_content = None
 
-        # Legacy: content → TextBlock (only if blocks not explicitly provided)
-        if 'content' in data and data['content'] and not has_blocks:
+        # content= shorthand → TextBlock (for user/system messages)
+        if 'content' in data and data['content'] and not data.get('blocks'):
             content = data.pop('content')
             if data.get('role') == 'tool':
                 tool_content = content
             else:
-                blocks.append(TextBlock(text=content))
+                data['blocks'] = [TextBlock(text=content)]
 
-        # Legacy: thoughts → ThoughtBlocks
-        if 'thoughts' in data and data['thoughts'] and not has_blocks:
-            for t in data.pop('thoughts'):
-                blocks.append(t if isinstance(t, ThoughtBlock) else ThoughtBlock(**t))
-
-        # Legacy: actions → ActionBlocks
-        if 'actions' in data and data['actions'] and not has_blocks:
-            for a in data.pop('actions'):
-                blocks.append(a if isinstance(a, ActionBlock) else ActionBlock(**a))
-
-        # Legacy: web_search dict → ActionBlock
-        if 'web_search' in data and data['web_search'] and not has_blocks:
-            ws = data.pop('web_search')
-            if isinstance(ws, dict):
-                blocks.append(ActionBlock(id=ws.get('id', ''), name="web_search", status="completed", body={"query": ws.get('query', '')}, server_executed=True))
-
-        if blocks:
-            data['blocks'] = blocks
-        data.pop('thoughts', None)
-        data.pop('actions', None)
-        data.pop('content', None)
-        data.pop('web_search', None)
         super().__init__(**data)
         if tool_content:
             self._tool_content = tool_content
@@ -208,12 +176,14 @@ class Message(BaseModel):
                         b["citations"] = block.citations
                     content_blocks.append(b)
                 elif isinstance(block, ActionBlock):
-                    if block.server_executed and block.name == "web_search":
-                        content_blocks.append({"type": "server_tool_use", "id": block.id, "name": "web_search", "input": block.body})
+                    if block.server_executed:
+                        # Server-executed action (e.g., web_search, code_execution)
+                        content_blocks.append({"type": "server_tool_use", "id": block.id, "name": block.name, "input": block.body})
+                        # If results exist, emit the result block too
+                        if block.result:
+                            content_blocks.append({"type": "web_search_tool_result", "tool_use_id": block.id, "content": block.result.get("results", [])})
                     else:
                         content_blocks.append({"type": "tool_use", "id": block.id, "name": block.name, "input": block.body})
-                elif isinstance(block, WebSearchResultBlock):
-                    content_blocks.append({"type": "web_search_tool_result", "tool_use_id": block.tool_use_id, "content": block.results})
             return {"role": "assistant", "content": content_blocks}
 
         return {"role": self.role, "content": self.content}
@@ -256,9 +226,9 @@ class Message(BaseModel):
 
     @property
     def has_interleaving(self) -> bool:
-        """Check if message has interleaved content (web search, multiple text blocks with actions between)"""
-        has_web_search = any(isinstance(b, WebSearchResultBlock) or (isinstance(b, ActionBlock) and b.server_executed) for b in self.blocks)
-        if has_web_search:
+        """Check if message has interleaved content (server-executed actions, multiple text blocks with actions between)"""
+        # Server-executed actions (web_search, code_execution, etc.) always have interleaving
+        if any(isinstance(b, ActionBlock) and b.server_executed for b in self.blocks):
             return True
         text_indices = [i for i, b in enumerate(self.blocks) if isinstance(b, TextBlock)]
         action_indices = [i for i, b in enumerate(self.blocks) if isinstance(b, ActionBlock)]
@@ -310,8 +280,9 @@ class Message(BaseModel):
         role = row.get("role", "user").lower()
         status = row.get("status", "completed").lower()
 
+        # Build blocks from row
+        blocks = []
         if row.get("blocks"):
-            blocks = []
             for b in row["blocks"]:
                 block_type = b.get("type")
                 if block_type == "text":
@@ -320,17 +291,20 @@ class Message(BaseModel):
                     blocks.append(ThoughtBlock(**b))
                 elif block_type == "action":
                     blocks.append(ActionBlock(**b))
-                elif block_type == "web_search_result":
-                    blocks.append(WebSearchResultBlock(**b))
-            return cls(id=row.get("id", str(uuid.uuid4())), role=role, status=status, blocks=blocks, action_id=row.get("action_id") or row.get("tool_call_id"), citations=row.get("citations"), sources=row.get("sources"))
+        else:
+            # Legacy fallback: build blocks from separate fields
+            if row.get("thought"):
+                blocks.append(ThoughtBlock(**row["thought"]))
+            if row.get("content"):
+                blocks.append(TextBlock(text=row["content"]))
+            for action in (row.get("actions") or []):
+                blocks.append(ActionBlock(**action))
 
         return cls(
             id=row.get("id", str(uuid.uuid4())),
             role=role,
             status=status,
-            content=row.get("content"),
-            actions=row.get("actions"),
-            thoughts=[row["thought"]] if row.get("thought") else None,
+            blocks=blocks if blocks else [],
             action_id=row.get("action_id") or row.get("tool_call_id"),
             citations=row.get("citations"),
             sources=row.get("sources"),

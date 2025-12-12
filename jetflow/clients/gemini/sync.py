@@ -7,10 +7,10 @@ from typing import List, Iterator, Optional, Type
 from pydantic import BaseModel
 
 from jetflow.action import BaseAction
-from jetflow.models.message import Message, TextBlock, ThoughtBlock, ActionBlock, WebSearchResultBlock
+from jetflow.models.message import Message, TextBlock, ThoughtBlock, ActionBlock
 from jetflow.models.events import StreamEvent, MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionEnd
 from jetflow.clients.base import BaseClient, ToolChoice
-from jetflow.clients.gemini.utils import build_gemini_config, messages_to_contents
+from jetflow.clients.gemini.utils import build_gemini_config, messages_to_contents, parse_grounding_metadata
 
 
 class GeminiClient(BaseClient):
@@ -73,19 +73,9 @@ class GeminiClient(BaseClient):
             if hasattr(response.usage_metadata, 'thoughts_token_count'):
                 completion.thinking_tokens = response.usage_metadata.thoughts_token_count
 
-        # Parse grounding metadata (Google Search results)
-        if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
-            grounding = candidate.grounding_metadata
-            results = []
-            if hasattr(grounding, 'grounding_chunks') and grounding.grounding_chunks:
-                for chunk in grounding.grounding_chunks:
-                    if hasattr(chunk, 'web') and chunk.web:
-                        results.append({
-                            'url': getattr(chunk.web, 'uri', ''),
-                            'title': getattr(chunk.web, 'title', ''),
-                        })
-            if results:
-                completion.blocks.append(WebSearchResultBlock(tool_use_id='google_search', results=results))
+        search_action = parse_grounding_metadata(candidate)
+        if search_action:
+            completion.blocks.append(search_action)
 
         return completion
 
@@ -149,20 +139,10 @@ class GeminiClient(BaseClient):
         if finish_reason and str(finish_reason) not in ('FinishReason.STOP', 'STOP') and logger:
             logger.log_warning(f"Gemini stream ended with finish_reason: {finish_reason}")
 
-        # Parse grounding metadata from final chunk (Google Search results)
-        # Note: grounding_metadata is typically only available on the final chunk
-        if last_candidate and hasattr(last_candidate, 'grounding_metadata') and last_candidate.grounding_metadata:
-            grounding = last_candidate.grounding_metadata
-            results = []
-            if hasattr(grounding, 'grounding_chunks') and grounding.grounding_chunks:
-                for chunk in grounding.grounding_chunks:
-                    if hasattr(chunk, 'web') and chunk.web:
-                        results.append({
-                            'url': getattr(chunk.web, 'uri', ''),
-                            'title': getattr(chunk.web, 'title', ''),
-                        })
-            if results:
-                completion.blocks.append(WebSearchResultBlock(tool_use_id='google_search', results=results))
+        if last_candidate:
+            search_action = parse_grounding_metadata(last_candidate)
+            if search_action:
+                completion.blocks.append(search_action)
 
         completion.status = "completed"
         yield MessageEnd(message=completion)

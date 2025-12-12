@@ -1,7 +1,7 @@
 """Tests for Message serialization to/from database"""
 
 import pytest
-from jetflow.models.message import Message, TextBlock, ActionBlock, ThoughtBlock, WebSearchResultBlock
+from jetflow.models.message import Message, TextBlock, ActionBlock, ThoughtBlock
 
 
 class TestMessageBlocks:
@@ -26,10 +26,10 @@ class TestMessageBlocks:
 
         assert msg.has_interleaving is True
 
-    def test_web_search_result_block_has_interleaving(self):
-        """Message with WebSearchResultBlock should have interleaving"""
+    def test_server_executed_action_has_interleaving(self):
+        """Message with server-executed action should have interleaving"""
         msg = Message(role='assistant', status='completed')
-        msg.blocks.append(WebSearchResultBlock(tool_use_id='ws1', results=[]))
+        msg.blocks.append(ActionBlock(id='ws1', name='web_search', status='completed', body={}, server_executed=True))
 
         assert msg.has_interleaving is True
 
@@ -96,18 +96,17 @@ class TestMessageDbSerialization:
         """Interleaved message includes blocks column"""
         msg = Message(role='assistant', status='completed')
         msg.blocks.append(TextBlock(text='Before'))
-        msg.blocks.append(ActionBlock(id='ws1', name='web_search', status='completed', body={}, server_executed=True))
-        msg.blocks.append(WebSearchResultBlock(tool_use_id='ws1', results=[{'title': 'Result'}]))
+        msg.blocks.append(ActionBlock(id='ws1', name='web_search', status='completed', body={}, result={'results': [{'title': 'Result'}]}, server_executed=True))
         msg.blocks.append(TextBlock(text='After'))
 
         row = msg.to_db_row()
 
         assert 'blocks' in row
-        assert len(row['blocks']) == 4
+        assert len(row['blocks']) == 3
         assert row['blocks'][0]['type'] == 'text'
         assert row['blocks'][1]['type'] == 'action'
-        assert row['blocks'][2]['type'] == 'web_search_result'
-        assert row['blocks'][3]['type'] == 'text'
+        assert row['blocks'][1]['server_executed'] is True
+        assert row['blocks'][2]['type'] == 'text'
 
     def test_from_db_row_legacy(self):
         """Deserialize legacy row without blocks"""
@@ -138,19 +137,18 @@ class TestMessageDbSerialization:
             'status': 'Completed',
             'blocks': [
                 {'type': 'text', 'text': 'Before'},
-                {'type': 'action', 'id': 'ws1', 'name': 'web_search', 'status': 'completed', 'body': {}, 'server_executed': True},
-                {'type': 'web_search_result', 'tool_use_id': 'ws1', 'results': []},
+                {'type': 'action', 'id': 'ws1', 'name': 'web_search', 'status': 'completed', 'body': {}, 'result': {'results': []}, 'server_executed': True},
                 {'type': 'text', 'text': 'After'},
             ],
         }
 
         msg = Message.from_db_row(row)
 
-        assert len(msg.blocks) == 4
+        assert len(msg.blocks) == 3
         assert isinstance(msg.blocks[0], TextBlock)
         assert isinstance(msg.blocks[1], ActionBlock)
-        assert isinstance(msg.blocks[2], WebSearchResultBlock)
-        assert isinstance(msg.blocks[3], TextBlock)
+        assert msg.blocks[1].server_executed is True
+        assert isinstance(msg.blocks[2], TextBlock)
         assert msg.content == 'BeforeAfter'
         assert msg.has_interleaving is True
 
@@ -171,8 +169,7 @@ class TestMessageDbSerialization:
         """Round-trip interleaved message through DB format"""
         original = Message(role='assistant', status='completed')
         original.blocks.append(TextBlock(text='Before'))
-        original.blocks.append(ActionBlock(id='ws1', name='web_search', status='completed', body={'query': 'test'}, server_executed=True))
-        original.blocks.append(WebSearchResultBlock(tool_use_id='ws1', results=[{'title': 'R1'}]))
+        original.blocks.append(ActionBlock(id='ws1', name='web_search', status='completed', body={'query': 'test'}, result={'results': [{'title': 'R1'}]}, server_executed=True))
         original.blocks.append(TextBlock(text='After'))
 
         row = original.to_db_row()
@@ -195,10 +192,11 @@ class TestMessageLegacyConstruction:
         assert len(msg.blocks) == 1
         assert isinstance(msg.blocks[0], TextBlock)
 
-    def test_construct_with_actions(self):
-        """Construct message with actions list"""
-        msg = Message(role='assistant', content='Result', actions=[
-            {'id': 'a1', 'name': 'test', 'status': 'completed', 'body': {}}
+    def test_construct_with_blocks(self):
+        """Construct message with explicit blocks"""
+        msg = Message(role='assistant', blocks=[
+            TextBlock(text='Result'),
+            ActionBlock(id='a1', name='test', status='completed', body={})
         ])
 
         assert msg.content == 'Result'
