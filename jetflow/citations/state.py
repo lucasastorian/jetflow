@@ -1,19 +1,24 @@
 """Citation state management"""
 
-from typing import Dict, Optional, Set, Union
+from __future__ import annotations
+
+from typing import Dict, Optional, Set, Union, TYPE_CHECKING
 from jetflow.citations.extractor import CitationExtractor
+
+if TYPE_CHECKING:
+    from jetflow.models.citations import BaseCitation
 
 
 class CitationState:
     """Manages citation storage, ID allocation, and stream detection"""
 
     def __init__(self):
-        self.citations: Dict[int, dict] = {}
+        self.citations: Dict[int, BaseCitation] = {}
         self._next_id: int = 1
         self._cursor: int = 0
         self._seen_ids: Set[int] = set()
 
-    def add_citations(self, new_citations: Union[Dict[int, dict], None]) -> None:
+    def add_citations(self, new_citations: Union[Dict[int, BaseCitation], None]) -> None:
         """Add citations from an action result"""
         if not new_citations:
             return
@@ -30,16 +35,16 @@ class CitationState:
         """Get next available citation ID"""
         return self._next_id
 
-    def get_citation(self, citation_id: int) -> Optional[dict]:
+    def get_citation(self, citation_id: int) -> Optional[BaseCitation]:
         """Look up metadata for a citation ID"""
         return self.citations.get(citation_id)
 
-    def get_used_citations(self, content: str) -> Dict[int, dict]:
+    def get_used_citations(self, content: str) -> Dict[int, BaseCitation]:
         """Extract citations actually used in content and return their metadata"""
         used_ids = CitationExtractor.extract_ids(content)
         return {cid: self.citations[cid] for cid in used_ids if cid in self.citations}
 
-    def check_new_citations(self, content_buffer: str) -> Dict[int, dict]:
+    def check_new_citations(self, content_buffer: str) -> Dict[int, BaseCitation]:
         """Check for new citation tags in content buffer and return their metadata"""
         all_ids = CitationExtractor.extract_ids(content_buffer)
         new_ids = [cid for cid in all_ids if cid not in self._seen_ids]

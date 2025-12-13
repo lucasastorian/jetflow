@@ -77,8 +77,8 @@ def test_serper_search_mode():
     if citations:
         assert 1 in citations, "Should have citation with ID 1"
         citation = citations[1]
-        assert citation.get("type") == "web"
-        assert citation.get("url")
+        assert citation.type == "web"
+        assert citation.url
 
     print("\n✅ Search mode test passed!")
     return response
@@ -118,8 +118,8 @@ def test_serper_read_mode():
 
     if citations:
         citation = citations[1]
-        assert citation.get("type") == "web"
-        assert citation.get("url")
+        assert citation.type == "web"
+        assert citation.url
 
     print("\n✅ Read mode test passed!")
     return response
@@ -165,8 +165,8 @@ Include citation tags from the search results in your answer.""",
 
             for cid, citation in msg.citations.items():
                 assert isinstance(cid, int)
-                assert citation["type"] == "web"
-                assert "url" in citation
+                assert citation.type == "web"
+                assert citation.url
 
         if msg.role == "tool" and msg.content:
             tags = re.findall(r'<(\d+)>', msg.content)

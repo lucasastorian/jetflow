@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import uuid
 from typing import Literal, List, Optional, Dict, Any, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from jetflow.models.citations import BaseCitation
 
 try:
     import tiktoken
@@ -61,7 +62,7 @@ class Message(BaseModel):
     action_id: Optional[str] = None
     error: bool = False
     metadata: Optional[Dict[str, Any]] = None
-    citations: Optional[Dict[int, Dict[str, Any]]] = None
+    citations: Optional[Dict[int, BaseCitation]] = None
     sources: Optional[List[Dict[str, Any]]] = None
 
     uncached_prompt_tokens: Optional[int] = None
@@ -76,6 +77,23 @@ class Message(BaseModel):
     _tool_content: Optional[str] = None
 
     model_config = {"extra": "allow"}
+
+    @field_validator('citations', mode='before')
+    @classmethod
+    def coerce_citations(cls, v):
+        """Coerce dict citations to BaseCitation objects"""
+        if v is None:
+            return None
+        from jetflow.models.citations import BaseCitation
+        result = {}
+        for key, val in v.items():
+            if isinstance(val, BaseCitation):
+                result[int(key)] = val
+            elif isinstance(val, dict):
+                result[int(key)] = BaseCitation(**val)
+            else:
+                result[int(key)] = val
+        return result
 
     def __init__(self, **data):
         tool_content = None

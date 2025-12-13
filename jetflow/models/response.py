@@ -2,80 +2,79 @@ from __future__ import annotations
 
 """Response types for agent and action execution"""
 
-from dataclasses import dataclass
-from typing import Optional, List, TYPE_CHECKING, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 
 if TYPE_CHECKING:
     from jetflow.models.message import Message
+    from jetflow.models.citations import BaseCitation
     from jetflow.action import BaseAction
     from jetflow.utils.usage import Usage
 
 
-@dataclass
-class ActionFollowUp:
+class ActionFollowUp(BaseModel):
     """Follow-up actions to execute after an action completes"""
-    actions: List[BaseAction]
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    actions: List[Any]  # List[BaseAction] - using Any to avoid circular import
     force: bool  # If True, execute immediately (vertical). If False, available next iteration (horizontal)
 
 
-@dataclass
-class StepResult:
+class StepResult(BaseModel):
     """Result from executing one agent step (LLM call + actions)"""
     is_exit: bool
-    follow_ups: List[ActionFollowUp]
-
-    def __post_init__(self):
-        """Ensure follow_ups is never None"""
-        if self.follow_ups is None:
-            self.follow_ups = []
+    follow_ups: List[ActionFollowUp] = Field(default_factory=list)
 
 
-@dataclass
-class ActionResponse:
+class ActionResponse(BaseModel):
     """Response from an action execution"""
-    message: Message
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    message: Any  # Message - using Any to avoid circular import
     follow_up: Optional[ActionFollowUp] = None
-    summary: str = None  # Optional summary for logging (from ActionResult.summary)
-    result: dict = None  # Structured result for UI rendering (from ActionResult.metadata)
+    summary: Optional[str] = None  # Optional summary for logging (from ActionResult.summary)
+    result: Optional[dict] = None  # Structured result for UI rendering (from ActionResult.metadata)
 
 
-@dataclass
-class ActionResult:
+class ActionResult(BaseModel):
     """User-facing return type for actions (alternative to returning string)"""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     content: str
-    follow_up_actions: List[BaseAction] = None
+    follow_up_actions: Optional[List[Any]] = None  # List[BaseAction]
     force_follow_up: bool = False
-    metadata: dict = None
-    summary: str = None
-    citations: dict = None  # Dict[int, dict] - citation ID → metadata
-    sources: List[dict] = None  # List of source metadata dicts
+    metadata: Optional[dict] = None
+    summary: Optional[str] = None
+    citations: Optional[Dict[int, Any]] = None  # Dict[int, BaseCitation] - citation ID → citation object
+    sources: Optional[List[dict]] = None  # List of source metadata dicts
 
 
-@dataclass
-class AgentResponse:
+class AgentResponse(BaseModel):
     """Response from agent execution"""
-    messages: List[Message]
-    usage: Usage
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    messages: List[Any]  # List[Message]
+    usage: Any  # Usage
     duration: float
     iterations: int
     success: bool
     content: Optional[str] = None  # None when require_action=True with no text
-    citations: dict = None  # Dict[int, dict] - citation ID → metadata
-    parsed: BaseModel = None  # Parsed exit action params (when exit=True or require_action=True)
+    citations: Optional[Dict[int, Any]] = None  # Dict[int, BaseCitation]
+    parsed: Optional[BaseModel] = None  # Parsed exit action params (when exit=True or require_action=True)
 
     def __str__(self) -> str:
         """Allow print(response) to show final answer"""
         return self.content or ""
 
 
-@dataclass
-class ChainResponse:
+class ChainResponse(BaseModel):
     """Response from chain execution"""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     content: str
-    messages: List[Message]
-    usage: Usage
+    messages: List[Any]  # List[Message]
+    usage: Any  # Usage
     duration: float
     success: bool
 
