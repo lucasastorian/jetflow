@@ -130,7 +130,7 @@ def _wrap_function_action(fn: Callable, schema: Type[BaseModel], exit: bool) -> 
 
     FunctionAction.name = schema.__name__
     FunctionAction.schema = schema
-    FunctionAction._is_exit = exit
+    FunctionAction.is_exit = exit
 
     return FunctionAction
 
@@ -224,7 +224,7 @@ def _wrap_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> Type['
     _copy_class_attributes(ClassAction, cls)
     ClassAction.name = schema.__name__
     ClassAction.schema = schema
-    ClassAction._is_exit = exit
+    ClassAction.is_exit = exit
 
     return ClassAction
 
@@ -282,7 +282,7 @@ def _wrap_async_function_action(fn: Callable, schema: Type[BaseModel], exit: boo
     # Set class attributes after class definition
     AsyncFunctionAction.name = schema.__name__
     AsyncFunctionAction.schema = schema
-    AsyncFunctionAction._is_exit = exit
+    AsyncFunctionAction.is_exit = exit
 
     return AsyncFunctionAction
 
@@ -372,6 +372,6 @@ def _wrap_async_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> 
     _copy_class_attributes(AsyncClassAction, cls)
     AsyncClassAction.name = schema.__name__
     AsyncClassAction.schema = schema
-    AsyncClassAction._is_exit = exit
+    AsyncClassAction.is_exit = exit
 
     return AsyncClassAction

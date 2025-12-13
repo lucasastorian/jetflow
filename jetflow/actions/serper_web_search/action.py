@@ -1,11 +1,10 @@
-"""Exa Web Search action with citation support."""
+"""Serper Web Search action with citation support."""
 
 import os
 from typing import Optional, List, Dict, Any, Tuple, Literal
 from urllib.parse import urlparse
+import httpx
 from pydantic import BaseModel, Field, model_validator
-from exa_py import Exa
-from exa_py.api import Result
 
 from jetflow.action import action
 from jetflow.agent.state import AgentState
@@ -17,8 +16,8 @@ class WebSearch(BaseModel):
     """Search the web or read a specific URL.
 
     Two modes available:
-    - mode="search": Find relevant pages. Provide 'query' (required) and optionally 'num_results'.
-      Returns summaries of matching pages with citation tags.
+    - mode="search": Find relevant pages via Google. Provide 'query' (required) and optionally 'num_results'.
+      Returns snippets from matching pages with citation tags.
     - mode="read": Get full content from a specific URL. Provide 'url' (required).
       Use this when you need detailed information from a page found via search.
 
@@ -31,7 +30,7 @@ class WebSearch(BaseModel):
     query: Optional[str] = Field(
         default=None,
         description="Search query - be specific and descriptive (required for mode='search')",
-        min_length=5
+        min_length=3
     )
     url: Optional[str] = Field(
         default=None,
@@ -49,12 +48,17 @@ class WebSearch(BaseModel):
 
 
 @action(schema=WebSearch)
-class ExaWebSearch:
-    """Search the web or read specific pages using Exa's semantic search engine."""
+class SerperWebSearch:
+    """Search the web or read pages using Serper (Google Search API)."""
+
+    SEARCH_URL = "https://google.serper.dev/search"
+    SCRAPE_URL = "https://scrape.serper.dev"
 
     def __init__(self, enable_citations: bool = True, api_key: Optional[str] = None):
         self.enable_citations = enable_citations
-        self.exa = Exa(api_key=api_key or os.environ.get('EXA_API_KEY'))
+        self.api_key = api_key or os.environ.get('SERPER_API_KEY')
+        if not self.api_key:
+            raise ValueError("SERPER_API_KEY not found in environment")
 
     def __call__(self, params: WebSearch, state: AgentState = None, citation_start: int = 1) -> ActionResult:
         """Execute search or read based on mode."""
@@ -63,50 +67,61 @@ class ExaWebSearch:
         return self._search(params, citation_start)
 
     def _search(self, params: WebSearch, cid: int) -> ActionResult:
-        """Search the web and return summaries."""
-
+        """Search via Google and return snippets."""
         try:
-            results = self.exa.search_and_contents(
-                query=params.query,
-                type="auto",
-                num_results=params.num_results,
-                summary=True
+            response = httpx.post(
+                self.SEARCH_URL,
+                json={"q": params.query, "num": params.num_results},
+                headers={"X-API-KEY": self.api_key, "Content-Type": "application/json"},
+                timeout=30
             )
+            response.raise_for_status()
+            data = response.json()
         except Exception as e:
             return ActionResult(content=f"Search failed: {str(e)}", citations={}, summary="Search failed")
 
-        if not results.results:
+        organic = data.get("organic", [])
+        if not organic:
             return ActionResult(content=f"No results found for: {params.query}", citations={}, summary="No results")
 
-        content, citations, sources, total = self._format_search_results(results.results, params.query, cid)
+        content, citations, sources = self._format_search_results(organic, params.query, cid)
 
         return ActionResult(
             content=content,
             citations=citations,
             sources=sources,
-            metadata={"mode": "search", "query": params.query, "num_results": len(results.results)},
-            summary=f"Found {len(results.results)} results"
+            metadata={"mode": "search", "query": params.query, "num_results": len(organic)},
+            summary=f"Found {len(organic)} results"
         )
 
     def _read_page(self, params: WebSearch, cid: int) -> ActionResult:
-        """Read actual content from a specific URL."""
-
+        """Scrape and extract content from a URL."""
         try:
-            results = self.exa.get_contents(urls=[params.url], text={"max_characters": 10000})
+            response = httpx.post(
+                self.SCRAPE_URL,
+                json={"url": params.url, "includeMarkdown": True},
+                headers={"X-API-KEY": self.api_key, "Content-Type": "application/json"},
+                timeout=30
+            )
+            response.raise_for_status()
+            data = response.json()
         except Exception as e:
             return ActionResult(content=f"Failed to read page: {str(e)}", citations={}, summary="Read failed")
 
-        if not results.results:
-            return ActionResult(content=f"Could not fetch: {params.url}", citations={}, summary="No content")
+        markdown = data.get("markdown", "")
+        text = data.get("text", "")
+        metadata = data.get("metadata", {})
 
-        result = results.results[0]
-        url = result.url or params.url
-        title = result.title or url
-        domain = urlparse(url).netloc
-        content = result.text or ""
-
+        content = markdown or text
         if not content:
             return ActionResult(content=f"No readable content at: {params.url}", citations={}, summary="No content")
+
+        # Truncate if too long
+        if len(content) > 10000:
+            content = content[:10000]
+
+        title = metadata.get("title") or metadata.get("og:title") or params.url
+        domain = urlparse(params.url).netloc
 
         # Split into paragraphs and filter out noise
         paragraphs = []
@@ -125,14 +140,14 @@ class ExaWebSearch:
             paragraphs.append(p)
         citations = {}
         content_parts = []
-        sources = [{"url": url, "title": title}]
+        sources = [{"url": params.url, "title": title}]
 
         for para in paragraphs:
             content_parts.append(f"{para} <{cid}>")
             if self.enable_citations:
                 citations[cid] = WebCitation(
-                    id=cid, type="web", url=url, title=title,
-                    content=para, domain=domain, published_date=result.published_date
+                    id=cid, type="web", url=params.url, title=title,
+                    content=para, domain=domain
                 ).model_dump()
             cid += 1
 
@@ -140,34 +155,34 @@ class ExaWebSearch:
             content=f"# {title}\n\n" + "\n\n".join(content_parts),
             citations=citations,
             sources=sources,
-            metadata={"mode": "read", "url": url},
+            metadata={"mode": "read", "url": params.url},
             summary=f"Read: {title[:50]}..."
         )
 
-    def _format_search_results(self, results: List[Result], query: str, cid: int) -> Tuple[str, Dict[int, Any], List[Dict], int]:
+    def _format_search_results(self, results: List[Dict], query: str, cid: int) -> Tuple[str, Dict[int, Any], List[Dict]]:
         """Format search results with citations."""
         citations = {}
         content_parts = []
         sources = []
 
         for result in results:
-            url = result.url
-            title = result.title or url
+            url = result.get("link", "")
+            title = result.get("title", url)
+            snippet = result.get("snippet", "")
             domain = urlparse(url).netloc if url else ""
-            snippet = result.summary or ""
 
             if not snippet:
                 continue
 
             sources.append({"url": url, "title": title})
-            content_parts.append(f"{snippet} <{cid}>")
+            content_parts.append(f"**{title}**\n{snippet} <{cid}>")
 
             if self.enable_citations:
                 citations[cid] = WebCitation(
                     id=cid, type="web", url=url, title=title, content=snippet,
-                    query=query, domain=domain, published_date=result.published_date
+                    query=query, domain=domain
                 ).model_dump()
 
             cid += 1
 
-        return "\n\n".join(content_parts), citations, sources, len(citations)
+        return "\n\n".join(content_parts), citations, sources

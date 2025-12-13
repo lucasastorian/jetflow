@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from jetflow.models.events import StreamEvent
     from jetflow.utils.verbose_logger import VerboseLogger
 
-# Internal tool choice type - used by clients
 ToolChoice = Literal["auto", "required", "none"]
 
 
@@ -24,13 +23,13 @@ class BaseClient(ABC):
     model: str
 
     @abstractmethod
-    def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: Optional[VerboseLogger] = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> List[Message]:
-        """Non-streaming completion"""
+    def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: Optional[VerboseLogger] = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Message:
+        """Non-streaming completion - returns single message"""
         raise NotImplementedError
 
     @abstractmethod
     def stream(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: Optional[VerboseLogger] = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Iterator[StreamEvent]:
-        """Streaming completion - yields events"""
+        """Streaming completion - yields events, final MessageEnd contains the message"""
         raise NotImplementedError
 
     @abstractmethod
@@ -46,13 +45,13 @@ class AsyncBaseClient(ABC):
     model: str
 
     @abstractmethod
-    async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: Optional[VerboseLogger] = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> List[Message]:
-        """Non-streaming completion"""
+    async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: Optional[VerboseLogger] = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Message:
+        """Non-streaming completion - returns single message"""
         raise NotImplementedError
 
     @abstractmethod
     async def stream(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: Optional[VerboseLogger] = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> AsyncIterator[StreamEvent]:
-        """Streaming completion - yields events"""
+        """Streaming completion - yields events, final MessageEnd contains the message"""
         raise NotImplementedError
 
     @abstractmethod

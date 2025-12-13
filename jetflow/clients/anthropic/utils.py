@@ -312,4 +312,4 @@ def process_completion(response, logger) -> List[Message]:
         completion.cache_read_tokens = response.usage.cache_read_input_tokens or 0
         completion.completion_tokens = response.usage.output_tokens or 0
 
-    return [completion]
+    return completion

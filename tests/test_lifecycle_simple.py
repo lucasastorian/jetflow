@@ -8,7 +8,7 @@ class DummyAction:
     """Dummy action with lifecycle hooks"""
     name = "dummy"
     schema = None
-    _is_exit = False
+    is_exit = False
 
     def __start__(self):
         hook_calls.append("start")
@@ -38,11 +38,11 @@ def test_sync_hooks():
     agent.logger = type('obj', (object,), {'log_error': lambda self, msg: print(f"Error: {msg}")})()
 
     # Test the hook calling method directly
-    print("Calling _call_lifecycle_hooks('__start__')...")
-    agent._call_lifecycle_hooks('__start__')
+    print("Calling _call_start_hooks()...")
+    agent._call_start_hooks()
 
-    print("\nCalling _call_lifecycle_hooks('__stop__')...")
-    agent._call_lifecycle_hooks('__stop__')
+    print("\nCalling _call_stop_hooks()...")
+    agent._call_stop_hooks()
 
     print(f"\nHook calls: {hook_calls}")
     assert hook_calls == ["start", "stop"], f"Expected ['start', 'stop'], got {hook_calls}"
@@ -59,7 +59,7 @@ async def test_async_hooks():
         """Dummy async action with lifecycle hooks"""
         name = "async_dummy"
         schema = None
-        _is_exit = False
+        is_exit = False
 
         async def __start__(self):
             hook_calls.append("async_start")
@@ -83,11 +83,11 @@ async def test_async_hooks():
     agent.logger = type('obj', (object,), {'log_error': lambda self, msg: print(f"Error: {msg}")})()
 
     # Test the hook calling method directly
-    print("Calling _call_lifecycle_hooks('__start__')...")
-    await agent._call_lifecycle_hooks('__start__')
+    print("Calling _call_start_hooks()...")
+    await agent._call_start_hooks()
 
-    print("\nCalling _call_lifecycle_hooks('__stop__')...")
-    await agent._call_lifecycle_hooks('__stop__')
+    print("\nCalling _call_stop_hooks()...")
+    await agent._call_stop_hooks()
 
     print(f"\nHook calls: {hook_calls}")
     assert hook_calls == ["async_start", "async_stop"], f"Expected ['async_start', 'async_stop'], got {hook_calls}"

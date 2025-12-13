@@ -30,7 +30,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
         self.cache_ttl = cache_ttl
         self.client = anthropic.AsyncAnthropic(api_key=api_key or os.environ.get('ANTHROPIC_API_KEY'), timeout=60.0)
 
-    async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> List[Message]:
+    async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Message:
         """Non-streaming completion"""
         should_cache = self._resolve_caching(enable_caching)
         params = build_message_params(self.model, self.temperature, self.max_tokens, system_prompt, messages, actions, allowed_actions, self.reasoning_budget, tool_choice=tool_choice, stream=False, effort=self.effort, enable_caching=should_cache, cache_ttl=self.cache_ttl, context_cache_index=context_cache_index)
@@ -203,7 +203,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
             completion.cache_read_tokens = response.usage.cache_read_input_tokens or 0
             completion.completion_tokens = response.usage.output_tokens or 0
 
-        return [completion]
+        return completion
 
     async def extract(self, schema: Type[BaseModel], query: str, system_prompt: str = "Extract the requested information.") -> BaseModel:
         """Extract structured data using Anthropic's native structured output"""

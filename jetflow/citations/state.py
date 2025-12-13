@@ -1,6 +1,6 @@
 """Citation state management"""
 
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, Union
 from jetflow.citations.extractor import CitationExtractor
 
 
@@ -13,7 +13,7 @@ class CitationState:
         self._cursor: int = 0
         self._seen_ids: Set[int] = set()
 
-    def add_citations(self, new_citations: Dict[int, dict]) -> None:
+    def add_citations(self, new_citations: Union[Dict[int, dict], None]) -> None:
         """Add citations from an action result"""
         if not new_citations:
             return

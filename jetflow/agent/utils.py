@@ -77,7 +77,7 @@ def prepare_and_validate_actions(
         )
 
     if require_action:
-        exit_actions = [a for a in regular_actions if getattr(a, '_is_exit', False)]
+        exit_actions = [a for a in regular_actions if a.is_exit]
         if not exit_actions:
             raise ValueError(
                 "require_action=True requires at least one exit action. "

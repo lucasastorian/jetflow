@@ -55,7 +55,7 @@ class AsyncGrokClient(AsyncOpenAIClient):
             timeout=300.0,
         )
 
-    async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> List[Message]:
+    async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Message:
         """Non-streaming completion"""
         params = build_grok_params(self.model, system_prompt, messages, actions, allowed_actions, tool_choice, self.temperature, self.reasoning_effort, stream=False)
         return await self._complete_with_retry(params, actions, logger)
@@ -203,4 +203,4 @@ class AsyncGrokClient(AsyncOpenAIClient):
         if response.usage:
             apply_usage_to_message(response.usage, completion)
 
-        return [completion]
+        return completion

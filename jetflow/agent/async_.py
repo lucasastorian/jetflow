@@ -1,5 +1,6 @@
 """Async agent orchestration"""
 
+import inspect
 from typing import List, Optional, Union, Callable, Type, AsyncIterator
 
 from jetflow.clients.base import AsyncBaseClient
@@ -38,45 +39,32 @@ class AsyncAgent:
 
         actions = actions or []
         self.actions = prepare_and_validate_actions(actions, require_action, is_async=True)
-
         self.client = AsyncCitationMiddleware(client)
-
         self.max_iter = max_iter
         self.force_exit_on_max_iter = force_exit_on_max_iter
         self.require_action = require_action
         self.max_tokens_before_exit = max_tokens_before_exit
         self._system_prompt = system_prompt
-
         self.logger = logger if logger is not None else VerboseLogger(verbose)
-
-        # Context management
         self.context_config = context_config or ContextConfig()
         self._context_manager = ContextManager(self.context_config)
-        self._cache_marker_index: Optional[int] = None  # Track where to place cache marker
-
+        self._cache_marker_index: Optional[int] = None
         self.messages: List[Message] = []
         self.num_iter = 0
 
     def _should_enable_caching(self) -> bool:
-        """Determine if prompt caching should be enabled for this iteration."""
         return should_enable_caching(self.max_iter, self.num_iter, bool(self.actions))
 
     async def run(self, query: Union[str, List[Message]]) -> AgentResponse:
-        """Execute agent loop until exit or max iterations"""
-        # Call __start__ hooks on all actions
-        await self._call_lifecycle_hooks('__start__')
+        await self._call_start_hooks()
 
         try:
             async with Timer.measure_async() as timer:
                 self._add_messages_to_history(query)
 
-                # Apply context management on first iteration (num_iter==0)
-                # This maintains consistent truncations throughout the run for prompt caching
                 token_count = count_message_tokens(self.messages, self.system_prompt)
                 self.messages, self._cache_marker_index = self._context_manager.apply_if_needed(
-                    self.messages,
-                    self.num_iter,
-                    token_count
+                    self.messages, self.num_iter, token_count
                 )
 
                 follow_up_actions = []
@@ -90,30 +78,22 @@ class AsyncAgent:
 
                     follow_up_actions = result.follow_ups
 
-                # max_iter reached without exit
                 if self.force_exit_on_max_iter:
                     self.logger.log_warning(f"max_iter ({self.max_iter}) reached without exit action, forcing exit")
                 return self._build_final_response(timer, success=self.force_exit_on_max_iter)
         finally:
-            # Call __stop__ hooks on all actions
-            await self._call_lifecycle_hooks('__stop__')
+            await self._call_stop_hooks()
 
     async def stream(self, query: Union[str, List[Message]]) -> AsyncIterator[Union[StreamEvent, AgentResponse]]:
-        """Execute agent loop with streaming, yields events then AgentResponse"""
-        # Call __start__ hooks on all actions
-        await self._call_lifecycle_hooks('__start__')
+        await self._call_start_hooks()
 
         try:
             async with Timer.measure_async() as timer:
                 self._add_messages_to_history(query)
 
-                # Apply context management on first iteration (num_iter==0)
-                # This maintains consistent truncations throughout the run for prompt caching
                 token_count = count_message_tokens(self.messages, self.system_prompt)
                 self.messages, self._cache_marker_index = self._context_manager.apply_if_needed(
-                    self.messages,
-                    self.num_iter,
-                    token_count
+                    self.messages, self.num_iter, token_count
                 )
 
                 follow_up_actions = []
@@ -134,23 +114,18 @@ class AsyncAgent:
 
                     follow_up_actions = result.follow_ups
 
-                # max_iter reached without exit
                 if self.force_exit_on_max_iter:
                     self.logger.log_warning(f"max_iter ({self.max_iter}) reached without exit action, forcing exit")
                 yield self._build_final_response(timer, success=self.force_exit_on_max_iter)
         finally:
-            # Call __stop__ hooks on all actions
-            await self._call_lifecycle_hooks('__stop__')
+            await self._call_stop_hooks()
 
     async def _navigate_sequence_non_streaming(self, actions: List[Union[BaseAction, AsyncBaseAction]], system_prompt: str, allowed_actions: List[Union[BaseAction, AsyncBaseAction]] = None, depth: int = 0) -> StepResult:
-        """Navigate action sequence, recursing on forced follow-ups"""
         if depth > self.max_depth:
             raise RuntimeError(f"Exceeded max follow-up depth {self.max_depth}")
 
         follow_ups = await self._step(actions, system_prompt, allowed_actions)
-        is_exit = (follow_ups is None)
-
-        if is_exit:
+        if follow_ups is None:
             return StepResult(is_exit=True, follow_ups=[])
 
         optional_follow_ups = []
@@ -171,12 +146,10 @@ class AsyncAgent:
         return StepResult(is_exit=False, follow_ups=optional_follow_ups)
 
     async def _navigate_sequence_streaming(self, actions: List[Union[BaseAction, AsyncBaseAction]], system_prompt: str, allowed_actions: List[Union[BaseAction, AsyncBaseAction]] = None, depth: int = 0):
-        """Navigate action sequence with streaming, recursing on forced follow-ups"""
         if depth > self.max_depth:
             raise RuntimeError(f"Exceeded max follow-up depth {self.max_depth}")
 
         result = None
-
         async for event in self._step_streaming(actions, system_prompt, allowed_actions):
             if isinstance(event, StepResult):
                 result = event
@@ -191,7 +164,6 @@ class AsyncAgent:
         for follow_up in result.follow_ups:
             if follow_up.force:
                 rec_result = None
-
                 async for event in self._navigate_sequence_streaming(
                     actions=actions + follow_up.actions,
                     system_prompt=system_prompt,
@@ -213,11 +185,10 @@ class AsyncAgent:
         yield StepResult(is_exit=False, follow_ups=optional_follow_ups)
 
     async def _step(self, actions: List[Union[BaseAction, AsyncBaseAction]], system_prompt: str, allowed_actions: List[Union[BaseAction, AsyncBaseAction]] = None) -> Optional[List[ActionFollowUp]]:
-        """Execute one step: LLM call + actions. Returns None if exit, else follow-ups"""
         if self._is_final_step() or self._approaching_context_limit(system_prompt):
             allowed_actions = self._get_final_step_allowed_actions()
 
-        completions = await self.client.complete(
+        completion = await self.client.complete(
             messages=self.messages,
             system_prompt=system_prompt,
             actions=actions,
@@ -228,13 +199,10 @@ class AsyncAgent:
             context_cache_index=self._cache_marker_index
         )
 
-        self.messages.extend(completions)
+        self.messages.append(completion)
         self.num_iter += 1
 
-        main_completion = completions[-1]
-
-        # Filter out server-executed actions (like web_search) - they're already complete
-        executable_actions = [a for a in main_completion.actions if not a.server_executed]
+        executable_actions = [a for a in completion.actions if not a.server_executed]
 
         if not executable_actions:
             return handle_no_actions(self.require_action, self.messages, self.logger)
@@ -242,11 +210,10 @@ class AsyncAgent:
         return await self._consume_action_events(executable_actions, actions)
 
     async def _step_streaming(self, actions: List[Union[BaseAction, AsyncBaseAction]], system_prompt: str, allowed_actions: List[Union[BaseAction, AsyncBaseAction]] = None) -> AsyncIterator[Union[StreamEvent, StepResult]]:
-        """Execute one step with streaming. Yields events, then StepResult"""
         if self._is_final_step() or self._approaching_context_limit(system_prompt):
             allowed_actions = self._get_final_step_allowed_actions()
 
-        completion_messages = []
+        completion = None
         async for event in self.client.stream(
             messages=self.messages,
             system_prompt=system_prompt,
@@ -259,19 +226,14 @@ class AsyncAgent:
         ):
             yield event
             if isinstance(event, MessageEnd):
-                completion_messages.append(event.message)
-            # Log server-executed actions (like web_search) that come from the client
+                completion = event.message
             elif isinstance(event, ActionExecuted) and event.action and event.action.server_executed:
-                self.logger.log_action_start(event.action.name, event.action.body)
-                self.logger.log_action_end(event.summary, event.message.content if event.message else "", False)
+                self._log_server_executed_action(event)
 
-        self.messages.extend(completion_messages)
+        self.messages.append(completion)
         self.num_iter += 1
 
-        main_completion = completion_messages[-1]
-
-        # Filter out server-executed actions (like web_search) - they're already complete
-        executable_actions = [a for a in main_completion.actions if not a.server_executed]
+        executable_actions = [a for a in completion.actions if not a.server_executed]
 
         if not executable_actions:
             follow_ups = handle_no_actions(self.require_action, self.messages, self.logger)
@@ -291,7 +253,6 @@ class AsyncAgent:
         yield StepResult(is_exit=False, follow_ups=follow_ups)
 
     async def _execute_actions(self, called_actions: List[Action], actions: List[Union[BaseAction, AsyncBaseAction]]) -> AsyncIterator[StreamEvent]:
-        """Execute actions and yield ActionExecutionStart/ActionExecuted events"""
         state = AgentState(messages=self.messages, citations=dict(self.client.citations))
 
         for called_action in called_actions:
@@ -300,47 +261,48 @@ class AsyncAgent:
                 handle_action_not_found(called_action, self.actions, self.messages, self.logger)
                 continue
 
-            citation_start = self.client.get_next_id()
-            self.logger.log_action_start(called_action.name, called_action.body)
+            async for event in self._execute_action(called_action, action_impl, state):
+                yield event
+                if isinstance(event, ActionExecuted) and event.is_exit:
+                    return
 
-            yield ActionExecutionStart(id=called_action.id, name=called_action.name, body=called_action.body)
+    async def _execute_action(self, called_action: Action, action_impl: Union[BaseAction, AsyncBaseAction], state: AgentState) -> AsyncIterator[StreamEvent]:
+        """Executes a single action"""
+        citation_start = self.client.get_next_id()
+        self.logger.log_action_start(called_action.name, called_action.body)
 
-            if isinstance(action_impl, AsyncBaseAction):
-                response = await action_impl(called_action, state=state, citation_start=citation_start)
-            else:
-                response = action_impl(called_action, state=state, citation_start=citation_start)
+        yield ActionExecutionStart(id=called_action.id, name=called_action.name, body=called_action.body)
 
-            if response.message.error:
-                self.logger.log_error(f"Action '{called_action.name}' failed: {response.message.content}")
+        if isinstance(action_impl, AsyncBaseAction):
+            response = await action_impl(called_action, state=state, citation_start=citation_start)
+        else:
+            response = action_impl(called_action, state=state, citation_start=citation_start)
 
-            self.messages.append(response.message)
-            if response.message.citations:
-                self.client.add_citations(response.message.citations)
+        if response.message.error:
+            self.logger.log_error(f"Action '{called_action.name}' failed: {response.message.content}")
 
-            self.logger.log_action_end(response.summary, response.message.content, response.message.error)
+        self.messages.append(response.message)
 
-            # Attach result and sources to the action for UI rendering
-            called_action.result = response.result
-            if response.message.sources:
-                called_action.sources = response.message.sources
+        self.logger.log_action_end(response.summary, response.message.content, response.message.error)
 
-            # Only consider it an exit if action succeeded (no error)
-            is_exit = bool(getattr(action_impl, '_is_exit', False)) and not response.message.error
+        self.client.add_citations(response.message.citations)
 
-            yield ActionExecuted(
-                action_id=called_action.id,
-                action=called_action,
-                message=response.message,
-                summary=response.summary,
-                follow_up=response.follow_up,
-                is_exit=is_exit
-            )
+        # Update the action result & sources
+        called_action.result = response.result
+        called_action.sources = response.message.sources
 
-            if is_exit:
-                return
+        is_exit = action_impl.is_exit and not response.message.error
+
+        yield ActionExecuted(
+            action_id=called_action.id,
+            action=called_action,
+            message=response.message,
+            summary=response.summary,
+            follow_up=response.follow_up,
+            is_exit=is_exit
+        )
 
     async def _consume_action_events(self, called_actions: List[Action], actions: List[Union[BaseAction, AsyncBaseAction]]) -> Optional[List[ActionFollowUp]]:
-        """Consume action events and return follow-ups. Returns None if exit"""
         follow_ups = []
         async for event in self._execute_actions(called_actions, actions):
             if isinstance(event, ActionExecuted):
@@ -348,24 +310,33 @@ class AsyncAgent:
                     return None
                 if event.follow_up:
                     follow_ups.append(event.follow_up)
+        return follow_ups or []
 
-        return follow_ups if follow_ups else []
+    def _log_server_executed_action(self, event: ActionExecuted) -> None:
+        self.logger.log_action_start(event.action.name, event.action.body)
+        self.logger.log_action_end(event.summary, event.message.content if event.message else "", False)
 
-    async def _call_lifecycle_hooks(self, hook_name: str):
-        """Call lifecycle hooks (__start__ or __stop__) on all action instances"""
+    async def _call_start_hooks(self):
         for action in self.actions:
-            if hasattr(action, hook_name) and callable(getattr(action, hook_name)):
-                hook = getattr(action, hook_name)
-                try:
-                    result = hook()
-                    # Await if it's a coroutine
-                    if hasattr(result, '__await__'):
-                        await result
-                except Exception as e:
-                    self.logger.log_error(f"Error in {hook_name} hook for {action.name}: {e}")
+            try:
+                if inspect.iscoroutinefunction(action.__start__):
+                    await action.__start__()
+                else:
+                    action.__start__()
+            except Exception as e:
+                self.logger.log_error(f"Error in __start__ hook for {action.name}: {e}")
+
+    async def _call_stop_hooks(self):
+        for action in self.actions:
+            try:
+                if inspect.iscoroutinefunction(action.__stop__):
+                    await action.__stop__()
+                else:
+                    action.__stop__()
+            except Exception as e:
+                self.logger.log_error(f"Error in __stop__ hook for {action.name}: {e}")
 
     def reset(self):
-        """Reset agent state for fresh execution"""
         reset_agent_state(self)
         self._context_manager.reset()
 
@@ -373,8 +344,6 @@ class AsyncAgent:
         add_messages_to_history(self.messages, query, self.client)
 
     def _is_final_step(self) -> bool:
-        # Only treat as final step if we've done at least one iteration
-        # This allows max_iter=1 to have a full first iteration with functions
         return self.num_iter == self.max_iter - 1 and self.num_iter > 0
 
     def _approaching_context_limit(self, system_prompt: str) -> bool:
@@ -386,9 +355,7 @@ class AsyncAgent:
 
     def _get_final_step_allowed_actions(self) -> List[BaseAction]:
         if self.require_action:
-            # Force exit via exit actions only
-            return [a for a in self.actions if getattr(a, '_is_exit', False)]
-        # require_action=False: return [] to force tool_choice="none" (text response)
+            return [a for a in self.actions if a.is_exit]
         return []
 
     def _build_final_response(self, timer: Timer, success: bool) -> AgentResponse:
@@ -400,5 +367,4 @@ class AsyncAgent:
 
     @property
     def exit_actions(self) -> List[Union[BaseAction, AsyncBaseAction]]:
-        """Get all actions marked as exit actions"""
-        return [a for a in self.actions if getattr(a, '_is_exit', False)]
+        return [a for a in self.actions if a.is_exit]

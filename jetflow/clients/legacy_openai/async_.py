@@ -24,7 +24,7 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         self.reasoning_effort = reasoning_effort
         self.client = openai.AsyncOpenAI(base_url=base_url or "https://api.openai.com/v1", api_key=api_key or os.environ.get('OPENAI_API_KEY'), timeout=300.0)
 
-    async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> List[Message]:
+    async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Message:
         """Non-streaming completion"""
         params = build_legacy_params(self.model, self.temperature, system_prompt, messages, actions, allowed_actions, self.reasoning_effort, tool_choice=tool_choice, stream=False)
         return await self._complete_with_retry(params, logger)
@@ -126,7 +126,7 @@ class AsyncLegacyOpenAIClient(AsyncBaseClient):
         if response.usage:
             apply_legacy_usage(response.usage, completion)
 
-        return [completion]
+        return completion
 
     async def extract(self, schema: Type[BaseModel], query: str, system_prompt: str = "Extract the requested information.") -> BaseModel:
         """Extract structured data using ChatCompletions structured output"""

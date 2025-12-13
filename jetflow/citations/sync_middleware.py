@@ -16,10 +16,7 @@ if TYPE_CHECKING:
 
 
 def _translate_require_action(require_action: bool) -> ToolChoice:
-    """Translate user-facing require_action bool to internal tool_choice."""
-    if require_action is True:
-        return "required"
-    return "auto"
+    return "required" if require_action else "auto"
 
 
 class SyncCitationMiddleware(BaseClient):
@@ -36,7 +33,7 @@ class SyncCitationMiddleware(BaseClient):
         return self._state.citations
 
     def add_citations(self, new_citations):
-        return self._state.add_citations(new_citations)
+        self._state.add_citations(new_citations)
 
     def get_next_id(self):
         return self._state.get_next_id()
@@ -48,10 +45,9 @@ class SyncCitationMiddleware(BaseClient):
         return self._state.get_used_citations(content)
 
     def reset(self):
-        return self._state.reset()
+        self._state.reset()
 
     def stream(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, require_action: bool = False, logger: Optional[BaseLogger] = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Iterator[StreamEvent]:
-        """Stream events with citation detection"""
         self._state.reset_stream_state()
         content_buffer = ""
         tool_choice = _translate_require_action(require_action)
@@ -70,16 +66,9 @@ class SyncCitationMiddleware(BaseClient):
 
             yield event
 
-    def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, require_action: bool = False, logger: Optional[BaseLogger] = None, enable_caching: bool = True, context_cache_index: Optional[int] = None) -> List[Message]:
-        """Pass through to wrapped client"""
+    def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, require_action: bool = False, logger: Optional[BaseLogger] = None, enable_caching: bool = True, context_cache_index: Optional[int] = None) -> Message:
         tool_choice = _translate_require_action(require_action)
         return self.client.complete(messages=messages, system_prompt=system_prompt, actions=actions, allowed_actions=allowed_actions, tool_choice=tool_choice, logger=logger, enable_caching=enable_caching, context_cache_index=context_cache_index)
 
-    def extract(
-        self,
-        schema: Type[BaseModel],
-        query: str,
-        system_prompt: str = "Extract the requested information.",
-    ) -> BaseModel:
-        """Pass through to wrapped client"""
+    def extract(self, schema: Type[BaseModel], query: str, system_prompt: str = "Extract the requested information.") -> BaseModel:
         return self.client.extract(schema, query, system_prompt)

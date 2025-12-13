@@ -16,12 +16,20 @@ C = TypeVar('C', bound=Type)
 
 class ActionSchemaMixin:
     """Mixin for shared schema properties and methods"""
-    
+
     name: str
     schema: type[BaseModel]
-    _is_exit: bool = False
+    is_exit: bool = False
     _use_custom: bool = False
     _custom_field: str = None
+
+    def __start__(self) -> None:
+        """Called when agent starts. Override to initialize resources."""
+        pass
+
+    def __stop__(self) -> None:
+        """Called when agent stops. Override to cleanup resources."""
+        pass
 
     @property
     def openai_schema(self) -> dict:

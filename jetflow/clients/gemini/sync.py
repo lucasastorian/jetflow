@@ -22,12 +22,12 @@ class GeminiClient(BaseClient):
         api_key = api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
         self.client = genai.Client(api_key=api_key)
 
-    def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> List[Message]:
+    def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Message:
         """Non-streaming completion"""
         config = build_gemini_config(system_prompt, actions, self.thinking_budget, allowed_actions, tool_choice)
         contents = messages_to_contents(messages)
         response = self.client.models.generate_content(model=self.model, contents=contents, config=config)
-        return [self._parse_response(response, logger)]
+        return self._parse_response(response, logger)
 
     def stream(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Iterator[StreamEvent]:
         """Streaming completion - yields events"""
