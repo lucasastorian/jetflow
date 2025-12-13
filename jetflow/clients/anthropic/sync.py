@@ -11,6 +11,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from jetflow.action import BaseAction
 from jetflow.models.message import Message, TextBlock, ThoughtBlock, ActionBlock
 from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, ActionExecuted, StreamEvent
+from jetflow.models.citations import WebSource
 from jetflow.clients.base import BaseClient, ToolChoice
 from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, extract_web_search_results, REASONING_BUDGET_MAP, make_schema_strict
 
@@ -93,7 +94,7 @@ class AnthropicClient(BaseClient):
                             block.status = 'completed'
                             block.result = {"results": results}
                             tool_message = Message(role='tool', content=f"Web search returned {len(results)} results", action_id=tool_use_id)
-                            tool_message.sources = [{"title": r.get("title", ""), "url": r.get("url", "")} for r in results if r.get("url")]
+                            tool_message.sources = [WebSource(title=r.get("title", ""), url=r.get("url", "")) for r in results if r.get("url")]
                             yield ActionExecuted(action_id=tool_use_id, action=block, message=tool_message)
                             break
 
@@ -191,7 +192,7 @@ class AnthropicClient(BaseClient):
                     if isinstance(action_block, ActionBlock) and action_block.id == tool_use_id and action_block.server_executed:
                         action_block.status = 'completed'
                         action_block.result = {"results": results}
-                        action_block.sources = [{"title": r.get("title", ""), "url": r.get("url", "")} for r in results if r.get("url")]
+                        action_block.sources = [WebSource(title=r.get("title", ""), url=r.get("url", "")) for r in results if r.get("url")]
                         break
 
         if hasattr(response, 'usage') and response.usage:

@@ -135,7 +135,7 @@ def test_serper_with_agent():
     print("SERPER SEARCH - SYNC AGENT TEST")
     print("=" * 80)
 
-    client = OpenAIClient(model="gpt-4o-mini")
+    client = OpenAIClient(model="gpt-5-mini")
 
     agent = Agent(
         client=client,
@@ -193,7 +193,7 @@ async def test_serper_with_async_agent():
     print("SERPER SEARCH - ASYNC AGENT TEST")
     print("=" * 80)
 
-    client = AsyncOpenAIClient(model="gpt-4o-mini")
+    client = AsyncOpenAIClient(model="gpt-5-mini")
 
     agent = AsyncAgent(
         client=client,
@@ -232,7 +232,7 @@ def test_agent_reads_page():
     print("SERPER SEARCH - AGENT READ MODE TEST")
     print("=" * 80)
 
-    client = OpenAIClient(model="gpt-4o-mini")
+    client = OpenAIClient(model="gpt-5-mini")
 
     agent = Agent(
         client=client,

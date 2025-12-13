@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 from jetflow.action import action
 from jetflow.agent.state import AgentState
 from jetflow.models.response import ActionResult
-from jetflow.models.citations import WebCitation
+from jetflow.models.citations import WebCitation, WebSource
 
 
 class WebSearch(BaseModel):
@@ -140,15 +140,15 @@ class SerperWebSearch:
             paragraphs.append(p)
         citations = {}
         content_parts = []
-        sources = [{"url": params.url, "title": title}]
+        sources = [WebSource(url=params.url, title=title)]
 
         for para in paragraphs:
             content_parts.append(f"{para} <{cid}>")
             if self.enable_citations:
                 citations[cid] = WebCitation(
-                    id=cid, type="web", url=params.url, title=title,
+                    id=cid, url=params.url, title=title,
                     content=para, domain=domain
-                ).model_dump()
+                )
             cid += 1
 
         return ActionResult(
@@ -159,7 +159,7 @@ class SerperWebSearch:
             summary=f"Read: {title[:50]}..."
         )
 
-    def _format_search_results(self, results: List[Dict], query: str, cid: int) -> Tuple[str, Dict[int, Any], List[Dict]]:
+    def _format_search_results(self, results: List[Dict], query: str, cid: int) -> Tuple[str, Dict[int, WebCitation], List[WebSource]]:
         """Format search results with citations."""
         citations = {}
         content_parts = []
@@ -174,14 +174,14 @@ class SerperWebSearch:
             if not snippet:
                 continue
 
-            sources.append({"url": url, "title": title})
+            sources.append(WebSource(url=url, title=title))
             content_parts.append(f"**{title}**\n{snippet} <{cid}>")
 
             if self.enable_citations:
                 citations[cid] = WebCitation(
-                    id=cid, type="web", url=url, title=title, content=snippet,
+                    id=cid, url=url, title=title, content=snippet,
                     query=query, domain=domain
-                ).model_dump()
+                )
 
             cid += 1
 

@@ -22,7 +22,7 @@ from jetflow.models.events import (
 )
 from jetflow.models.response import AgentResponse, ActionResponse, ActionResult, ActionFollowUp, StepResult
 from jetflow.models.chart import Chart, ChartSeries
-from jetflow.models.citations import BaseCitation, CodeExecutionCitation, WebCitation
+from jetflow.models.citations import BaseCitation, CodeExecutionCitation, WebCitation, BaseSource, WebSource
 
 __all__ = [
     # Message types
@@ -62,4 +62,7 @@ __all__ = [
     'BaseCitation',
     'CodeExecutionCitation',
     'WebCitation',
+    # Source types
+    'BaseSource',
+    'WebSource',
 ]

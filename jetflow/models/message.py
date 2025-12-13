@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 import uuid
 from typing import Literal, List, Optional, Dict, Any, Union
-from pydantic import BaseModel, Field, field_validator
-from jetflow.models.citations import BaseCitation
+from pydantic import BaseModel, Field, field_validator, SerializeAsAny
+from jetflow.models.citations import BaseCitation, BaseSource, WebSource
 
 try:
     import tiktoken
@@ -40,7 +40,7 @@ class ActionBlock(BaseModel):
     status: Literal['streaming', 'parsed', 'completed', 'failed'] = 'parsed'
     body: Dict[str, Any] = Field(default_factory=dict)
     result: Optional[Dict[str, Any]] = None
-    sources: Optional[List[Dict[str, Any]]] = None
+    sources: Optional[List[SerializeAsAny[BaseSource]]] = None
     external_id: Optional[str] = None
     server_executed: bool = False
     model_config = {"extra": "allow"}
@@ -62,8 +62,8 @@ class Message(BaseModel):
     action_id: Optional[str] = None
     error: bool = False
     metadata: Optional[Dict[str, Any]] = None
-    citations: Optional[Dict[int, BaseCitation]] = None
-    sources: Optional[List[Dict[str, Any]]] = None
+    citations: Optional[Dict[int, SerializeAsAny[BaseCitation]]] = None
+    sources: Optional[List[SerializeAsAny[BaseSource]]] = None
 
     uncached_prompt_tokens: Optional[int] = None
     cache_write_tokens: Optional[int] = None
@@ -93,6 +93,27 @@ class Message(BaseModel):
                 result[int(key)] = BaseCitation(**val)
             else:
                 result[int(key)] = val
+        return result
+
+    @field_validator('sources', mode='before')
+    @classmethod
+    def coerce_sources(cls, v):
+        """Coerce dict sources to BaseSource objects"""
+        if v is None:
+            return None
+        from jetflow.models.citations import BaseSource, WebSource
+        result = []
+        for item in v:
+            if isinstance(item, BaseSource):
+                result.append(item)
+            elif isinstance(item, dict):
+                # Use WebSource if it has url/title, otherwise BaseSource
+                if item.get('type') == 'web' or ('url' in item and 'title' in item):
+                    result.append(WebSource(**item))
+                else:
+                    result.append(BaseSource(**item))
+            else:
+                result.append(item)
         return result
 
     def __init__(self, **data):

@@ -6,6 +6,7 @@ from typing import List, Optional
 
 from jetflow.action import BaseAction
 from jetflow.models.message import Message, ActionBlock
+from jetflow.models.citations import WebSource
 from jetflow.clients.base import ToolChoice
 from jetflow.utils.server_tools import extract_server_tools
 
@@ -39,7 +40,7 @@ def parse_grounding_metadata(candidate) -> Optional[ActionBlock]:
         status='completed',
         body={},
         result={"results": results},
-        sources=[{"url": r["url"], "title": r["title"]} for r in results],
+        sources=[WebSource(url=r["url"], title=r["title"]) for r in results],
         server_executed=True
     )
 

@@ -2,15 +2,8 @@ from __future__ import annotations
 
 """Response types for agent and action execution"""
 
-from typing import Optional, List, Dict, Any, TYPE_CHECKING
-
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
-
-if TYPE_CHECKING:
-    from jetflow.models.message import Message
-    from jetflow.models.citations import BaseCitation
-    from jetflow.action import BaseAction
-    from jetflow.utils.usage import Usage
 
 
 class ActionFollowUp(BaseModel):
@@ -46,8 +39,8 @@ class ActionResult(BaseModel):
     force_follow_up: bool = False
     metadata: Optional[dict] = None
     summary: Optional[str] = None
-    citations: Optional[Dict[int, Any]] = None  # Dict[int, BaseCitation] - citation ID → citation object
-    sources: Optional[List[dict]] = None  # List of source metadata dicts
+    citations: Optional[Dict[int, Any]] = None  # Dict[int, BaseCitation]
+    sources: Optional[List[Any]] = None  # List[BaseSource]
 
 
 class AgentResponse(BaseModel):
