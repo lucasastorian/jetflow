@@ -6,7 +6,8 @@ import json
 import uuid
 from typing import Literal, List, Optional, Dict, Any, Union
 from pydantic import BaseModel, Field, field_validator, SerializeAsAny
-from jetflow.models.citations import BaseCitation, BaseSource, WebSource
+from jetflow.models.citations import BaseCitation
+from jetflow.models.sources import BaseSource, WebSource
 
 try:
     import tiktoken
@@ -101,7 +102,7 @@ class Message(BaseModel):
         """Coerce dict sources to BaseSource objects"""
         if v is None:
             return None
-        from jetflow.models.citations import BaseSource, WebSource
+        from jetflow.models.sources import BaseSource, WebSource
         result = []
         for item in v:
             if isinstance(item, BaseSource):

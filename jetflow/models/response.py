@@ -3,7 +3,9 @@ from __future__ import annotations
 """Response types for agent and action execution"""
 
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, SerializeAsAny
+from jetflow.models.citations import BaseCitation
+from jetflow.models.sources import BaseSource
 
 
 class ActionFollowUp(BaseModel):
@@ -39,8 +41,8 @@ class ActionResult(BaseModel):
     force_follow_up: bool = False
     metadata: Optional[dict] = None
     summary: Optional[str] = None
-    citations: Optional[Dict[int, Any]] = None  # Dict[int, BaseCitation]
-    sources: Optional[List[Any]] = None  # List[BaseSource]
+    citations: Optional[Dict[int, SerializeAsAny[BaseCitation]]] = None
+    sources: Optional[List[SerializeAsAny[BaseSource]]] = None
 
 
 class AgentResponse(BaseModel):
@@ -53,7 +55,7 @@ class AgentResponse(BaseModel):
     iterations: int
     success: bool
     content: Optional[str] = None  # None when require_action=True with no text
-    citations: Optional[Dict[int, Any]] = None  # Dict[int, BaseCitation]
+    citations: Optional[Dict[int, SerializeAsAny[BaseCitation]]] = None
     parsed: Optional[BaseModel] = None  # Parsed exit action params (when exit=True or require_action=True)
 
     def __str__(self) -> str:

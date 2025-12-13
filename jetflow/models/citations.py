@@ -42,21 +42,3 @@ class WebCitation(BaseCitation):
     query: Optional[str] = None  # Search query that found this
     domain: Optional[str] = None
     published_date: Optional[str] = None
-
-
-# =============================================================================
-# Source types - references to where content came from
-# =============================================================================
-
-class BaseSource(BaseModel):
-    """Base class for all sources - subclass to add custom fields"""
-    type: str
-
-    model_config = ConfigDict(extra='allow')
-
-
-class WebSource(BaseSource):
-    """Source from web content"""
-    type: Literal['web'] = 'web'
-    url: str
-    title: str

@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from jetflow.action import BaseAction
 from jetflow.models.message import Message, ActionBlock
-from jetflow.models.citations import WebSource
+from jetflow.models.sources import WebSource
 from jetflow.clients.base import ToolChoice
 from jetflow.utils.server_tools import extract_server_tools
 

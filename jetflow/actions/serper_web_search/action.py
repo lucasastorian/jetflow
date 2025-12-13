@@ -1,6 +1,7 @@
 """Serper Web Search action with citation support."""
 
 import os
+import html
 from typing import Optional, List, Dict, Any, Tuple, Literal
 from urllib.parse import urlparse
 import httpx
@@ -9,7 +10,8 @@ from pydantic import BaseModel, Field, model_validator
 from jetflow.action import action
 from jetflow.agent.state import AgentState
 from jetflow.models.response import ActionResult
-from jetflow.models.citations import WebCitation, WebSource
+from jetflow.models.citations import WebCitation
+from jetflow.models.sources import WebSource
 
 
 class WebSearch(BaseModel):
@@ -120,7 +122,7 @@ class SerperWebSearch:
         if len(content) > 10000:
             content = content[:10000]
 
-        title = metadata.get("title") or metadata.get("og:title") or params.url
+        title = html.unescape(metadata.get("title") or metadata.get("og:title") or params.url)
         domain = urlparse(params.url).netloc
 
         # Split into paragraphs and filter out noise
@@ -167,8 +169,8 @@ class SerperWebSearch:
 
         for result in results:
             url = result.get("link", "")
-            title = result.get("title", url)
-            snippet = result.get("snippet", "")
+            title = html.unescape(result.get("title", url))
+            snippet = html.unescape(result.get("snippet", ""))
             domain = urlparse(url).netloc if url else ""
 
             if not snippet:

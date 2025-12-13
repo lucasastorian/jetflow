@@ -11,7 +11,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from jetflow.action import BaseAction
 from jetflow.models.message import Message, TextBlock, ThoughtBlock, ActionBlock
 from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, ActionExecuted, StreamEvent
-from jetflow.models.citations import WebSource
+from jetflow.models.sources import WebSource
 from jetflow.clients.base import BaseClient, ToolChoice
 from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, extract_web_search_results, REASONING_BUDGET_MAP, make_schema_strict
 
