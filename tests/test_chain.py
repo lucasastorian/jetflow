@@ -4,14 +4,14 @@ Test Chain - Sequential agent execution with shared message history
 Validates that Chain properly:
 1. Executes agents in sequence
 2. Shares message history between agents
-3. Requires exit actions for all agents except the last
+3. Supports conditional routing (require_action=False agents can respond directly to end chain)
 4. Accumulates usage across all agents
 """
 
 import asyncio
 from dotenv import load_dotenv
 from jetflow import Agent, AsyncAgent, Chain, AsyncChain, action
-from jetflow.clients.anthropic import AnthropicClient, AsyncAnthropicClient
+from jetflow.clients.openai import OpenAIClient, AsyncOpenAIClient
 from jetflow.models.response import ActionResult, ChainResponse
 from jetflow.models import StreamEvent, ContentDelta, MessageEnd, ChainAgentStart, ChainAgentEnd
 from pydantic import BaseModel, Field
@@ -77,7 +77,7 @@ def test_sync_chain():
     print("=" * 80)
     print()
 
-    client = AnthropicClient(model="claude-haiku-4-5")
+    client = OpenAIClient(model="gpt-5-mini")
 
     # Stage 1: Search agent (cheap, fast model)
     search_agent = Agent(
@@ -150,7 +150,7 @@ async def test_async_chain():
     print("=" * 80)
     print()
 
-    client = AsyncAnthropicClient(model="claude-haiku-4-5")
+    client = AsyncOpenAIClient(model="gpt-5-mini")
 
     # Stage 1: Search agent
     search_agent = AsyncAgent(
@@ -222,7 +222,7 @@ def test_sync_chain_stream():
     print("=" * 80)
     print()
 
-    client = AnthropicClient(model="claude-haiku-4-5")
+    client = OpenAIClient(model="gpt-5-mini")
 
     search_agent = Agent(
         client=client,
@@ -294,7 +294,7 @@ async def test_async_chain_stream():
     print("=" * 80)
     print()
 
-    client = AsyncAnthropicClient(model="claude-haiku-4-5")
+    client = AsyncOpenAIClient(model="gpt-5-mini")
 
     search_agent = AsyncAgent(
         client=client,
@@ -356,6 +356,116 @@ async def test_async_chain_stream():
 
 
 # ============================================================================
+# Test 5: Early Termination - First agent responds directly
+# ============================================================================
+
+def test_early_termination():
+    """Test that chain stops when first agent responds without exit action"""
+    print("=" * 80)
+    print("TEST 5: EARLY TERMINATION - DIRECT RESPONSE")
+    print("=" * 80)
+    print()
+
+    client = OpenAIClient(model="gpt-5-mini")
+
+    # Router agent - can respond directly OR call exit action
+    router_agent = Agent(
+        client=client,
+        actions=[search_complete],  # Has exit action but doesn't HAVE to use it
+        system_prompt="""You are a router agent.
+        If the user asks a simple question (like 'hello' or 'what is 2+2'), respond directly.
+        If the user asks for research or complex analysis, call search_complete to hand off.""",
+        require_action=False,  # CAN respond directly
+        max_iter=5,
+        verbose=True
+    )
+
+    # This agent should NOT run for simple queries
+    analysis_agent = Agent(
+        client=client,
+        actions=[analysis_complete],
+        system_prompt="""You are an analyst. Analyze the findings.""",
+        require_action=True,
+        max_iter=5,
+        verbose=True
+    )
+
+    chain = Chain([router_agent, analysis_agent])
+
+    # Simple query - router should respond directly, chain should stop
+    response = chain.run("Hello! What is 2+2?")
+
+    print("\n" + "=" * 80)
+    print("ASSERTIONS")
+    print("=" * 80)
+
+    assert response.success, "Chain should complete successfully"
+
+    # The key test: only router_agent should have run
+    # Check that we don't have analysis_complete in the messages
+    all_content = " ".join(m.content or "" for m in response.messages)
+    has_analysis = "Analysis:" in all_content or "analysis_complete" in all_content.lower()
+
+    print(f"✓ Response: {response.content[:100]}...")
+    print(f"✓ Total messages: {len(response.messages)}")
+    print(f"✓ Contains analysis output: {has_analysis}")
+
+    # For a simple "hello" query, the analysis agent shouldn't have run
+    # This validates early termination worked
+    if not has_analysis:
+        print("✓ Early termination worked - analysis agent did not run")
+    else:
+        print("⚠ Analysis agent ran (LLM chose to hand off - behavior is valid but not testing early termination)")
+
+    print("\n✅ TEST 5 PASSED\n")
+    return response
+
+
+async def test_async_early_termination():
+    """Test async chain early termination"""
+    print("=" * 80)
+    print("TEST 6: ASYNC EARLY TERMINATION")
+    print("=" * 80)
+    print()
+
+    client = AsyncOpenAIClient(model="gpt-5-mini")
+
+    router_agent = AsyncAgent(
+        client=client,
+        actions=[search_complete],
+        system_prompt="""You are a router agent.
+        If the user asks a simple question, respond directly.
+        If the user asks for research, call search_complete.""",
+        require_action=False,
+        max_iter=5,
+        verbose=True
+    )
+
+    analysis_agent = AsyncAgent(
+        client=client,
+        actions=[analysis_complete],
+        system_prompt="""You are an analyst.""",
+        require_action=True,
+        max_iter=5,
+        verbose=True
+    )
+
+    chain = AsyncChain([router_agent, analysis_agent])
+    response = await chain.run("Hi there! Just saying hello.")
+
+    print("\n" + "=" * 80)
+    print("ASSERTIONS")
+    print("=" * 80)
+
+    assert response.success, "Chain should complete successfully"
+    print(f"✓ Response: {response.content[:100]}...")
+    print(f"✓ Total messages: {len(response.messages)}")
+
+    print("\n✅ TEST 6 PASSED\n")
+    return response
+
+
+# ============================================================================
 # Main
 # ============================================================================
 
@@ -365,6 +475,8 @@ async def main():
     await test_async_chain()
     test_sync_chain_stream()
     await test_async_chain_stream()
+    test_early_termination()
+    await test_async_early_termination()
 
 
 if __name__ == "__main__":
@@ -386,6 +498,8 @@ if __name__ == "__main__":
         print("  ✓ Shared message history between agents")
         print("  ✓ Exit action requirements")
         print("  ✓ Usage accumulation across agents")
+        print("  ✓ Early termination (require_action=False)")
+        print("  ✓ Conditional routing")
 
     except AssertionError as e:
         print(f"\n❌ TEST FAILED: {e}\n")

@@ -25,6 +25,7 @@ try:
         R2Storage,
         GCSStorage,
     )
+    from jetflow.actions.e2b_python_exec.extract_widget import ExtractWidget
     from jetflow.actions.utils import FileInfo
 
     __all__ = [
@@ -36,6 +37,7 @@ try:
         "S3Storage",
         "R2Storage",
         "GCSStorage",
+        "ExtractWidget",
     ]
 except ImportError as e:
     raise ImportError(

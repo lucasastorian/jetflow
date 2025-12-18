@@ -74,7 +74,7 @@ class AsyncAgent:
                     )
 
                     if result.is_exit:
-                        return self._build_final_response(timer, success=True)
+                        return self._build_final_response(timer, success=True, exited_via_action=result.via_action)
 
                     follow_up_actions = result.follow_ups
 
@@ -109,7 +109,7 @@ class AsyncAgent:
                             yield event
 
                     if result.is_exit:
-                        yield self._build_final_response(timer, success=True)
+                        yield self._build_final_response(timer, success=True, exited_via_action=result.via_action)
                         return
 
                     follow_up_actions = result.follow_ups
@@ -124,12 +124,12 @@ class AsyncAgent:
         if depth > self.max_depth:
             raise RuntimeError(f"Exceeded max follow-up depth {self.max_depth}")
 
-        follow_ups = await self._step(actions, system_prompt, allowed_actions)
-        if follow_ups is None:
-            return StepResult(is_exit=True, follow_ups=[])
+        step_result = await self._step(actions, system_prompt, allowed_actions)
+        if step_result.is_exit:
+            return step_result  # Preserves via_action flag
 
         optional_follow_ups = []
-        for follow_up in follow_ups:
+        for follow_up in step_result.follow_ups:
             if follow_up.force:
                 rec_result = await self._navigate_sequence_non_streaming(
                     actions=actions + follow_up.actions,
@@ -138,7 +138,7 @@ class AsyncAgent:
                     depth=depth + 1
                 )
                 if rec_result.is_exit:
-                    return StepResult(is_exit=True, follow_ups=[])
+                    return rec_result  # Preserves via_action flag
                 optional_follow_ups.extend(rec_result.follow_ups)
             else:
                 optional_follow_ups.extend(follow_up.actions)
@@ -149,19 +149,19 @@ class AsyncAgent:
         if depth > self.max_depth:
             raise RuntimeError(f"Exceeded max follow-up depth {self.max_depth}")
 
-        result = None
+        step_result = None
         async for event in self._step_streaming(actions, system_prompt, allowed_actions):
             if isinstance(event, StepResult):
-                result = event
+                step_result = event
             else:
                 yield event
 
-        if result.is_exit:
-            yield StepResult(is_exit=True, follow_ups=[])
+        if step_result.is_exit:
+            yield step_result  # Preserves via_action flag
             return
 
         optional_follow_ups = []
-        for follow_up in result.follow_ups:
+        for follow_up in step_result.follow_ups:
             if follow_up.force:
                 rec_result = None
                 async for event in self._navigate_sequence_streaming(
@@ -176,7 +176,7 @@ class AsyncAgent:
                         yield event
 
                 if rec_result.is_exit:
-                    yield StepResult(is_exit=True, follow_ups=[])
+                    yield rec_result  # Preserves via_action flag
                     return
                 optional_follow_ups.extend(rec_result.follow_ups)
             else:
@@ -184,7 +184,7 @@ class AsyncAgent:
 
         yield StepResult(is_exit=False, follow_ups=optional_follow_ups)
 
-    async def _step(self, actions: List[Union[BaseAction, AsyncBaseAction]], system_prompt: str, allowed_actions: List[Union[BaseAction, AsyncBaseAction]] = None) -> Optional[List[ActionFollowUp]]:
+    async def _step(self, actions: List[Union[BaseAction, AsyncBaseAction]], system_prompt: str, allowed_actions: List[Union[BaseAction, AsyncBaseAction]] = None) -> StepResult:
         if self._is_final_step() or self._approaching_context_limit(system_prompt):
             allowed_actions = self._get_final_step_allowed_actions()
 
@@ -205,9 +205,15 @@ class AsyncAgent:
         executable_actions = [a for a in completion.actions if not a.server_executed]
 
         if not executable_actions:
-            return handle_no_actions(self.require_action, self.messages, self.logger)
+            result = handle_no_actions(self.require_action, self.messages, self.logger)
+            if result is None:
+                return StepResult(is_exit=True, via_action=False)  # Direct response
+            return StepResult(is_exit=False, follow_ups=result)
 
-        return await self._consume_action_events(executable_actions, actions)
+        action_result = await self._consume_action_events(executable_actions, actions)
+        if action_result is None:
+            return StepResult(is_exit=True, via_action=True)  # Exit action
+        return StepResult(is_exit=False, follow_ups=action_result)
 
     async def _step_streaming(self, actions: List[Union[BaseAction, AsyncBaseAction]], system_prompt: str, allowed_actions: List[Union[BaseAction, AsyncBaseAction]] = None) -> AsyncIterator[Union[StreamEvent, StepResult]]:
         if self._is_final_step() or self._approaching_context_limit(system_prompt):
@@ -237,7 +243,10 @@ class AsyncAgent:
 
         if not executable_actions:
             follow_ups = handle_no_actions(self.require_action, self.messages, self.logger)
-            yield StepResult(is_exit=(follow_ups is None), follow_ups=follow_ups or [])
+            if follow_ups is None:
+                yield StepResult(is_exit=True, via_action=False)  # Direct response
+            else:
+                yield StepResult(is_exit=False, follow_ups=follow_ups)
             return
 
         follow_ups = []
@@ -245,7 +254,7 @@ class AsyncAgent:
             yield event
             if isinstance(event, ActionExecuted):
                 if event.is_exit:
-                    yield StepResult(is_exit=True, follow_ups=[])
+                    yield StepResult(is_exit=True, via_action=True)  # Exit action
                     return
                 if event.follow_up:
                     follow_ups.append(event.follow_up)
@@ -358,8 +367,8 @@ class AsyncAgent:
             return [a for a in self.actions if a.is_exit]
         return []
 
-    def _build_final_response(self, timer: Timer, success: bool) -> AgentResponse:
-        return _build_response(self, timer, success)
+    def _build_final_response(self, timer: Timer, success: bool, exited_via_action: bool = False) -> AgentResponse:
+        return _build_response(self, timer, success, exited_via_action)
 
     @property
     def system_prompt(self) -> str:

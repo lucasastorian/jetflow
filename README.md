@@ -343,9 +343,9 @@ All clients support streaming with consistent event semantics.
 
 ## Docs
 
-- **[Quickstart](https://jetflow.readthedocs.io/quickstart)** — 5-minute tutorial
-- **[E2B Code Execution](https://jetflow.readthedocs.io/e2b)** — Cloud Python sandbox
-- **[API Reference](https://jetflow.readthedocs.io/api)** — Full API docs
+- **[Quickstart](https://jetflow.readthedocs.io/en/latest/quickstart)** — 5-minute tutorial
+- **[E2B Code Execution](https://jetflow.readthedocs.io/en/latest/e2b)** — Cloud Python sandbox
+- **[API Reference](https://jetflow.readthedocs.io/en/latest/api)** — Full API docs
 
 ---
 

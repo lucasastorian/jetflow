@@ -17,9 +17,13 @@ class Chain:
     """
     Sequential execution of sync agents with shared message history.
 
-    All agents except the last must have:
-    - require_action=True
-    - At least one exit action
+    Agents with require_action=True must exit via an exit action to continue the chain.
+    Agents with require_action=False can either:
+    - Respond directly (no exit action) → chain stops, response returned to user
+    - Call an exit action → chain continues to next agent
+
+    This enables conditional routing: first agent can be a "router" that decides
+    whether to handle a request directly or pass it to subsequent agents.
 
     The chain executes agents in order, accumulating messages across all agents.
     Each agent sees the full conversation history from previous agents.
@@ -39,16 +43,12 @@ class Chain:
         if not agents:
             raise ValueError("Chain must have at least one agent")
 
-        # Validate all agents except the last
+        # Validate agents with require_action=True have exit actions
         for i, agent in enumerate(agents[:-1]):
-            if not agent.require_action:
+            if agent.require_action and not agent.exit_actions:
                 raise ValueError(
-                    f"Agent at index {i} must have require_action=True for chaining. "
-                    f"Only the last agent can generate free-form responses."
-                )
-            if not agent.exit_actions:
-                raise ValueError(
-                    f"Agent at index {i} must have at least one exit action to hand off control."
+                    f"Agent at index {i} has require_action=True but no exit actions. "
+                    f"Add at least one exit action to hand off control."
                 )
 
         self._validate_thinking_compatibility(agents)
@@ -158,12 +158,27 @@ class Chain:
             agent_duration = time.time() - agent_start_time
             self.logger.log_chain_transition_end(i, len(self.agents), agent_duration)
 
-            # Verify non-last agents exited properly
-            if not is_last and not result.success:
-                raise RuntimeError(
-                    f"Agent at index {i} failed to exit via an exit action. "
-                    f"Check that it has exit actions and successfully called one."
-                )
+            # Handle non-last agent completion
+            if not is_last:
+                if result.exited_via_action:
+                    # Exited via exit action → continue to next agent
+                    pass
+                elif not agent.require_action:
+                    # Responded directly without exit action → valid early termination
+                    end_time = datetime.datetime.now()
+                    return ChainResponse(
+                        content=shared_messages[-1].content if shared_messages else "",
+                        messages=shared_messages,
+                        usage=total_usage,
+                        duration=(end_time - start_time).total_seconds(),
+                        success=True
+                    )
+                else:
+                    # require_action=True but didn't exit via exit action → error
+                    raise RuntimeError(
+                        f"Agent at index {i} failed to exit via an exit action. "
+                        f"Check that it has exit actions and successfully called one."
+                    )
 
         end_time = datetime.datetime.now()
 
@@ -220,12 +235,28 @@ class Chain:
             # Yield chain agent end event
             yield ChainAgentEnd(agent_index=i, total_agents=len(self.agents), duration=agent_duration)
 
-            # Verify non-last agents exited properly
-            if not is_last and not agent_response.success:
-                raise RuntimeError(
-                    f"Agent at index {i} failed to exit via an exit action. "
-                    f"Check that it has exit actions and successfully called one."
-                )
+            # Handle non-last agent completion
+            if not is_last:
+                if agent_response.exited_via_action:
+                    # Exited via exit action → continue to next agent
+                    pass
+                elif not agent.require_action:
+                    # Responded directly without exit action → valid early termination
+                    end_time = datetime.datetime.now()
+                    yield ChainResponse(
+                        content=shared_messages[-1].content if shared_messages else "",
+                        messages=shared_messages,
+                        usage=total_usage,
+                        duration=(end_time - start_time).total_seconds(),
+                        success=True
+                    )
+                    return
+                else:
+                    # require_action=True but didn't exit via exit action → error
+                    raise RuntimeError(
+                        f"Agent at index {i} failed to exit via an exit action. "
+                        f"Check that it has exit actions and successfully called one."
+                    )
 
         end_time = datetime.datetime.now()
 
@@ -242,9 +273,13 @@ class AsyncChain:
     """
     Sequential execution of async agents with shared message history.
 
-    All agents except the last must have:
-    - require_action=True
-    - At least one exit action
+    Agents with require_action=True must exit via an exit action to continue the chain.
+    Agents with require_action=False can either:
+    - Respond directly (no exit action) → chain stops, response returned to user
+    - Call an exit action → chain continues to next agent
+
+    This enables conditional routing: first agent can be a "router" that decides
+    whether to handle a request directly or pass it to subsequent agents.
 
     The chain executes agents in order, accumulating messages across all agents.
     Each agent sees the full conversation history from previous agents.
@@ -264,16 +299,12 @@ class AsyncChain:
         if not agents:
             raise ValueError("Chain must have at least one agent")
 
-        # Validate all agents except the last
+        # Validate agents with require_action=True have exit actions
         for i, agent in enumerate(agents[:-1]):
-            if not agent.require_action:
+            if agent.require_action and not agent.exit_actions:
                 raise ValueError(
-                    f"Agent at index {i} must have require_action=True for chaining. "
-                    f"Only the last agent can generate free-form responses."
-                )
-            if not agent.exit_actions:
-                raise ValueError(
-                    f"Agent at index {i} must have at least one exit action to hand off control."
+                    f"Agent at index {i} has require_action=True but no exit actions. "
+                    f"Add at least one exit action to hand off control."
                 )
 
         self._validate_thinking_compatibility(agents)
@@ -383,12 +414,27 @@ class AsyncChain:
             agent_duration = time.time() - agent_start_time
             self.logger.log_chain_transition_end(i, len(self.agents), agent_duration)
 
-            # Verify non-last agents exited properly
-            if not is_last and not result.success:
-                raise RuntimeError(
-                    f"Agent at index {i} failed to exit via an exit action. "
-                    f"Check that it has exit actions and successfully called one."
-                )
+            # Handle non-last agent completion
+            if not is_last:
+                if result.exited_via_action:
+                    # Exited via exit action → continue to next agent
+                    pass
+                elif not agent.require_action:
+                    # Responded directly without exit action → valid early termination
+                    end_time = datetime.datetime.now()
+                    return ChainResponse(
+                        content=shared_messages[-1].content if shared_messages else "",
+                        messages=shared_messages,
+                        usage=total_usage,
+                        duration=(end_time - start_time).total_seconds(),
+                        success=True
+                    )
+                else:
+                    # require_action=True but didn't exit via exit action → error
+                    raise RuntimeError(
+                        f"Agent at index {i} failed to exit via an exit action. "
+                        f"Check that it has exit actions and successfully called one."
+                    )
 
         end_time = datetime.datetime.now()
 
@@ -445,12 +491,28 @@ class AsyncChain:
             # Yield chain agent end event
             yield ChainAgentEnd(agent_index=i, total_agents=len(self.agents), duration=agent_duration)
 
-            # Verify non-last agents exited properly
-            if not is_last and not agent_response.success:
-                raise RuntimeError(
-                    f"Agent at index {i} failed to exit via an exit action. "
-                    f"Check that it has exit actions and successfully called one."
-                )
+            # Handle non-last agent completion
+            if not is_last:
+                if agent_response.exited_via_action:
+                    # Exited via exit action → continue to next agent
+                    pass
+                elif not agent.require_action:
+                    # Responded directly without exit action → valid early termination
+                    end_time = datetime.datetime.now()
+                    yield ChainResponse(
+                        content=shared_messages[-1].content if shared_messages else "",
+                        messages=shared_messages,
+                        usage=total_usage,
+                        duration=(end_time - start_time).total_seconds(),
+                        success=True
+                    )
+                    return
+                else:
+                    # require_action=True but didn't exit via exit action → error
+                    raise RuntimeError(
+                        f"Agent at index {i} failed to exit via an exit action. "
+                        f"Check that it has exit actions and successfully called one."
+                    )
 
         end_time = datetime.datetime.now()
 

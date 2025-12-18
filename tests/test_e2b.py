@@ -1120,6 +1120,166 @@ print(f"First date: {test_df['date'].iloc[0]}")
 
 
 # =============================================================================
+# WIDGET EXTRACTION TESTS
+# =============================================================================
+
+@skip_if_no_e2b
+def test_extract_html_widget():
+    """Test direct HTML widget extraction from file"""
+    print("\n=== Test: Extract HTML Widget ===")
+
+    from jetflow.actions.e2b_python_exec import ExtractWidget
+
+    executor = E2BPythonExec()
+    widget_extractor = ExtractWidget(python_exec=executor)
+    executor.__start__()
+
+    # Create an HTML file in the sandbox
+    html_content = """
+<!DOCTYPE html>
+<html>
+<head><title>Test Report</title></head>
+<body>
+    <h1>Performance Tearsheet</h1>
+    <table>
+        <tr><th>Metric</th><th>Value</th></tr>
+        <tr><td>Total Return</td><td>25.4%</td></tr>
+        <tr><td>Sharpe Ratio</td><td>1.8</td></tr>
+        <tr><td>Max Drawdown</td><td>-12.3%</td></tr>
+    </table>
+</body>
+</html>
+"""
+    executor.write_file('/tmp/tearsheet.html', html_content)
+
+    # Extract the widget
+    from jetflow.actions.e2b_python_exec.extract_widget import ExtractWidgetParams
+    result = widget_extractor(ExtractWidgetParams(
+        id='performance-tearsheet',
+        file_path='/tmp/tearsheet.html',
+        title='Q4 Performance Report'
+    ))
+
+    executor.__stop__()
+
+    # Verify the result
+    assert result.metadata is not None, "Should have metadata"
+    assert 'widget' in result.metadata, "Should have widget in metadata"
+
+    widget = result.metadata['widget']
+    assert widget['id'] == 'performance-tearsheet', f"Widget ID mismatch: {widget['id']}"
+    assert widget['type'] == 'html', f"Widget type mismatch: {widget['type']}"
+    assert widget['title'] == 'Q4 Performance Report', f"Widget title mismatch: {widget['title']}"
+    assert 'Performance Tearsheet' in widget['content'], "Widget content should contain HTML"
+    assert 'Total Return' in widget['content'], "Widget content should contain table data"
+    assert '<widget id="performance-tearsheet">' in result.content, "Should have embed instruction"
+
+    print(f"✅ HTML widget extracted")
+    print(f"   ID: {widget['id']}")
+    print(f"   Title: {widget['title']}")
+    print(f"   Content length: {len(widget['content'])} chars")
+    return True
+
+
+@skip_if_no_e2b
+def test_extract_widget_with_agent():
+    """Test LLM-driven widget extraction flow"""
+    print("\n=== Test: Extract Widget with Agent ===")
+
+    from jetflow.actions.e2b_python_exec import ExtractWidget
+    from jetflow import action
+    from pydantic import BaseModel
+
+    # Create exit action
+    class Done(BaseModel):
+        """Signal completion"""
+        message: str
+
+    @action(schema=Done, exit=True)
+    def done(d: Done) -> str:
+        return d.message
+
+    executor = E2BPythonExec(persistent=False)
+    widget_extractor = ExtractWidget(python_exec=executor)
+
+    client = get_client()
+    agent = Agent(
+        client=client,
+        actions=[executor, widget_extractor, done],
+        system_prompt="""You are a data analyst. When asked to create a report:
+1. Use PythonExec to generate HTML content and save it to a file
+2. Use ExtractWidget to extract it for display
+3. Call done() when finished""",
+        max_iter=5,
+        verbose=True
+    )
+
+    response = agent.run("""
+Create a simple HTML report showing these quarterly sales figures:
+- Q1: $1.2M
+- Q2: $1.5M
+- Q3: $1.8M
+- Q4: $2.1M
+
+Save it as /tmp/sales_report.html and extract it as a widget with id 'sales-q4' and title 'Q4 Sales Summary'.
+""")
+
+    # Find tool messages to check for widget extraction
+    tool_messages = [msg for msg in response.messages if msg.role == 'tool']
+
+    found_widget = False
+    for msg in tool_messages:
+        # Check content for embed instruction
+        if '<widget id=' in (msg.content or ''):
+            found_widget = True
+            print(f"✅ Widget embed instruction found in tool output")
+            print(f"   Content: {msg.content[:150]}...")
+            break
+
+    if not found_widget:
+        print("⚠️  Widget extraction not found in tool outputs")
+        print("   This may indicate LLM didn't call ExtractWidget")
+        for i, msg in enumerate(tool_messages):
+            print(f"   Tool {i+1}: {(msg.content or '')[:100]}...")
+
+    assert found_widget, "Should have widget embed instruction in tool output"
+    print("✅ Agent successfully created and extracted widget")
+    return True
+
+
+@skip_if_no_e2b
+def test_extract_widget_file_not_found():
+    """Test ExtractWidget error handling for missing files"""
+    print("\n=== Test: Extract Widget - File Not Found ===")
+
+    from jetflow.actions.e2b_python_exec import ExtractWidget
+    from jetflow.actions.e2b_python_exec.extract_widget import ExtractWidgetParams
+
+    executor = E2BPythonExec()
+    widget_extractor = ExtractWidget(python_exec=executor)
+    executor.__start__()
+
+    # Try to extract a non-existent file
+    result = widget_extractor(ExtractWidgetParams(
+        id='missing-widget',
+        file_path='/tmp/does_not_exist.html',
+        title='Missing File'
+    ))
+
+    executor.__stop__()
+
+    # Should return error gracefully, not crash
+    assert 'Error' in result.content or 'error' in result.content.lower(), \
+        f"Should indicate error, got: {result.content}"
+    assert result.metadata is None or 'widget' not in result.metadata, \
+        "Should not have widget in metadata on error"
+
+    print(f"✅ File not found handled gracefully")
+    print(f"   Response: {result.content[:100]}")
+    return True
+
+
+# =============================================================================
 # TEST RUNNER
 # =============================================================================
 
@@ -1168,6 +1328,9 @@ if __name__ == "__main__":
         ("Embeddable Charts with savefig", test_embeddable_charts_with_savefig),
         ("Moving Average NaN Alignment", test_moving_average_with_nan_alignment),
         ("Datetime in Charts", test_datetime_in_charts),
+        ("Extract HTML Widget", test_extract_html_widget),
+        ("Extract Widget with Agent", test_extract_widget_with_agent),
+        ("Extract Widget - File Not Found", test_extract_widget_file_not_found),
     ]
 
     results = []

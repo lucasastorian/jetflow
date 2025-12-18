@@ -19,6 +19,7 @@ class ActionFollowUp(BaseModel):
 class StepResult(BaseModel):
     """Result from executing one agent step (LLM call + actions)"""
     is_exit: bool
+    via_action: bool = False  # True if exit was via an exit action, False if responded directly
     follow_ups: List[ActionFollowUp] = Field(default_factory=list)
 
 
@@ -54,6 +55,7 @@ class AgentResponse(BaseModel):
     duration: float
     iterations: int
     success: bool
+    exited_via_action: bool = False  # True if agent called an exit action, False if responded directly
     content: Optional[str] = None  # None when require_action=True with no text
     citations: Optional[Dict[int, SerializeAsAny[BaseCitation]]] = None
     parsed: Optional[BaseModel] = None  # Parsed exit action params (when exit=True or require_action=True)

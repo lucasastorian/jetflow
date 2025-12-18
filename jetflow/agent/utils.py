@@ -117,7 +117,7 @@ def calculate_usage(messages: List[Message], provider: str, model: str) -> Usage
     return usage
 
 
-def _build_response(agent, timer: Timer, success: bool) -> AgentResponse:
+def _build_response(agent, timer: Timer, success: bool, exited_via_action: bool = False) -> AgentResponse:
     """Build agent response with citations and usage calculation"""
     end_time = timer.end_time if timer.end_time is not None else datetime.datetime.now()
 
@@ -128,6 +128,7 @@ def _build_response(agent, timer: Timer, success: bool) -> AgentResponse:
             duration=0.0,
             iterations=agent.num_iter,
             success=success,
+            exited_via_action=exited_via_action,
             content=""
         )
 
@@ -159,6 +160,7 @@ def _build_response(agent, timer: Timer, success: bool) -> AgentResponse:
         duration=(end_time - timer.start_time).total_seconds(),
         iterations=agent.num_iter,
         success=success,
+        exited_via_action=exited_via_action,
         content=last_message.content or None,
         citations=citations,
         parsed=output
