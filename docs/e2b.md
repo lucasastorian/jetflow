@@ -118,6 +118,52 @@ for chart in resp.charts:
     print(chart.base64) # PNG data for embedding
 ```
 
+## Widget Extraction
+
+Extract HTML content (tearsheets, reports) from the sandbox as embeddable widgets:
+
+```python
+from jetflow import Agent, action
+from jetflow.clients.openai import OpenAIClient
+from jetflow.actions.e2b_python_exec import E2BPythonExec, ExtractWidget
+from pydantic import BaseModel
+
+class Done(BaseModel):
+    summary: str
+
+@action(schema=Done, exit=True)
+def done(params: Done) -> str:
+    return params.summary
+
+exec = E2BPythonExec(persistent=True, session_id="reports")
+widget_extractor = ExtractWidget(python_exec=exec)
+
+agent = Agent(
+    client=OpenAIClient(model="gpt-4o"),
+    actions=[exec, widget_extractor, done],
+    system_prompt="""Generate HTML reports and save to /tmp/.
+    After saving, use ExtractWidget to extract the file as a widget.
+    Provide a unique id for each widget.""",
+    require_action=True
+)
+
+resp = agent.run("Create a performance tearsheet and extract it as a widget")
+
+# Access widget from message metadata
+for msg in resp.messages:
+    if hasattr(msg, 'metadata') and msg.metadata and 'widget' in msg.metadata:
+        widget = msg.metadata['widget']
+        print(widget['id'])       # "performance-tearsheet"
+        print(widget['type'])     # "html"
+        print(widget['content'])  # HTML content
+```
+
+The LLM workflow is:
+1. Generate HTML content in Python
+2. Save to file: `with open('/tmp/report.html', 'w') as f: f.write(html)`
+3. Call `ExtractWidget(id="my-widget", file_path="/tmp/report.html")`
+4. Widget content is returned in metadata for UI rendering
+
 ## File Operations
 
 ```python
