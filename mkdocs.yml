@@ -33,11 +33,7 @@ theme:
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
-  - Guides:
-      - Single Agent: single-agent.md
-      - Composition: composition.md
-      - Chains: chains.md
-      - Streaming: streaming.md
+  - E2B Code Execution: e2b.md
   - API Reference: api.md
 
 markdown_extensions:
@@ -69,3 +65,4 @@ extra:
       link: https://github.com/lucasastorian/jetflow
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/jetflow
+

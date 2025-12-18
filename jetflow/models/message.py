@@ -283,16 +283,26 @@ class Message(BaseModel):
         thoughts = self.thoughts
         actions = self.actions
 
+        # Serialize citations dict (int -> BaseCitation)
+        citations_serialized = None
+        if self.citations:
+            citations_serialized = {k: v.model_dump() for k, v in self.citations.items()}
+
+        # Serialize sources list
+        sources_serialized = None
+        if self.sources:
+            sources_serialized = [s.model_dump() for s in self.sources]
+
         row = {
             "id": self.id,
             "status": self.status.capitalize(),
             "role": self.role.capitalize() if self.role != "assistant" else "Assistant",
             "content": self.content or None,
-            "citations": self.citations,
+            "citations": citations_serialized,
             "actions": [a.model_dump() for a in actions] if actions else None,
             "thought": thoughts[0].model_dump() if thoughts else None,
             "action_id": self.action_id,
-            "sources": self.sources,
+            "sources": sources_serialized,
             "prompt_tokens": (self.uncached_prompt_tokens or 0) + (self.cache_read_tokens or 0),
             "completion_tokens": self.completion_tokens,
         }

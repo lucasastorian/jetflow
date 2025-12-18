@@ -1,9 +1,12 @@
 """E2B Sandbox with session persistence and file operations."""
 
+from __future__ import annotations
+
 from typing import Optional, Any, List, Union
 from e2b_code_interpreter import Sandbox
 
 from jetflow.actions.utils import FileInfo
+from jetflow.actions.e2b_python_exec.storage import BaseStorage
 
 
 class E2BSandbox:
@@ -17,6 +20,8 @@ class E2BSandbox:
         timeout: int = 300,
         api_key: Optional[str] = None,
         _sandbox_id: Optional[str] = None,
+        template: Optional[str] = None,
+        storage: Optional["BaseStorage"] = None,
     ):
         self._sandbox_id_override = _sandbox_id
         self.session_id = session_id
@@ -24,6 +29,8 @@ class E2BSandbox:
         self.persistent = persistent
         self.timeout = timeout
         self.api_key = api_key
+        self.template = template
+        self.storage = storage
         self._sandbox: Optional[Sandbox] = None
 
         if persistent and not session_id and not _sandbox_id:
@@ -35,16 +42,26 @@ class E2BSandbox:
             return
 
         kwargs = {'api_key': self.api_key} if self.api_key else {}
+        if self.template:
+            kwargs['template'] = self.template
 
         if self._sandbox_id_override:
             self._sandbox = Sandbox.connect(sandbox_id=self._sandbox_id_override, timeout=self.timeout, **kwargs)
+            self._mount_storage()
             return
 
         if self.persistent and self.session_id:
             self._sandbox = self._resume_or_create_persistent(**kwargs)
+            self._mount_storage()
             return
 
         self._sandbox = Sandbox.create(timeout=self.timeout, **kwargs)
+        self._mount_storage()
+
+    def _mount_storage(self) -> None:
+        """Mount cloud storage if configured."""
+        if self.storage and self._sandbox:
+            self.storage.mount(self._sandbox)
 
     def _resume_or_create_persistent(self, **kwargs) -> Sandbox:
         """Resume paused sandbox or create new with auto-pause."""

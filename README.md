@@ -1,315 +1,351 @@
-# ⚡ Jetflow
+# Jetflow
 
 [![PyPI](https://img.shields.io/pypi/v/jetflow.svg)](https://pypi.org/project/jetflow)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Documentation](https://img.shields.io/badge/docs-jetflow-blue.svg)](https://jetflow.readthedocs.io)
 
-**Stop rebuilding the same agent patterns.**
+**Build agents that actually work in production.**
 
-Jetflow gives you **typed tools**, **short agent loops**, and **clean multi-agent composition**—all with **full cost visibility**.
+LLM agents fail in predictable ways: they hallucinate tool calls, bloat context until they forget instructions, and cost 10x what you budgeted. Jetflow fixes this with **typed actions**, **deterministic exits**, and **full cost visibility**.
 
-* **Move fast.** Stand up real agents in minutes, not weeks.
-* **Control cost.** See tokens and dollars per run.
-* **Debug cleanly.** Read the full transcript, not a black box.
-* **Scale simply.** Treat agents as tools. Chain them when it helps.
+```python
+from jetflow import Agent, action
+from jetflow.clients.openai import OpenAIClient
+from jetflow.actions.serper_web_search import SerperWebSearch
+from pydantic import BaseModel
 
-> **One mental model:** *schema-in → action calls → formatted exit*.
-> Agents and actions share the same computational shape. That makes composition boring—in the good way.
+class Report(BaseModel):
+    """Final research report with citations"""
+    headline: str
+    findings: list[str]
+    sources: list[str]
+
+@action(schema=Report, exit=True)
+def publish(r: Report) -> str:
+    findings = "\n".join(f"• {f}" for f in r.findings)
+    refs = "\n".join(f"[{i+1}] {s}" for i, s in enumerate(r.sources))
+    return f"# {r.headline}\n\n{findings}\n\n---\nSources:\n{refs}"
+
+agent = Agent(
+    client=OpenAIClient(model="gpt-4o"),
+    actions=[SerperWebSearch(), publish],
+    system_prompt="Research thoroughly. Cite every claim. Publish when done.",
+    require_action=True  # Must exit via publish()
+)
+
+resp = agent.run("What are the pricing implications of OpenAI's recent enterprise deals?")
+print(resp.content)
+print(f"Cost: ${resp.usage.estimated_cost:.4f}")
+```
+
+**30 seconds to a research agent with web search, citations, and cost tracking.**
 
 ---
 
-## Why Jetflow (vs CrewAI/LangChain)
+## Why Jetflow
 
-A lightweight, developer-first agent toolkit for real applications. LLM-agnostic, easy to set up and debug, and flexible from single agents to multi-agent chains.
+**Multi-agent without the complexity.**
 
-| Dimension | Jetflow | CrewAI | LangChain |
-|---|---|---|---|
-| Target user | Developers integrating agents into apps | Non-dev “crew” workflows | Broad framework users |
-| Abstraction | Low-level, code-first | High-level roles/crews | Many abstractions (chains/graphs) |
-| Architecture | Explicit tools + short loops | Multi-agent by default | Varies by components |
-| Setup/Debug | Minutes; small surface; full transcript | Heavier config/orchestration | Larger surface; callbacks/tools |
-| LLM support | Vendor-neutral (OpenAI, Anthropic, Grok, Gemini) | Provider adapters | Large ecosystem |
-| Orchestration | Single, multi-agent, sequential agent chains | Teams/crews | Chains, agents, graphs |
+You want to build sophisticated agent systems. You've looked at:
+
+- **LangGraph** — State machines, nodes, edges, conditional routing... just to call two models in sequence
+- **CrewAI** — "Crews", "tasks", "processes"... a whole new vocabulary for what should be function calls
+- **Custom code** — Works, but you're reinventing message handling, cost tracking, streaming every time
+
+Jetflow gives you one mental model: **agents are functions**.
+
+```python
+# An agent IS a function: input → output
+resp = agent.run("Research NVIDIA earnings")
+
+# Wrap it as a tool for another agent
+@action(schema=ResearchQuery)
+def research(q: ResearchQuery) -> str:
+    return researcher.run(q.query).content
+
+# Now the parent agent can call it
+analyst = Agent(actions=[research, done])
+```
+
+**That's it.** No graphs. No crews. No orchestration layer. Just composition.
+
+**What you get:**
+
+- **Agents as tools** — Any agent can call any other agent. Nest them, chain them, fan them out.
+- **Deterministic exits** — `require_action=True` + exit action = guaranteed structured output
+- **Full visibility** — Every message, every tool call, every cost in `resp.messages` and `resp.usage`
+- **Provider-agnostic** — OpenAI, Anthropic, Gemini, Grok, Groq with identical APIs
+
+---
 
 ## Install
 
 ```bash
 pip install jetflow[openai]      # OpenAI
 pip install jetflow[anthropic]   # Anthropic
-pip install jetflow[grok]        # Grok (xAI)
-pip install jetflow[gemini]      # Gemini (Google)
-pip install jetflow[all]         # All providers
+pip install jetflow[gemini]      # Google Gemini
+pip install jetflow[e2b]         # Cloud code execution
+pip install jetflow[all]         # Everything
 ```
 
 ```bash
-export OPENAI_API_KEY=...
-export ANTHROPIC_API_KEY=...
-export XAI_API_KEY=...           # For Grok
-export GEMINI_API_KEY=...        # For Gemini (or GOOGLE_API_KEY)
+export OPENAI_API_KEY=sk-...
+export SERPER_API_KEY=...        # For web search
+export E2B_API_KEY=...           # For cloud execution
 ```
-
-**📚 [Full Documentation →](https://jetflow.readthedocs.io)** | [Quickstart](https://jetflow.readthedocs.io/quickstart) | [Single Agent](https://jetflow.readthedocs.io/single-agent) | [Composition](https://jetflow.readthedocs.io/composition) | [Chains](https://jetflow.readthedocs.io/chains) | [API Reference](https://jetflow.readthedocs.io/api)
-
-**Async support:** Full async/await API available. Use `AsyncAgent`, `AsyncChain`, and `@action` (auto-detects sync/async).
 
 ---
 
-## Quick Start 1 — Single Agent
+## Real Examples
 
-Typed tool → short loop → visible cost.
+### Research Agent with Citations
+
+Search the web, synthesize findings, cite sources:
 
 ```python
-from pydantic import BaseModel, Field
 from jetflow import Agent, action
 from jetflow.clients.openai import OpenAIClient
+from jetflow.actions.serper_web_search import SerperWebSearch
+from pydantic import BaseModel
 
-class Calculate(BaseModel):
-    """Evaluate a safe arithmetic expression"""
-    expression: str = Field(description="e.g. '25 * 4 + 10'")
+class ResearchReport(BaseModel):
+    """Structured research output"""
+    summary: str
+    key_findings: list[str]
+    sources: list[str]
 
-@action(schema=Calculate)
-def calculator(p: Calculate) -> str:
-    env = {"__builtins__": {}}
-    fns = {"abs": abs, "round": round, "min": min, "max": max, "sum": sum, "pow": pow}
-    return str(eval(p.expression, env, fns))
+@action(schema=ResearchReport, exit=True)
+def finished(r: ResearchReport) -> str:
+    findings = "\n".join(f"• {f}" for f in r.key_findings)
+    refs = "\n".join(f"[{i+1}] {s}" for i, s in enumerate(r.sources))
+    return f"{r.summary}\n\n{findings}\n\nSources:\n{refs}"
 
 agent = Agent(
-    client=OpenAIClient(model="gpt-5"),
-    actions=[calculator],
-    system_prompt="Answer clearly. Use tools when needed."
+    client=OpenAIClient(model="gpt-4o"),
+    actions=[SerperWebSearch(), finished],
+    system_prompt="Search for current information. Cite every claim.",
+    require_action=True
 )
 
-resp = agent.run("What is 25 * 4 + 10?")
-print(resp.content)                       # -> "110"
-print(f"Cost: ${resp.usage.estimated_cost:.4f}")
+resp = agent.run("What's the current state of AI regulation in the EU?")
 ```
 
-**Why teams use this:** strong schemas reduce junk calls, a short loop keeps latency predictable, and you see spend immediately.
+### Data Analysis with Cloud Execution
 
-→ **[Learn more: Single Agent Guide](https://jetflow.readthedocs.io/single-agent)**
-
----
-
-## Quick Start 2 — Multi-Agent (agents as tools)
-
-Let a **fast** model gather facts; let a **strong** model reason. Child agents return **one formatted result** via an exit action.
+Run Python in a sandboxed cloud environment with pre-loaded data:
 
 ```python
-from pydantic import BaseModel, Field
+from jetflow import Agent
+from jetflow.clients.openai import OpenAIClient
+from jetflow.actions.e2b_python_exec import E2BPythonExec, S3Storage
+
+agent = Agent(
+    client=OpenAIClient(model="gpt-4o"),
+    actions=[E2BPythonExec(
+        storage=S3Storage(
+            bucket="market-data",
+            access_key_id="AKIA...",
+            secret_access_key="..."
+        ),
+        embeddable_charts=True
+    )],
+    system_prompt="You are a quantitative analyst. Data is in /home/user/bucket/"
+)
+
+resp = agent.run("Load returns.parquet and plot risk-adjusted performance for 2024")
+# Charts automatically extracted, code preserved in transcript
+```
+
+### Multi-Agent: Fast Scout + Deep Analyst
+
+Use cheap models to gather data, expensive models to reason:
+
+```python
 from jetflow import Agent, action
 from jetflow.clients.openai import OpenAIClient
+from jetflow.actions.serper_web_search import SerperWebSearch
+from pydantic import BaseModel, Field
 
-# Child agent: research → returns a concise note
-class ResearchNote(BaseModel):
-    summary: str
+# --- Scout Agent (fast, cheap) ---
+class ScoutFindings(BaseModel):
+    facts: list[str]
     sources: list[str]
-    def format(self) -> str:
-        return f"{self.summary}\n\n" + "\n".join(f"- {s}" for s in self.sources)
 
-@action(schema=ResearchNote, exit=True)
-def FinishedResearch(note: ResearchNote) -> str:
-    return note.format()
+@action(schema=ScoutFindings, exit=True)
+def scout_done(f: ScoutFindings) -> str:
+    return "\n".join(f.facts) + "\n\nSources: " + ", ".join(f.sources)
 
-researcher = Agent(
-    client=OpenAIClient(model="gpt-5-mini"),
-    actions=[/* your web_search tool */, FinishedResearch],
-    system_prompt="Search broadly. Deduplicate. Return concise notes.",
+scout = Agent(
+    client=OpenAIClient(model="gpt-4o-mini"),  # Fast and cheap
+    actions=[SerperWebSearch(), scout_done],
+    system_prompt="Gather facts quickly. Don't analyze, just collect.",
     require_action=True
 )
 
-# Wrap researcher as an action
-class ResearchQuery(BaseModel):
-    """Search and summarize information"""
+# --- Wrap scout as a tool for the analyst ---
+class Research(BaseModel):
+    """Gather information on a topic"""
     query: str = Field(description="What to research")
 
-@action(schema=ResearchQuery)
-def research(params: ResearchQuery) -> str:
-    """Calls the researcher agent and returns its findings"""
-    researcher.reset()
-    result = researcher.run(params.query)
-    return result.content
+@action(schema=Research)
+def research(r: Research) -> str:
+    scout.reset()
+    return scout.run(r.query).content
 
-# Parent agent: deep analysis over the returned note
-class FinalReport(BaseModel):
+# --- Analyst Agent (powerful, thorough) ---
+class Analysis(BaseModel):
     headline: str
-    bullets: list[str]
-    def format(self) -> str:
-        return f"{self.headline}\n\n" + "\n".join(f"- {b}" for b in self.bullets)
+    insights: list[str]
+    recommendation: str
 
-@action(schema=FinalReport, exit=True)
-def Finished(report: FinalReport) -> str:
-    return report.format()
+@action(schema=Analysis, exit=True)
+def analysis_done(a: Analysis) -> str:
+    return f"# {a.headline}\n\n" + "\n".join(f"• {i}" for i in a.insights) + f"\n\n**Recommendation:** {a.recommendation}"
 
 analyst = Agent(
-    client=OpenAIClient(model="gpt-5"),
-    actions=[research, Finished],
-    system_prompt="Use research notes. Quantify impacts. Be precise.",
+    client=OpenAIClient(model="gpt-4o"),  # Powerful reasoning
+    actions=[research, analysis_done],
+    system_prompt="Use research tool to gather data. Synthesize insights. Be precise.",
     require_action=True
 )
 
-resp = analyst.run("Compare NVDA vs AMD inference margins using latest earnings calls.")
-print(resp.content)
-```
-
-**What this buys you:** fast models scout, strong models conclude; strict boundaries prevent prompt bloat; parents get one crisp payload per child.
-
-→ **[Learn more: Composition Guide](https://jetflow.readthedocs.io/composition)**
-
----
-
-## Quick Start 3 — Sequential Agent Chains (shared transcript, sequential hand-off)
-
-Run agents **in order** over the **same** message history. Classic "fast search → slow analysis".
-
-```python
-from jetflow import Chain
-from jetflow.clients.openai import OpenAIClient
-
-search_agent = Agent(
-    client=OpenAIClient(model="gpt-5-mini"),
-    actions=[/* web_search */, FinishedResearch],
-    system_prompt="Fast breadth-first search.",
-    require_action=True
-)
-
-analysis_agent = Agent(
-    client=OpenAIClient(model="gpt-5"),
-    actions=[/* calculator */, Finished],
-    system_prompt="Read prior messages. Analyze. Show working.",
-    require_action=True
-)
-
-chain = Chain([search_agent, analysis_agent])
-resp = chain.run("Find ARM CPU commentary in recent earnings calls, then quantify margin impacts.")
+resp = analyst.run("Compare AWS vs GCP pricing for GPU instances in 2024")
 print(resp.content)
 print(f"Total cost: ${resp.usage.estimated_cost:.4f}")
 ```
 
-**Why chains win:** you share context only when it compounds value, swap models per stage to balance speed and accuracy, and keep each agent narrowly focused.
+### Sequential Chain: Shared Context Pipeline
 
-→ **[Learn more: Chains Guide](https://jetflow.readthedocs.io/chains)**
-
----
-
-## Async Support
-
-Full async/await API. Same patterns, async primitives. The `@action` decorator **automatically detects** sync vs async functions.
+When agents need to build on each other's work:
 
 ```python
-from jetflow import AsyncAgent, AsyncChain, action
+from jetflow import Agent, Chain
+from jetflow.clients.openai import OpenAIClient
+from jetflow.actions.serper_web_search import SerperWebSearch
 
-@action(schema=Calculate)
-async def async_calculator(p: Calculate) -> str:
-    """Async function - @action auto-detects this"""
-    return str(eval(p.expression))
-
-agent = AsyncAgent(
-    client=OpenAIClient(model="gpt-5"),
-    actions=[async_calculator]
+# Agent 1: Research
+researcher = Agent(
+    client=OpenAIClient(model="gpt-4o-mini"),
+    actions=[SerperWebSearch()],
+    system_prompt="Find relevant information. Be thorough."
 )
 
-resp = await agent.run("What is 25 * 4 + 10?")
+# Agent 2: Analyze (sees researcher's output)
+analyst = Agent(
+    client=OpenAIClient(model="gpt-4o"),
+    actions=[],  # Pure reasoning
+    system_prompt="Analyze the research above. Identify patterns and insights."
+)
+
+# Agent 3: Write (sees both previous outputs)
+writer = Agent(
+    client=OpenAIClient(model="gpt-4o"),
+    actions=[],
+    system_prompt="Write a clear, concise summary for executives."
+)
+
+chain = Chain([researcher, analyst, writer])
+resp = chain.run("What's driving the recent surge in AI infrastructure spending?")
 ```
-
-**Use async when:** making concurrent API calls, handling many agents in parallel, or building async web services.
-
-**Note:** `AsyncAgent` can use **both sync and async actions**. Sync actions are called directly, async actions are awaited.
 
 ---
 
-## Streaming
+## Core Concepts
 
-Stream events in real-time as the agent executes. Perfect for UI updates, progress bars, and live feedback.
+### Actions = Typed Tools
+
+Every action has a Pydantic schema. The LLM can't hallucinate invalid parameters:
 
 ```python
-from jetflow import AgentResponse, ContentDelta, ActionExecutionStart, ActionExecuted, MessageEnd
+from pydantic import BaseModel, Field
+from jetflow import action
 
-response = None
-for event in agent.stream("What is 25 * 4 + 10?"):
-    if isinstance(event, AgentResponse):
-        response = event  # Final event with full results
+class SearchQuery(BaseModel):
+    """Search the web for information"""
+    query: str = Field(description="Search query")
+    max_results: int = Field(default=5, ge=1, le=20)
 
-    elif isinstance(event, ContentDelta):
-        print(event.delta, end="", flush=True)  # Stream text as it arrives
+@action(schema=SearchQuery)
+def search(params: SearchQuery) -> str:
+    # Your implementation
+    return results
+```
 
-    elif isinstance(event, ActionExecutionStart):
-        print(f"\n[Calling {event.name}...]")
+### Exit Actions = Deterministic Completion
 
+Use `exit=True` to force structured output:
+
+```python
+class FinalAnswer(BaseModel):
+    answer: str
+    confidence: float
+    reasoning: str
+
+@action(schema=FinalAnswer, exit=True)
+def done(f: FinalAnswer) -> str:
+    return f.answer
+
+agent = Agent(
+    client=client,
+    actions=[search, done],
+    require_action=True  # MUST call an exit action
+)
+```
+
+### Cost Tracking
+
+Every response includes usage:
+
+```python
+resp = agent.run("...")
+print(f"Prompt tokens: {resp.usage.prompt_tokens}")
+print(f"Completion tokens: {resp.usage.completion_tokens}")
+print(f"Estimated cost: ${resp.usage.estimated_cost:.4f}")
+```
+
+### Streaming
+
+Real-time updates for UI:
+
+```python
+for event in agent.stream("Analyze this data"):
+    if isinstance(event, ContentDelta):
+        print(event.delta, end="", flush=True)
     elif isinstance(event, ActionExecuted):
-        print(f"✓ {event.name}")
-
-    elif isinstance(event, MessageEnd):
-        final = event.message  # Complete message with all content
+        print(f"\n[Executed: {event.name}]")
 ```
-
-**Event flow:**
-- Yields streaming events (`MessageStart`, `ContentDelta`, `ActionExecutionStart`, `ActionExecuted`, `MessageEnd`)
-- Final event is always `AgentResponse` with full results
-
-**Works for chains too:**
-```python
-response = None
-for event in chain.stream("Research and analyze"):
-    if isinstance(event, AgentResponse):
-        response = event
-    elif isinstance(event, ContentDelta):
-        print(event.delta, end="")
-```
-
-→ **[Learn more: Streaming Guide](https://jetflow.readthedocs.io/streaming)**
-
----
-
-## Why Jetflow (in one breath)
-
-* **Fewer moving parts.** Agents, actions, messages—nothing else.
-* **Deterministic endings.** Use `require_action=True` + a `format()` exit to get one reliable result.
-* **Real observability.** Full transcript + token and dollar accounting.
-* **Composability that sticks.** Treat agents as tools; add chains when you need shared context.
-* **Provider-agnostic.** OpenAI, Anthropic, Grok (xAI), and Gemini (Google) with matching streaming semantics.
-
----
-
-## Production in 60 Seconds
-
-* **Guard exits.** For anything that matters, set `require_action=True` and finish with a formattable exit action.
-* **Budget hard-stops.** Choose `max_iter` and fail closed; treat errors as tool messages, not exceptions.
-* **Pick models per stage.** Cheap for search/IO, strong for reasoning, writer for polish.
-* **Log the transcript.** Store `response.messages` and `response.usage` for repro and cost tracking.
-* **Test like code.** Snapshot transcripts for golden tests; track cost deltas PR-to-PR.
 
 ---
 
 ## Built-in Actions
 
-Jetflow includes **safe Python execution**.
+| Action | What It Does |
+|--------|--------------|
+| `SerperWebSearch()` | Web search with citation tracking |
+| `E2BPythonExec()` | Cloud Python sandbox with chart extraction |
+| `LocalPythonExec()` | Local sandboxed Python execution |
+
+---
+
+## Supported Providers
 
 ```python
-from jetflow.actions.local_python_exec import LocalPythonExec
-
-agent = Agent(
-    client=OpenAIClient(model="gpt-5"),
-    actions=[LocalPythonExec()]
-)
-
-resp = agent.run("Calculate compound interest: principal=10000, rate=0.05, years=10")
+from jetflow.clients.openai import OpenAIClient
+from jetflow.clients.anthropic import AnthropicClient
+from jetflow.clients.gemini import GeminiClient
+from jetflow.clients.grok import GrokClient
+from jetflow.clients.groq import GroqClient
 ```
 
-Variables persist across calls. Perfect for data analysis workflows. For cloud-based execution with full libraries, use `E2BPythonExec`.
+All clients support streaming with consistent event semantics.
 
 ---
 
 ## Docs
 
-📚 **[Full Documentation](https://jetflow.readthedocs.io)**
-
 - **[Quickstart](https://jetflow.readthedocs.io/quickstart)** — 5-minute tutorial
-- **[Single Agent](https://jetflow.readthedocs.io/single-agent)** — Actions, control flow, debugging
-- **[Composition](https://jetflow.readthedocs.io/composition)** — Agents as tools
-- **[Chains](https://jetflow.readthedocs.io/chains)** — Multi-stage workflows
-- **[Streaming](https://jetflow.readthedocs.io/streaming)** — Real-time event streaming
-- **[API Reference](https://jetflow.readthedocs.io/api)** — Complete API docs
+- **[E2B Code Execution](https://jetflow.readthedocs.io/e2b)** — Cloud Python sandbox
+- **[API Reference](https://jetflow.readthedocs.io/api)** — Full API docs
 
 ---
 

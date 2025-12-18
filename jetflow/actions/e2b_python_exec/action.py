@@ -1,5 +1,7 @@
 """E2B Code Interpreter action."""
 
+from __future__ import annotations
+
 import json
 import pandas as pd
 from typing import Optional, List, Union
@@ -9,6 +11,7 @@ from jetflow.action import action
 from jetflow.actions.e2b_python_exec.sandbox import E2BSandbox
 from jetflow.actions.e2b_python_exec.chart_extractor import E2BChartExtractor
 from jetflow.actions.e2b_python_exec.tracking_code import TRACKING_CODE
+from jetflow.actions.e2b_python_exec.storage import BaseStorage
 from jetflow.actions.e2b_python_exec.utils import (
     format_action_result,
     format_run_code_result,
@@ -25,13 +28,52 @@ class PythonExec(BaseModel):
 
 @action(schema=PythonExec, custom_field="code")
 class E2BPythonExec:
-    """E2B code interpreter with session persistence."""
+    """E2B code interpreter with session persistence.
 
-    def __init__(self, session_id: Optional[str] = None, user_id: Optional[str] = None,
-                 persistent: bool = False, timeout: int = 300, api_key: Optional[str] = None,
-                 embeddable_charts: bool = False):
-        self.sandbox = E2BSandbox(session_id=session_id, user_id=user_id, persistent=persistent,
-                                  timeout=timeout, api_key=api_key)
+    Args:
+        session_id: Session identifier for persistent sandboxes
+        user_id: User identifier for sandbox metadata
+        persistent: If True, sandbox pauses instead of terminating (requires session_id)
+        timeout: Sandbox timeout in seconds
+        api_key: E2B API key (defaults to E2B_API_KEY env var)
+        embeddable_charts: If True, return charts as embeddable HTML
+        template: Custom E2B template ID/alias (for custom images with pre-installed packages)
+        storage: Cloud storage config (S3Storage, GCSStorage, or R2Storage) for mounting buckets
+
+    Example with S3 storage:
+        from jetflow.actions.e2b_python_exec.storage import S3Storage
+
+        exec = E2BPythonExec(
+            template="my-s3-template",  # Must have s3fs installed
+            storage=S3Storage(
+                bucket="market-data",
+                access_key_id="AKIA...",
+                secret_access_key="...",
+            )
+        )
+        # Agent can now read files from /home/user/bucket/
+    """
+
+    def __init__(
+        self,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        persistent: bool = False,
+        timeout: int = 300,
+        api_key: Optional[str] = None,
+        embeddable_charts: bool = False,
+        template: Optional[str] = None,
+        storage: Optional["BaseStorage"] = None,
+    ):
+        self.sandbox = E2BSandbox(
+            session_id=session_id,
+            user_id=user_id,
+            persistent=persistent,
+            timeout=timeout,
+            api_key=api_key,
+            template=template,
+            storage=storage,
+        )
         self.embeddable_charts = embeddable_charts
         self._charts: Optional[E2BChartExtractor] = None
         self._started = False

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jetflow"
-version = "1.0.71"
+version = "1.0.72"
 description = "Lightweight, production-ready framework for building agentic workflows with LLMs"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -29,6 +29,7 @@ dependencies = [
     "pydantic>=2.0",
     "httpx>=0.24.0",
     "tiktoken>=0.5.0",
+    "lmdb>=1.4.0",
 ]
 
 [project.optional-dependencies]
