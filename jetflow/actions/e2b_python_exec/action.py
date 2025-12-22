@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import pandas as pd
 from typing import Optional, List, Union
+from concurrent.futures import Future, ThreadPoolExecutor
 from pydantic import BaseModel, Field
 
 from jetflow.action import action
@@ -54,6 +55,8 @@ class E2BPythonExec:
         # Agent can now read files from /home/user/bucket/
     """
 
+    _executor = ThreadPoolExecutor(max_workers=4)
+
     def __init__(
         self,
         session_id: Optional[str] = None,
@@ -78,28 +81,40 @@ class E2BPythonExec:
         self._charts: Optional[E2BChartExtractor] = None
         self._started = False
         self._manually_started = False
+        self._start_future: Optional[Future] = None
 
     def __start__(self) -> None:
         if self._started:
             return
         self._started = True
+        self._start_future = self._executor.submit(self._do_start)
 
+    def _do_start(self) -> None:
+        """Boot sandbox in background thread."""
         self.sandbox.start()
         self._charts = E2BChartExtractor(self.sandbox)
         self.sandbox.run_code("import matplotlib\nmatplotlib.use('Agg')")
         self.sandbox.run_code(TRACKING_CODE)
+
+    def _ensure_started(self) -> None:
+        """Block until sandbox is ready."""
+        if self._start_future is not None:
+            self._start_future.result()
+            self._start_future = None
 
     def __stop__(self) -> None:
         if not self._started:
             return
         if self._manually_started:
             return
+        self._ensure_started()
         self._started = False
 
         self.sandbox.stop()
         self._charts = None
 
     def __call__(self, params: PythonExec) -> ActionResult:
+        self._ensure_started()
         try:
             self.sandbox.run_code("_jetflow_pending_charts = []")
             pre = self._charts.get_figure_hashes() if self._charts else {}
@@ -122,6 +137,7 @@ class E2BPythonExec:
         return format_action_result(result, charts, self.embeddable_charts, session_id)
 
     def run_code(self, code: str) -> str:
+        self._ensure_started()
         try:
             r = self.sandbox.run_code(code)
         except Exception as e:
@@ -155,6 +171,7 @@ class E2BPythonExec:
         if not self._started:
             self.__start__()
             self._manually_started = True
+        self._ensure_started()
 
         if hasattr(df, 'to_json'):
             json_str = df.to_json(orient='records', date_format='iso')
@@ -179,6 +196,7 @@ class E2BPythonExec:
         return self._json(f"import json;print(json.dumps({var}))")
 
     def _json(self, code: str):
+        self._ensure_started()
         r = self.sandbox.run_code(code)
         if r.logs and r.logs.stdout:
             try:
@@ -192,28 +210,36 @@ class E2BPythonExec:
         inst = cls.__new__(cls)
         inst.sandbox = E2BSandbox(_sandbox_id=sandbox_id, api_key=api_key, persistent=True)
         inst.embeddable_charts = False
+        inst._start_future = None
         inst.__start__()
+        inst._ensure_started()
         return inst
 
     def read_file(self, path: str, format: str = 'text') -> Union[str, bytes]:
+        self._ensure_started()
         return self.sandbox.read_file(path, format)
 
     def write_file(self, path: str, content: Union[str, bytes]) -> None:
+        self._ensure_started()
         self.sandbox.write_file(path, content)
 
     def list_files(self, path: str = '/home/user') -> List[FileInfo]:
+        self._ensure_started()
         return self.sandbox.list_files(path)
 
     def make_dir(self, path: str) -> None:
+        self._ensure_started()
         self.sandbox.make_dir(path)
 
     def delete_file(self, path: str) -> None:
+        self._ensure_started()
         self.sandbox.delete_file(path)
 
     def stop(self) -> None:
         """Manually stop the sandbox. Call this when done if you used import_dataframe."""
         if not self._started:
             return
+        self._ensure_started()
         self._started = False
         self._manually_started = False
         self.sandbox.stop()
