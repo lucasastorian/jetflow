@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jetflow"
-version = "1.0.75"
+version = "1.0.76"
 description = "Lightweight, production-ready framework for building agentic workflows with LLMs"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -37,14 +37,14 @@ openai = ["openai>=1.0.0", "jiter>=0.5.0", "tenacity>=8.0.0"]
 anthropic = ["anthropic>=0.18.0", "jiter>=0.5.0", "tenacity>=8.0.0"]
 grok = ["openai>=1.0.0", "jiter>=0.5.0", "tenacity>=8.0.0"]
 groq = ["openai>=1.0.0", "jiter>=0.5.0", "tenacity>=8.0.0"]
-gemini = ["google-genai>=1.0.0"]
+gemini = ["google-genai>=1.50.0"]  # >=1.50 required for Gemini 3 thinking_level
 exec = ["numpy>=2.3.0", "pandas>=2.3.0", "matplotlib>=3.0.0", "seaborn>=0.11.0"]
 e2b = ["e2b>=1.0.0", "e2b-code-interpreter>=2.4.1"]
 exa = ["exa-py>=2.0.0"]
 all = [
     "openai>=1.0.0",
     "anthropic>=0.18.0",
-    "google-genai>=1.0.0",
+    "google-genai>=1.50.0",
     "jiter>=0.5.0",
     "tenacity>=8.0.0",
     "e2b>=1.0.0",

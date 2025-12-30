@@ -17,6 +17,9 @@ ThinkingLevel = Literal["minimal", "low", "medium", "high"]
 GEMINI_3_PREFIXES = ("gemini-3-pro", "gemini-3-flash")
 GEMINI_25_PREFIXES = ("gemini-2.5-pro", "gemini-2.5-flash")
 
+# Check if SDK supports thinking_level (requires google-genai >= 1.x)
+SDK_SUPPORTS_THINKING_LEVEL = hasattr(types, 'ThinkingLevel')
+
 # Dummy signature for cross-provider compatibility (non-Gemini thoughts)
 # See: https://ai.google.dev/gemini-api/docs/thinking#thought-signatures
 DUMMY_THOUGHT_SIGNATURE = "context_engineering_is_the_way_to_go"
@@ -167,6 +170,11 @@ def build_gemini_config(
 
     if is_v3:
         # Gemini 3 uses thinking levels (default to dynamic/"high" if not specified)
+        if not SDK_SUPPORTS_THINKING_LEVEL:
+            raise ImportError(
+                f"Gemini 3 models ({model}) require google-genai >= 1.50.0 for thinking_level support. "
+                "Please upgrade: pip install --upgrade google-genai"
+            )
         level = thinking_level or "high"
         thinking_config = types.ThinkingConfig(
             include_thoughts=True,

@@ -159,17 +159,17 @@ if os.getenv("GROQ_API_KEY"):
 
 # Add Gemini if API key is available
 if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
-    # Gemini 2.5 Flash with thinking_budget (dynamic by default)
+    # Gemini 2.5 Flash with fixed thinking_budget
     CLIENTS.append({
         "name": "Gemini-2.5",
-        "sync_client": GeminiClient(model="gemini-2.5-flash", thinking_budget=-1),
-        "async_client": AsyncGeminiClient(model="gemini-2.5-flash", thinking_budget=-1),
+        "sync_client": GeminiClient(model="gemini-2.5-flash", thinking_budget=1024),
+        "async_client": AsyncGeminiClient(model="gemini-2.5-flash", thinking_budget=1024),
     })
     # Gemini 3 Flash with thinking_level
     CLIENTS.append({
         "name": "Gemini-3",
-        "sync_client": GeminiClient(model="gemini-3-flash-preview", thinking_level="low"),
-        "async_client": AsyncGeminiClient(model="gemini-3-flash-preview", thinking_level="low"),
+        "sync_client": GeminiClient(model="gemini-3-flash-preview", thinking_level="high"),
+        "async_client": AsyncGeminiClient(model="gemini-3-flash-preview", thinking_level="high"),
     })
 
 
