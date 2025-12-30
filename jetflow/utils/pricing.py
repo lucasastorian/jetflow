@@ -215,6 +215,11 @@ PRICING = {
             "output_per_million": 12.0,     # ≤200k ctx
             "output_per_million_long": 18.0, # >200k ctx
         },
+        "gemini-3-flash-preview": {
+            "input_per_million": 0.50,      # text/image/video
+            "input_per_million_audio": 1.0, # audio
+            "output_per_million": 3.0,      # including thinking tokens
+        },
         # Gemini 2.5 models
         "gemini-2.5-pro": {
             "input_per_million": 1.25,      # ≤200k ctx

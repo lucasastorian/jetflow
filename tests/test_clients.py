@@ -7,7 +7,8 @@ Tests all combinations:
 - LegacyOpenAI (gpt-4o-mini): sync/async × streaming/non-streaming
 - Grok (grok-4-fast): sync/async × streaming/non-streaming [if XAI_API_KEY set]
 - Groq (llama-3.3-70b-versatile): sync/async × streaming/non-streaming [if GROQ_API_KEY set]
-- Gemini (gemini-2.5-flash): sync/async × streaming/non-streaming [if GEMINI_API_KEY or GOOGLE_API_KEY set]
+- Gemini 2.5 (gemini-2.5-flash): sync/async × streaming/non-streaming [if GEMINI_API_KEY or GOOGLE_API_KEY set]
+- Gemini 3 (gemini-3-flash-preview): sync/async × streaming/non-streaming [if GEMINI_API_KEY or GOOGLE_API_KEY set]
 
 Dataset: Nvidia Income Statement (FY 2022-2025)
 """
@@ -158,10 +159,17 @@ if os.getenv("GROQ_API_KEY"):
 
 # Add Gemini if API key is available
 if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+    # Gemini 2.5 Flash with thinking_budget (dynamic by default)
     CLIENTS.append({
-        "name": "Gemini",
-        "sync_client": GeminiClient(model="gemini-2.5-flash"),
-        "async_client": AsyncGeminiClient(model="gemini-2.5-flash"),
+        "name": "Gemini-2.5",
+        "sync_client": GeminiClient(model="gemini-2.5-flash", thinking_budget=-1),
+        "async_client": AsyncGeminiClient(model="gemini-2.5-flash", thinking_budget=-1),
+    })
+    # Gemini 3 Flash with thinking_level
+    CLIENTS.append({
+        "name": "Gemini-3",
+        "sync_client": GeminiClient(model="gemini-3-flash-preview", thinking_level="low"),
+        "async_client": AsyncGeminiClient(model="gemini-3-flash-preview", thinking_level="low"),
     })
 
 

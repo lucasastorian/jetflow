@@ -10,28 +10,57 @@ from jetflow.action import BaseAction
 from jetflow.models.message import Message, TextBlock, ThoughtBlock, ActionBlock
 from jetflow.models.events import StreamEvent, MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionEnd
 from jetflow.clients.base import BaseClient, ToolChoice
-from jetflow.clients.gemini.utils import build_gemini_config, messages_to_contents, parse_grounding_metadata
+from jetflow.clients.gemini.utils import build_gemini_config, messages_to_contents, parse_grounding_metadata, ThinkingLevel
 
 
 class GeminiClient(BaseClient):
     provider: str = "Gemini"
 
-    def __init__(self, model: str = "gemini-2.5-flash", api_key: str = None, thinking_budget: int = -1):
+    def __init__(
+        self,
+        model: str = "gemini-2.5-flash",
+        api_key: str = None,
+        thinking_budget: Optional[int] = None,
+        thinking_level: Optional[ThinkingLevel] = None
+    ):
+        """Initialize Gemini client.
+
+        Args:
+            model: Model name (e.g., "gemini-2.5-flash", "gemini-3-flash-preview")
+            api_key: API key (defaults to GEMINI_API_KEY or GOOGLE_API_KEY env var)
+            thinking_budget: Token budget for thinking (Gemini 2.5 series only).
+                            -1 for dynamic, 0 to disable, or specific token count.
+            thinking_level: Thinking level (Gemini 3 series only).
+                           Options: "minimal", "low", "medium", "high"
+        """
         self.model = model
         self.thinking_budget = thinking_budget
+        self.thinking_level = thinking_level
         api_key = api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
         self.client = genai.Client(api_key=api_key)
 
     def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Message:
         """Non-streaming completion"""
-        config = build_gemini_config(system_prompt, actions, self.thinking_budget, allowed_actions, tool_choice)
+        config = build_gemini_config(
+            system_prompt, actions, self.model,
+            thinking_budget=self.thinking_budget,
+            thinking_level=self.thinking_level,
+            allowed_actions=allowed_actions,
+            tool_choice=tool_choice
+        )
         contents = messages_to_contents(messages)
         response = self.client.models.generate_content(model=self.model, contents=contents, config=config)
         return self._parse_response(response, logger)
 
     def stream(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Iterator[StreamEvent]:
         """Streaming completion - yields events"""
-        config = build_gemini_config(system_prompt, actions, self.thinking_budget, allowed_actions, tool_choice)
+        config = build_gemini_config(
+            system_prompt, actions, self.model,
+            thinking_budget=self.thinking_budget,
+            thinking_level=self.thinking_level,
+            allowed_actions=allowed_actions,
+            tool_choice=tool_choice
+        )
         contents = messages_to_contents(messages)
         response_stream = self.client.models.generate_content_stream(model=self.model, contents=contents, config=config)
         yield from self._stream_events(response_stream, logger)

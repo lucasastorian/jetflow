@@ -2,13 +2,20 @@
 
 import uuid
 from google.genai import types
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from jetflow.action import BaseAction
 from jetflow.models.message import Message, ActionBlock
 from jetflow.models.sources import WebSource
 from jetflow.clients.base import ToolChoice
 from jetflow.utils.server_tools import extract_server_tools
+
+# Thinking level options for Gemini 3 series
+ThinkingLevel = Literal["minimal", "low", "medium", "high"]
+
+# Model prefixes for version detection
+GEMINI_3_PREFIXES = ("gemini-3-pro", "gemini-3-flash")
+GEMINI_25_PREFIXES = ("gemini-2.5-pro", "gemini-2.5-flash")
 
 # Dummy signature for cross-provider compatibility (non-Gemini thoughts)
 # See: https://ai.google.dev/gemini-api/docs/thinking#thought-signatures
@@ -45,14 +52,30 @@ def parse_grounding_metadata(candidate) -> Optional[ActionBlock]:
     )
 
 
+def _is_gemini_3(model: str) -> bool:
+    """Check if model is Gemini 3 series"""
+    return any(model.startswith(prefix) for prefix in GEMINI_3_PREFIXES)
+
+
+def _is_gemini_25(model: str) -> bool:
+    """Check if model is Gemini 2.5 series"""
+    return any(model.startswith(prefix) for prefix in GEMINI_25_PREFIXES)
+
+
 def build_gemini_config(
     system_prompt: str,
     actions: List[BaseAction],
-    thinking_budget: int = -1,
+    model: str,
+    thinking_budget: Optional[int] = None,
+    thinking_level: Optional[ThinkingLevel] = None,
     allowed_actions: List[BaseAction] = None,
     tool_choice: ToolChoice = "auto",
 ) -> types.GenerateContentConfig:
     """Build Gemini GenerateContentConfig from parameters
+
+    Thinking configuration:
+    - Gemini 3 series: Uses thinking_level ("minimal", "low", "medium", "high")
+    - Gemini 2.5 series: Uses thinking_budget (int token count, -1 for dynamic, 0 to disable)
 
     allowed_actions behavior (takes precedence over tool_choice):
     - None: Use tool_choice logic
@@ -118,12 +141,53 @@ def build_gemini_config(
             )
         # tool_choice == "auto" defaults to AUTO
 
+    # Build thinking config based on model version
     thinking_config = None
-    if thinking_budget != 0:
+    is_v3 = _is_gemini_3(model)
+    is_v25 = _is_gemini_25(model)
+
+    # Validate: cannot set both thinking_budget and thinking_level
+    if thinking_budget is not None and thinking_level is not None:
+        raise ValueError(
+            "Cannot set both thinking_budget and thinking_level. "
+            "Use thinking_budget for Gemini 2.5 models, thinking_level for Gemini 3 models."
+        )
+
+    # Validate incompatible parameter combinations
+    if thinking_level is not None and is_v25:
+        raise ValueError(
+            f"thinking_level is not supported for Gemini 2.5 models ({model}). "
+            "Use thinking_budget instead."
+        )
+    if thinking_budget is not None and is_v3:
+        raise ValueError(
+            f"thinking_budget is not supported for Gemini 3 models ({model}). "
+            "Use thinking_level instead."
+        )
+
+    if is_v3:
+        # Gemini 3 uses thinking levels (default to dynamic/"high" if not specified)
+        level = thinking_level or "high"
         thinking_config = types.ThinkingConfig(
             include_thoughts=True,
-            thinking_budget=thinking_budget
+            thinking_level=level
         )
+    elif is_v25:
+        # Gemini 2.5 uses thinking budgets (default to dynamic/-1 if not specified)
+        budget = thinking_budget if thinking_budget is not None else -1
+        if budget != 0:
+            thinking_config = types.ThinkingConfig(
+                include_thoughts=True,
+                thinking_budget=budget
+            )
+    else:
+        # Unknown model - try thinking_budget for backwards compatibility
+        budget = thinking_budget if thinking_budget is not None else -1
+        if budget != 0:
+            thinking_config = types.ThinkingConfig(
+                include_thoughts=True,
+                thinking_budget=budget
+            )
 
     return types.GenerateContentConfig(
         system_instruction=system_prompt,
