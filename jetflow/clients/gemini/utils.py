@@ -189,13 +189,21 @@ def build_gemini_config(
                 thinking_budget=budget
             )
     else:
-        # Unknown model - try thinking_budget for backwards compatibility
-        budget = thinking_budget if thinking_budget is not None else -1
-        if budget != 0:
+        # Unknown model - prefer thinking_level if SDK supports it (Gemini 3+),
+        # otherwise fall back to thinking_budget (Gemini 2.5 compat)
+        if SDK_SUPPORTS_THINKING_LEVEL and thinking_budget is None:
+            level = thinking_level or "high"
             thinking_config = types.ThinkingConfig(
                 include_thoughts=True,
-                thinking_budget=budget
+                thinking_level=level
             )
+        else:
+            budget = thinking_budget if thinking_budget is not None else -1
+            if budget != 0:
+                thinking_config = types.ThinkingConfig(
+                    include_thoughts=True,
+                    thinking_budget=budget
+                )
 
     return types.GenerateContentConfig(
         system_instruction=system_prompt,
