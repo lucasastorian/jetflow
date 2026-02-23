@@ -71,25 +71,44 @@ class AsyncGeminiClient(AsyncBaseClient):
         completion = Message(role="assistant", status="completed")
         candidate = response.candidates[0]
 
+        def _encode_signature(raw_signature):
+            if not raw_signature:
+                return None
+            import base64
+            return base64.b64encode(raw_signature).decode('ascii') if isinstance(raw_signature, bytes) else raw_signature
+
         for part in candidate.content.parts:
             if part.thought:
+                thought_signature = _encode_signature(getattr(part, 'thought_signature', None))
                 if part.text:
-                    completion.blocks.append(ThoughtBlock(id="", summaries=[part.text], provider="gemini"))
+                    if completion.blocks and isinstance(completion.blocks[-1], ThoughtBlock):
+                        if completion.blocks[-1].summaries:
+                            completion.blocks[-1].summaries[0] += part.text
+                        else:
+                            completion.blocks[-1].summaries = [part.text]
+                        if thought_signature:
+                            completion.blocks[-1].id = thought_signature
+                    else:
+                        completion.blocks.append(ThoughtBlock(id=thought_signature or "", summaries=[part.text], provider="gemini"))
                     if logger:
                         logger.log_thought(part.text)
-
-            elif part.function_call:
-                thought_signature = getattr(part, 'thought_signature', None)
-                if thought_signature:
-                    # Base64 encode bytes for JSON serialization
-                    import base64
-                    sig_str = base64.b64encode(thought_signature).decode('ascii') if isinstance(thought_signature, bytes) else thought_signature
+                elif thought_signature:
                     for block in reversed(completion.blocks):
                         if isinstance(block, ThoughtBlock):
-                            block.id = sig_str
+                            block.id = thought_signature
                             break
                     else:
-                        completion.blocks.append(ThoughtBlock(id=sig_str, summaries=[], provider="gemini"))
+                        completion.blocks.append(ThoughtBlock(id=thought_signature, summaries=[], provider="gemini"))
+
+            elif part.function_call:
+                thought_signature = _encode_signature(getattr(part, 'thought_signature', None))
+                if thought_signature:
+                    for block in reversed(completion.blocks):
+                        if isinstance(block, ThoughtBlock):
+                            block.id = thought_signature
+                            break
+                    else:
+                        completion.blocks.append(ThoughtBlock(id=thought_signature, summaries=[], provider="gemini"))
 
                 completion.blocks.append(ActionBlock(id=str(uuid.uuid4()), name=part.function_call.name, status="parsed", body=dict(part.function_call.args)))
 
@@ -120,6 +139,15 @@ class AsyncGeminiClient(AsyncBaseClient):
         yield MessageStart(role="assistant")
         finish_reason = None
         last_candidate = None
+        active_thought = None
+        active_thought_event_id = None
+
+        def _encode_signature(raw_signature):
+            """Normalize Gemini thought signature for JSON-safe storage."""
+            if not raw_signature:
+                return None
+            import base64
+            return base64.b64encode(raw_signature).decode('ascii') if isinstance(raw_signature, bytes) else raw_signature
 
         async for chunk in stream:
             if chunk.candidates:
@@ -132,27 +160,44 @@ class AsyncGeminiClient(AsyncBaseClient):
                 continue
 
             for part in chunk.candidates[0].content.parts:
-                if part.thought:
+                is_thought = bool(getattr(part, 'thought', False))
+                # In streaming, some terminal thought-signature-only parts can be empty.
+                if not is_thought and active_thought is not None and getattr(part, 'thought_signature', None) and not getattr(part, 'function_call', None) and not getattr(part, 'text', None):
+                    is_thought = True
+
+                if is_thought:
+                    if active_thought is None:
+                        active_thought_event_id = str(uuid.uuid4())
+                        active_thought = ThoughtBlock(id=active_thought_event_id, summaries=[""], provider="gemini")
+                        completion.blocks.append(active_thought)
+                        yield ThoughtStart(id=active_thought_event_id)
+
+                    thought_signature = _encode_signature(getattr(part, 'thought_signature', None))
+                    if thought_signature:
+                        active_thought.id = thought_signature
+
                     if part.text:
-                        completion.blocks.append(ThoughtBlock(id="", summaries=[part.text], provider="gemini"))
-                        yield ThoughtStart(id="")
-                        yield ThoughtDelta(id="", delta=part.text)
-                        yield ThoughtEnd(id="", thought=part.text)
+                        active_thought.summaries[0] += part.text
+                        yield ThoughtDelta(id=active_thought_event_id, delta=part.text)
                         if logger:
                             logger.log_thought(part.text)
 
-                elif part.function_call:
-                    thought_signature = getattr(part, 'thought_signature', None)
+                    continue
+
+                if active_thought is not None:
+                    yield ThoughtEnd(id=active_thought_event_id, thought=active_thought.summaries[0])
+                    active_thought = None
+                    active_thought_event_id = None
+
+                if part.function_call:
+                    thought_signature = _encode_signature(getattr(part, 'thought_signature', None))
                     if thought_signature:
-                        # Base64 encode bytes for JSON serialization
-                        import base64
-                        sig_str = base64.b64encode(thought_signature).decode('ascii') if isinstance(thought_signature, bytes) else thought_signature
                         for block in reversed(completion.blocks):
                             if isinstance(block, ThoughtBlock):
-                                block.id = sig_str
+                                block.id = thought_signature
                                 break
                         else:
-                            completion.blocks.append(ThoughtBlock(id=sig_str, summaries=[], provider="gemini"))
+                            completion.blocks.append(ThoughtBlock(id=thought_signature, summaries=[], provider="gemini"))
 
                     action_id = str(uuid.uuid4())
                     action = ActionBlock(id=action_id, name=part.function_call.name, status="parsed", body=dict(part.function_call.args))
@@ -174,6 +219,9 @@ class AsyncGeminiClient(AsyncBaseClient):
                 completion.completion_tokens = chunk.usage_metadata.candidates_token_count
                 if hasattr(chunk.usage_metadata, 'thoughts_token_count'):
                     completion.thinking_tokens = chunk.usage_metadata.thoughts_token_count
+
+        if active_thought is not None:
+            yield ThoughtEnd(id=active_thought_event_id, thought=active_thought.summaries[0])
 
         if finish_reason and str(finish_reason) not in ('FinishReason.STOP', 'STOP') and logger:
             logger.log_warning(f"Gemini stream ended with finish_reason: {finish_reason}")

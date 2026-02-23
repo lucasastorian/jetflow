@@ -5,7 +5,7 @@ from google.genai import types
 from typing import List, Optional, Literal
 
 from jetflow.action import BaseAction
-from jetflow.models.message import Message, ActionBlock
+from jetflow.models.message import Message, ActionBlock, ImageBlock, TextBlock
 from jetflow.models.sources import WebSource
 from jetflow.clients.base import ToolChoice
 from jetflow.utils.server_tools import extract_server_tools
@@ -367,10 +367,32 @@ def messages_to_contents(messages: List[Message]) -> List[types.Content]:
             # Flush any pending tool responses before user turn
             flush_tool_parts()
 
-            contents.append(types.Content(
-                role="user",
-                parts=[types.Part(text=msg.content)]
-            ))
+            # Check for image blocks
+            if any(isinstance(b, ImageBlock) for b in msg.blocks):
+                parts = []
+                for block in msg.blocks:
+                    if isinstance(block, ImageBlock):
+                        if block.data:
+                            import base64 as b64
+                            parts.append(types.Part.from_bytes(
+                                data=b64.b64decode(block.data),
+                                mime_type=block.media_type
+                            ))
+                        elif block.url:
+                            import urllib.request
+                            with urllib.request.urlopen(block.url) as resp:
+                                parts.append(types.Part.from_bytes(
+                                    data=resp.read(),
+                                    mime_type=block.media_type
+                                ))
+                    elif isinstance(block, TextBlock):
+                        parts.append(types.Part(text=block.text))
+                contents.append(types.Content(role="user", parts=parts))
+            else:
+                contents.append(types.Content(
+                    role="user",
+                    parts=[types.Part(text=msg.content)]
+                ))
 
     # Flush any remaining tool parts at the end
     flush_tool_parts()

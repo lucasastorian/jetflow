@@ -2,7 +2,7 @@
 
 from jetflow.models.message import (
     Message, Action, Thought,
-    ContentBlock, TextBlock, ThoughtBlock, ActionBlock
+    ContentBlock, TextBlock, ThoughtBlock, ActionBlock, ImageBlock
 )
 from jetflow.models.events import (
     StreamEvent,
@@ -35,6 +35,7 @@ __all__ = [
     'TextBlock',
     'ThoughtBlock',
     'ActionBlock',
+    'ImageBlock',
     # Stream events
     'StreamEvent',
     'MessageStart',

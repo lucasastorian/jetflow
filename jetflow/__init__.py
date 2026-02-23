@@ -12,7 +12,7 @@ from jetflow.action import action
 from jetflow.actions.web_search import WebSearch
 from jetflow.actions.text_editor import TextEditor
 from jetflow.models import (
-    Message, Action, Thought,
+    Message, Action, Thought, ImageBlock,
     AgentResponse, ActionResult,
     StreamEvent, MessageStart, MessageEnd, ContentDelta,
     ThoughtStart, ThoughtDelta, ThoughtEnd,
@@ -78,6 +78,7 @@ __all__ = [
     "Message",
     "Action",
     "Thought",
+    "ImageBlock",
     "AgentResponse",
     "ActionResult",
     "Usage",

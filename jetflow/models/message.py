@@ -47,7 +47,16 @@ class ActionBlock(BaseModel):
     model_config = {"extra": "allow"}
 
 
-ContentBlock = Union[TextBlock, ThoughtBlock, ActionBlock]
+class ImageBlock(BaseModel):
+    """Image content block"""
+    type: Literal["image"] = "image"
+    url: Optional[str] = None          # URL reference
+    data: Optional[str] = None         # base64-encoded data
+    media_type: str = "image/jpeg"     # MIME type
+    model_config = {"extra": "allow"}
+
+
+ContentBlock = Union[TextBlock, ThoughtBlock, ActionBlock, ImageBlock]
 
 # Legacy aliases
 Action = ActionBlock
@@ -172,6 +181,10 @@ class Message(BaseModel):
             self.blocks.insert(i, t if isinstance(t, ThoughtBlock) else ThoughtBlock(**t))
 
     @property
+    def images(self) -> List[ImageBlock]:
+        return [b for b in self.blocks if isinstance(b, ImageBlock)]
+
+    @property
     def web_search(self) -> Optional[ActionBlock]:
         for b in self.blocks:
             if isinstance(b, ActionBlock) and b.name == "web_search" and b.server_executed:
@@ -226,6 +239,19 @@ class Message(BaseModel):
                         content_blocks.append({"type": "tool_use", "id": block.id, "name": block.name, "input": block.body})
             return {"role": "assistant", "content": content_blocks}
 
+        # User/system messages - check for image blocks
+        if any(isinstance(b, ImageBlock) for b in self.blocks):
+            content_blocks = []
+            for block in self.blocks:
+                if isinstance(block, ImageBlock):
+                    if block.url:
+                        content_blocks.append({"type": "image", "source": {"type": "url", "url": block.url}})
+                    elif block.data:
+                        content_blocks.append({"type": "image", "source": {"type": "base64", "media_type": block.media_type, "data": block.data}})
+                elif isinstance(block, TextBlock):
+                    content_blocks.append({"type": "text", "text": block.text})
+            return {"role": self.role, "content": content_blocks}
+
         return {"role": self.role, "content": self.content}
 
     def openai_format(self) -> List[dict]:
@@ -235,6 +261,15 @@ class Message(BaseModel):
             return [{"call_id": self.action_id, "output": self.content, "type": "function_call_output"}]
 
         if self.role != "assistant":
+            if any(isinstance(b, ImageBlock) for b in self.blocks):
+                content_blocks = []
+                for block in self.blocks:
+                    if isinstance(block, ImageBlock):
+                        url = block.url or f"data:{block.media_type};base64,{block.data}"
+                        content_blocks.append({"type": "input_image", "image_url": url})
+                    elif isinstance(block, TextBlock):
+                        content_blocks.append({"type": "input_text", "text": block.text})
+                return [{"role": self.role, "content": content_blocks}]
             return [{"role": self.role, "content": self.content}]
 
         items = []
@@ -261,6 +296,16 @@ class Message(BaseModel):
             if self.actions:
                 message["tool_calls"] = [{"id": a.id, "type": "function", "function": {"name": a.name, "arguments": json.dumps(a.body)}} for a in self.actions]
             return message
+
+        if any(isinstance(b, ImageBlock) for b in self.blocks):
+            content_blocks = []
+            for block in self.blocks:
+                if isinstance(block, ImageBlock):
+                    url = block.url or f"data:{block.media_type};base64,{block.data}"
+                    content_blocks.append({"type": "image_url", "image_url": {"url": url}})
+                elif isinstance(block, TextBlock):
+                    content_blocks.append({"type": "text", "text": block.text})
+            return {"role": self.role, "content": content_blocks}
 
         return {"role": self.role, "content": self.content}
 
@@ -312,7 +357,7 @@ class Message(BaseModel):
         if user_id:
             row["user_id"] = user_id
 
-        if self.has_interleaving:
+        if self.has_interleaving or self.images:
             row["blocks"] = [self._serialize_block(b) for b in self.blocks]
 
         return row
@@ -341,6 +386,8 @@ class Message(BaseModel):
                     blocks.append(ThoughtBlock(**b))
                 elif block_type == "action":
                     blocks.append(ActionBlock(**b))
+                elif block_type == "image":
+                    blocks.append(ImageBlock(**b))
         else:
             # Legacy fallback: build blocks from separate fields
             if row.get("thought"):
