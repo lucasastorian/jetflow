@@ -10,7 +10,7 @@ from jetflow.action import BaseAction
 from jetflow.models.message import Message, TextBlock, ThoughtBlock, ActionBlock
 from jetflow.models.events import StreamEvent, MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionEnd
 from jetflow.clients.base import BaseClient, ToolChoice
-from jetflow.clients.gemini.utils import build_gemini_config, messages_to_contents, parse_grounding_metadata, ThinkingLevel
+from jetflow.clients.gemini.utils import build_gemini_config, messages_to_contents, parse_grounding_metadata, ThinkingLevel, RETRYABLE_STREAM_ERRORS
 
 
 class GeminiClient(BaseClient):
@@ -120,7 +120,9 @@ class GeminiClient(BaseClient):
                     logger.log_content(part.text)
 
         if response.usage_metadata:
-            completion.uncached_prompt_tokens = response.usage_metadata.prompt_token_count
+            cached = getattr(response.usage_metadata, 'cached_content_token_count', 0) or 0
+            completion.cache_read_tokens = cached
+            completion.uncached_prompt_tokens = (response.usage_metadata.prompt_token_count or 0) - cached
             completion.completion_tokens = response.usage_metadata.candidates_token_count
             if hasattr(response.usage_metadata, 'thoughts_token_count'):
                 completion.thinking_tokens = response.usage_metadata.thoughts_token_count
@@ -147,76 +149,90 @@ class GeminiClient(BaseClient):
             import base64
             return base64.b64encode(raw_signature).decode('ascii') if isinstance(raw_signature, bytes) else raw_signature
 
-        for chunk in stream:
-            if chunk.candidates:
-                candidate = chunk.candidates[0]
-                last_candidate = candidate
-                if hasattr(candidate, 'finish_reason') and candidate.finish_reason:
-                    finish_reason = candidate.finish_reason
+        try:
+            for chunk in stream:
+                if chunk.candidates:
+                    candidate = chunk.candidates[0]
+                    last_candidate = candidate
+                    if hasattr(candidate, 'finish_reason') and candidate.finish_reason:
+                        finish_reason = candidate.finish_reason
 
-            if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
-                continue
-
-            for part in chunk.candidates[0].content.parts:
-                is_thought = bool(getattr(part, 'thought', False))
-                # In streaming, some terminal thought-signature-only parts can be empty.
-                if not is_thought and active_thought is not None and getattr(part, 'thought_signature', None) and not getattr(part, 'function_call', None) and not getattr(part, 'text', None):
-                    is_thought = True
-
-                if is_thought:
-                    if active_thought is None:
-                        active_thought_event_id = str(uuid.uuid4())
-                        active_thought = ThoughtBlock(id=active_thought_event_id, summaries=[""], provider="gemini")
-                        completion.blocks.append(active_thought)
-                        yield ThoughtStart(id=active_thought_event_id)
-
-                    thought_signature = _encode_signature(getattr(part, 'thought_signature', None))
-                    if thought_signature:
-                        active_thought.id = thought_signature
-
-                    if part.text:
-                        active_thought.summaries[0] += part.text
-                        yield ThoughtDelta(id=active_thought_event_id, delta=part.text)
-                        if logger:
-                            logger.log_thought(part.text)
-
+                if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
                     continue
 
-                if active_thought is not None:
-                    yield ThoughtEnd(id=active_thought_event_id, thought=active_thought.summaries[0])
-                    active_thought = None
-                    active_thought_event_id = None
+                for part in chunk.candidates[0].content.parts:
+                    is_thought = bool(getattr(part, 'thought', False))
+                    # In streaming, some terminal thought-signature-only parts can be empty.
+                    if not is_thought and active_thought is not None and getattr(part, 'thought_signature', None) and not getattr(part, 'function_call', None) and not getattr(part, 'text', None):
+                        is_thought = True
 
-                if part.function_call:
-                    thought_signature = _encode_signature(getattr(part, 'thought_signature', None))
-                    if thought_signature:
-                        for block in reversed(completion.blocks):
-                            if isinstance(block, ThoughtBlock):
-                                block.id = thought_signature
-                                break
+                    if is_thought:
+                        if active_thought is None:
+                            active_thought_event_id = str(uuid.uuid4())
+                            active_thought = ThoughtBlock(id=active_thought_event_id, summaries=[""], provider="gemini")
+                            completion.blocks.append(active_thought)
+                            yield ThoughtStart(id=active_thought_event_id)
+
+                        thought_signature = _encode_signature(getattr(part, 'thought_signature', None))
+                        if thought_signature:
+                            active_thought.id = thought_signature
+
+                        if part.text:
+                            active_thought.summaries[0] += part.text
+                            yield ThoughtDelta(id=active_thought_event_id, delta=part.text)
+                            if logger:
+                                logger.log_thought(part.text)
+
+                        continue
+
+                    if active_thought is not None:
+                        yield ThoughtEnd(id=active_thought_event_id, thought=active_thought.summaries[0])
+                        active_thought = None
+                        active_thought_event_id = None
+
+                    if part.function_call:
+                        thought_signature = _encode_signature(getattr(part, 'thought_signature', None))
+                        if thought_signature:
+                            for block in reversed(completion.blocks):
+                                if isinstance(block, ThoughtBlock):
+                                    block.id = thought_signature
+                                    break
+                            else:
+                                completion.blocks.append(ThoughtBlock(id=thought_signature, summaries=[], provider="gemini"))
+
+                        action_id = str(uuid.uuid4())
+                        action = ActionBlock(id=action_id, name=part.function_call.name, status="parsed", body=dict(part.function_call.args))
+                        completion.blocks.append(action)
+                        yield ActionStart(id=action_id, name=action.name)
+                        yield ActionEnd(id=action_id, name=action.name, body=action.body)
+
+                    elif part.text:
+                        if completion.blocks and isinstance(completion.blocks[-1], TextBlock):
+                            completion.blocks[-1].text += part.text
                         else:
-                            completion.blocks.append(ThoughtBlock(id=thought_signature, summaries=[], provider="gemini"))
+                            completion.blocks.append(TextBlock(text=part.text))
+                        yield ContentDelta(delta=part.text)
+                        if logger:
+                            logger.log_content_delta(part.text)
 
-                    action_id = str(uuid.uuid4())
-                    action = ActionBlock(id=action_id, name=part.function_call.name, status="parsed", body=dict(part.function_call.args))
-                    completion.blocks.append(action)
-                    yield ActionStart(id=action_id, name=action.name)
-                    yield ActionEnd(id=action_id, name=action.name, body=action.body)
+                if chunk.usage_metadata:
+                    cached = getattr(chunk.usage_metadata, 'cached_content_token_count', 0) or 0
+                    completion.cache_read_tokens = cached
+                    completion.uncached_prompt_tokens = (chunk.usage_metadata.prompt_token_count or 0) - cached
+                    completion.completion_tokens = chunk.usage_metadata.candidates_token_count
+                    if hasattr(chunk.usage_metadata, 'thoughts_token_count'):
+                        completion.thinking_tokens = chunk.usage_metadata.thoughts_token_count
 
-                elif part.text:
-                    if completion.blocks and isinstance(completion.blocks[-1], TextBlock):
-                        completion.blocks[-1].text += part.text
-                    else:
-                        completion.blocks.append(TextBlock(text=part.text))
-                    yield ContentDelta(delta=part.text)
-                    if logger:
-                        logger.log_content_delta(part.text)
-
-            if chunk.usage_metadata:
-                completion.uncached_prompt_tokens = chunk.usage_metadata.prompt_token_count
-                completion.completion_tokens = chunk.usage_metadata.candidates_token_count
-                if hasattr(chunk.usage_metadata, 'thoughts_token_count'):
-                    completion.thinking_tokens = chunk.usage_metadata.thoughts_token_count
+        except RETRYABLE_STREAM_ERRORS as e:
+            # Stream interrupted (network error, server disconnect, etc.)
+            if logger:
+                logger.log_error(f"Gemini stream interrupted: {type(e).__name__}: {e}")
+            if active_thought is not None:
+                yield ThoughtEnd(id=active_thought_event_id, thought=active_thought.summaries[0] if active_thought.summaries else "")
+            completion.status = "completed"
+            completion.error = True
+            yield MessageEnd(message=completion)
+            return
 
         if active_thought is not None:
             yield ThoughtEnd(id=active_thought_event_id, thought=active_thought.summaries[0])

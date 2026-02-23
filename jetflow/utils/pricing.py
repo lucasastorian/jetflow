@@ -210,49 +210,60 @@ PRICING = {
     "Gemini": {
         # Gemini 3.1 models
         "gemini-3.1-pro-preview": {
-            "input_per_million": 2.0,      # ≤200k ctx
+            "input_per_million": 2.0,       # ≤200k ctx
             "input_per_million_long": 4.0,  # >200k ctx
+            "cache_read_per_million": 0.20, # ≤200k ctx (from Google pricing)
+            "cache_read_per_million_long": 0.40, # >200k ctx
             "output_per_million": 12.0,     # ≤200k ctx (including thinking)
             "output_per_million_long": 18.0, # >200k ctx
         },
         # Gemini 3 models
         "gemini-3-pro-preview": {
-            "input_per_million": 2.0,      # ≤200k ctx
+            "input_per_million": 2.0,       # ≤200k ctx
             "input_per_million_long": 4.0,  # >200k ctx
+            "cache_read_per_million": 0.20, # from Google pricing
+            "cache_read_per_million_long": 0.40,
             "output_per_million": 12.0,     # ≤200k ctx
             "output_per_million_long": 18.0, # >200k ctx
         },
         "gemini-3-flash-preview": {
             "input_per_million": 0.50,      # text/image/video
             "input_per_million_audio": 1.0, # audio
+            "cache_read_per_million": 0.05, # from Google pricing
             "output_per_million": 3.0,      # including thinking tokens
         },
         # Gemini 2.5 models
         "gemini-2.5-pro": {
             "input_per_million": 1.25,      # ≤200k ctx
             "input_per_million_long": 2.50, # >200k ctx
+            "cache_read_per_million": 0.125, # from Google pricing
+            "cache_read_per_million_long": 0.25,
             "output_per_million": 10.0,     # ≤200k ctx (text/thinking)
             "output_per_million_long": 15.0, # >200k ctx
         },
         "gemini-2.5-flash": {
             "input_per_million": 0.30,      # text/image/video
             "input_per_million_audio": 1.0, # audio
+            "cache_read_per_million": 0.075, # 25% of input
             "output_per_million": 2.50,     # all media including thinking
         },
         "gemini-2.5-flash-lite": {
             "input_per_million": 0.10,      # text/image/video
             "input_per_million_audio": 0.30, # audio
+            "cache_read_per_million": 0.025, # 25% of input
             "output_per_million": 0.40,     # all media including thinking
         },
         # Gemini 2.0 models
         "gemini-2.0-flash": {
             "input_per_million": 0.10,      # text/image/video
             "input_per_million_audio": 0.70, # audio
+            "cache_read_per_million": 0.025, # 25% of input
             "output_per_million": 0.40,     # all media
         },
         "gemini-2.0-flash-exp": {
             "input_per_million": 0.10,      # text/image/video (assuming same as 2.0-flash)
             "input_per_million_audio": 0.70,
+            "cache_read_per_million": 0.025,
             "output_per_million": 0.40,
         },
     }

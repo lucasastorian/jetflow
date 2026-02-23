@@ -25,6 +25,7 @@ class Agent:
     """Sync agent orchestration"""
 
     max_depth: int = 10
+    max_stream_retries: int = 2
 
     def __init__(self, client: BaseClient, actions: List[Union[Type[BaseAction], BaseAction]] = None,
                  system_prompt: Union[str, Callable[[], str]] = "", max_iter: int = 20, require_action: bool = False,
@@ -48,6 +49,7 @@ class Agent:
         self._cache_marker_index: Optional[int] = None
         self.messages: List[Message] = []
         self.num_iter = 0
+        self._consecutive_stream_errors = 0
 
     def _should_enable_caching(self) -> bool:
         return should_enable_caching(self.max_iter, self.num_iter, bool(self.actions))
@@ -237,6 +239,20 @@ class Agent:
             elif isinstance(event, ActionExecuted) and event.action and event.action.server_executed:
                 self._log_server_executed_action(event)
 
+        # Handle stream failure — discard partial message and retry
+        if completion and completion.error:
+            self._consecutive_stream_errors += 1
+            if self._consecutive_stream_errors > self.max_stream_retries:
+                raise RuntimeError(
+                    f"Stream failed after {self.max_stream_retries} consecutive retries"
+                )
+            self.logger.log_warning(
+                f"Stream interrupted, retrying ({self._consecutive_stream_errors}/{self.max_stream_retries})..."
+            )
+            yield StepResult(is_exit=False, follow_ups=[])
+            return
+
+        self._consecutive_stream_errors = 0
         self.messages.append(completion)
         self.num_iter += 1
 

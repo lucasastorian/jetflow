@@ -38,6 +38,7 @@ class ActionResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     content: str
+    images: Optional[List[Any]] = None  # List[ImageBlock] - using Any to avoid circular import
     follow_up_actions: Optional[List[Any]] = None  # List[BaseAction]
     force_follow_up: bool = False
     metadata: Optional[dict] = None

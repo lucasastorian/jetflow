@@ -25,6 +25,27 @@ SDK_SUPPORTS_THINKING_LEVEL = hasattr(types, 'ThinkingLevel')
 DUMMY_THOUGHT_SIGNATURE = "context_engineering_is_the_way_to_go"
 
 
+# Transient stream/network errors that warrant retry
+def _build_retryable_errors():
+    """Build tuple of retryable stream errors (connection drops, timeouts, etc.)"""
+    errors = [ConnectionError, TimeoutError, OSError]
+    try:
+        from aiohttp.client_exceptions import (
+            ClientPayloadError, ServerDisconnectedError, ClientConnectionError
+        )
+        errors.extend([ClientPayloadError, ServerDisconnectedError, ClientConnectionError])
+    except ImportError:
+        pass
+    try:
+        from httpx import ReadError, RemoteProtocolError, ConnectError
+        errors.extend([ReadError, RemoteProtocolError, ConnectError])
+    except ImportError:
+        pass
+    return tuple(errors)
+
+RETRYABLE_STREAM_ERRORS = _build_retryable_errors()
+
+
 def parse_grounding_metadata(candidate) -> Optional[ActionBlock]:
     """Parse grounding metadata (Google Search results) into ActionBlock."""
     if not hasattr(candidate, 'grounding_metadata') or not candidate.grounding_metadata:
@@ -309,10 +330,45 @@ def messages_to_contents(messages: List[Message]) -> List[types.Content]:
         if msg.role == "tool":
             # Function response - accumulate for grouping
             action_name = find_action_name(msg.action_id, messages)
-            part = types.Part.from_function_response(
-                name=action_name,
-                response={"result": msg.content}
-            )
+
+            # Build multimodal function response for Gemini 3 (images in tool results)
+            image_blocks = [b for b in msg.blocks if isinstance(b, ImageBlock)]
+            has_multimodal_fr = hasattr(types, 'FunctionResponsePart')
+
+            if image_blocks and has_multimodal_fr:
+                # Gemini 3 native multimodal function responses
+                response_data = {"result": msg.content}
+                multimodal_parts = []
+                for i, block in enumerate(image_blocks):
+                    ext = block.media_type.split('/')[-1] if '/' in block.media_type else 'jpg'
+                    display_name = f"image_{i}.{ext}"
+                    image_bytes = None
+                    if block.data:
+                        import base64 as b64
+                        image_bytes = b64.b64decode(block.data)
+                    elif block.url:
+                        import urllib.request
+                        with urllib.request.urlopen(block.url) as resp:
+                            image_bytes = resp.read()
+                    if image_bytes:
+                        multimodal_parts.append(types.FunctionResponsePart(
+                            inline_data=types.FunctionResponseBlob(
+                                mime_type=block.media_type,
+                                display_name=display_name,
+                                data=image_bytes,
+                            )
+                        ))
+                        response_data[f"image_{i}"] = {"$ref": display_name}
+                part = types.Part.from_function_response(
+                    name=action_name,
+                    response=response_data,
+                    parts=multimodal_parts
+                )
+            else:
+                part = types.Part.from_function_response(
+                    name=action_name,
+                    response={"result": msg.content}
+                )
             pending_tool_parts.append(part)
 
         elif msg.role == "assistant":

@@ -9,7 +9,7 @@ import inspect
 from typing import Type, Callable, Any, Union
 from pydantic import BaseModel, ValidationError
 from jetflow.agent.state import AgentState
-from jetflow.models.message import Message, Action
+from jetflow.models.message import Message, Action, ImageBlock, TextBlock
 from jetflow.models.response import ActionResponse, ActionResult, ActionFollowUp
 
 
@@ -37,16 +37,30 @@ def _copy_class_attributes(wrapper_cls: type, source_cls: type):
 def _build_response_from_result(result: Union[ActionResult, Any], action: Action) -> ActionResponse:
     """Build ActionResponse from action result (ActionResult or any other type)"""
     if isinstance(result, ActionResult):
+        # Build blocks if action returned images
+        blocks = None
+        if result.images:
+            blocks = []
+            if result.content:
+                blocks.append(TextBlock(text=result.content))
+            for img in result.images:
+                if isinstance(img, ImageBlock):
+                    blocks.append(img)
+                elif isinstance(img, dict):
+                    blocks.append(ImageBlock(**img))
+
+        msg = Message(
+            role="tool",
+            action_id=action.id,
+            status="completed",
+            metadata=result.metadata,
+            citations=result.citations,
+            sources=result.sources,
+            **({"blocks": blocks} if blocks else {"content": result.content})
+        )
+
         return ActionResponse(
-            message=Message(
-                role="tool",
-                content=result.content,
-                action_id=action.id,
-                status="completed",
-                metadata=result.metadata,
-                citations=result.citations,
-                sources=result.sources
-            ),
+            message=msg,
             follow_up=ActionFollowUp(
                 actions=result.follow_up_actions,
                 force=result.force_follow_up

@@ -253,6 +253,7 @@ def reset_agent_state(agent_instance):
     """Reset core agent state for fresh execution"""
     agent_instance.messages = []
     agent_instance.num_iter = 0
+    agent_instance._consecutive_stream_errors = 0
     agent_instance.client.reset()
 
 

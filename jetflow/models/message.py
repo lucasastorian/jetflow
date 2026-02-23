@@ -216,6 +216,20 @@ class Message(BaseModel):
 
     def anthropic_format(self) -> dict:
         if self.role == "tool":
+            # Check for image blocks in tool result
+            if self.images:
+                tool_content = []
+                for block in self.blocks:
+                    if isinstance(block, ImageBlock):
+                        if block.url:
+                            tool_content.append({"type": "image", "source": {"type": "url", "url": block.url}})
+                        elif block.data:
+                            tool_content.append({"type": "image", "source": {"type": "base64", "media_type": block.media_type, "data": block.data}})
+                    elif isinstance(block, TextBlock):
+                        tool_content.append({"type": "text", "text": block.text})
+                if not tool_content and self.content:
+                    tool_content.append({"type": "text", "text": self.content})
+                return {"role": "user", "content": [{"type": "tool_result", "tool_use_id": self.action_id, "content": tool_content}]}
             return {"role": "user", "content": [{"type": "tool_result", "tool_use_id": self.action_id, "content": self.content}]}
 
         if self.role == "assistant":
