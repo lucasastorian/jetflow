@@ -21,7 +21,7 @@ class AsyncAnthropicClient(AsyncBaseClient):
     provider: str = "Anthropic"
     max_tokens: int = 16384
 
-    def __init__(self, model: str = "claude-sonnet-4-5", api_key: str = None, temperature: float = 1.0, reasoning_effort: Literal['low', 'medium', 'high', 'none'] = 'medium', effort: Literal['low', 'medium', 'high'] = None, prompt_caching: Literal['never', 'agentic', 'conversational'] = 'agentic', cache_ttl: Literal['5m', '1h'] = '5m'):
+    def __init__(self, model: str = "claude-sonnet-4-5", api_key: str = None, temperature: float = 1.0, reasoning_effort: Literal['low', 'medium', 'high', 'none'] = 'medium', effort: Literal['low', 'medium', 'high'] = None, prompt_caching: Literal['never', 'agentic', 'conversational'] = 'agentic', cache_ttl: Literal['5m', '1h'] = '5m', caching_strategy: Literal['auto', 'explicit'] = 'auto'):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
@@ -29,18 +29,19 @@ class AsyncAnthropicClient(AsyncBaseClient):
         self.effort = effort
         self.prompt_caching = prompt_caching
         self.cache_ttl = cache_ttl
+        self.caching_strategy = caching_strategy
         self.client = anthropic.AsyncAnthropic(api_key=api_key or os.environ.get('ANTHROPIC_API_KEY'), timeout=60.0)
 
     async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Message:
         """Non-streaming completion"""
         should_cache = self._resolve_caching(enable_caching)
-        params = build_message_params(self.model, self.temperature, self.max_tokens, system_prompt, messages, actions, allowed_actions, self.reasoning_budget, tool_choice=tool_choice, stream=False, effort=self.effort, enable_caching=should_cache, cache_ttl=self.cache_ttl, context_cache_index=context_cache_index)
+        params = build_message_params(self.model, self.temperature, self.max_tokens, system_prompt, messages, actions, allowed_actions, self.reasoning_budget, tool_choice=tool_choice, stream=False, effort=self.effort, enable_caching=should_cache, cache_ttl=self.cache_ttl, context_cache_index=context_cache_index, caching_strategy=self.caching_strategy)
         return await self._complete_with_retry(params, logger)
 
     async def stream(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> AsyncIterator[StreamEvent]:
         """Streaming completion - yields events"""
         should_cache = self._resolve_caching(enable_caching)
-        params = build_message_params(self.model, self.temperature, self.max_tokens, system_prompt, messages, actions, allowed_actions, self.reasoning_budget, tool_choice=tool_choice, stream=True, effort=self.effort, enable_caching=should_cache, cache_ttl=self.cache_ttl, context_cache_index=context_cache_index)
+        params = build_message_params(self.model, self.temperature, self.max_tokens, system_prompt, messages, actions, allowed_actions, self.reasoning_budget, tool_choice=tool_choice, stream=True, effort=self.effort, enable_caching=should_cache, cache_ttl=self.cache_ttl, context_cache_index=context_cache_index, caching_strategy=self.caching_strategy)
         async for event in self._stream_events_with_retry(params, logger, tool_choice=tool_choice):
             yield event
 

@@ -14,7 +14,7 @@ from jetflow.utils.server_tools import extract_server_tools
 ThinkingLevel = Literal["minimal", "low", "medium", "high"]
 
 # Model prefixes for version detection
-GEMINI_3_PREFIXES = ("gemini-3-pro", "gemini-3-flash")
+GEMINI_3_PREFIXES = ("gemini-3-pro", "gemini-3-flash", "gemini-3.1-pro", "gemini-3.1-flash")
 GEMINI_25_PREFIXES = ("gemini-2.5-pro", "gemini-2.5-flash")
 
 # Check if SDK supports thinking_level (requires google-genai >= 1.x)
@@ -205,15 +205,67 @@ def build_gemini_config(
     )
 
 
+# Gemini only supports a subset of JSON Schema keywords
+GEMINI_SUPPORTED_KEYWORDS = {
+    'type', 'format', 'description', 'nullable', 'enum', 'items',
+    'properties', 'required', 'anyOf', 'oneOf', 'allOf', 'default'
+}
+
+
+def _clean_schema_for_gemini(schema: dict, defs: dict, is_properties_dict: bool = False) -> dict:
+    """Resolve $refs and strip unsupported fields (Gemini doesn't support $ref, additionalProperties, title, etc.)."""
+    if isinstance(schema, dict):
+        # Handle $ref - inline the definition
+        if '$ref' in schema:
+            ref_path = schema['$ref']
+            if ref_path.startswith('#/$defs/'):
+                def_name = ref_path[len('#/$defs/'):]
+            elif ref_path.startswith('#/definitions/'):
+                def_name = ref_path[len('#/definitions/'):]
+            else:
+                return schema
+            if def_name in defs:
+                return _clean_schema_for_gemini(defs[def_name].copy(), defs)
+            return schema
+
+        result = {}
+        for k, v in schema.items():
+            if k in ('$defs', 'definitions'):
+                continue  # Skip definitions block
+
+            # If we're inside a "properties" dict, keys are field names (keep all)
+            # Otherwise, keys are schema keywords (filter to supported only)
+            if not is_properties_dict and k not in GEMINI_SUPPORTED_KEYWORDS:
+                continue  # Strip unsupported schema keywords
+
+            # "properties" value is a dict of field names -> schemas
+            if k == 'properties':
+                result[k] = _clean_schema_for_gemini(v, defs, is_properties_dict=True)
+            else:
+                result[k] = _clean_schema_for_gemini(v, defs, is_properties_dict=False)
+        return result
+
+    elif isinstance(schema, list):
+        return [_clean_schema_for_gemini(item, defs) for item in schema]
+
+    return schema
+
+
 def action_to_function(action: BaseAction) -> dict:
     """Convert BaseAction to Gemini function declaration"""
     schema = action.schema.model_json_schema()
+    defs = schema.get('$defs', schema.get('definitions', {}))
+
+    # Clean schema: resolve $refs and strip unsupported fields
+    # Pass is_properties_dict=True since we're passing the properties dict directly
+    properties = _clean_schema_for_gemini(schema.get('properties', {}), defs, is_properties_dict=True)
+
     return {
         "name": action.name,
         "description": schema.get('description', ''),
         "parameters": {
             "type": "object",
-            "properties": schema.get('properties', {}),
+            "properties": properties,
             "required": schema.get('required', [])
         }
     }
@@ -279,7 +331,9 @@ def messages_to_contents(messages: List[Message]) -> List[types.Content]:
                     if thought.id:
                         # Use real signature for Gemini, dummy for other providers
                         if thought.provider == "gemini":
-                            thought_signature = thought.id
+                            # Decode base64 back to bytes for Gemini SDK
+                            import base64
+                            thought_signature = base64.b64decode(thought.id)
                         else:
                             thought_signature = DUMMY_THOUGHT_SIGNATURE
 

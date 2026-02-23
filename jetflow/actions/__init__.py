@@ -10,8 +10,10 @@ to avoid triggering dependency checks. Import them directly:
 
 from jetflow.actions.plan import create_plan
 from jetflow.actions.web_search import WebSearch
+from jetflow.actions.text_editor import TextEditor
 
 __all__ = [
     "create_plan",
     "WebSearch",
+    "TextEditor",
 ]

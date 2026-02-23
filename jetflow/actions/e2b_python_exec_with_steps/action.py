@@ -10,27 +10,7 @@ from jetflow.models.response import ActionResult
 from jetflow.models.citations import CodeExecutionCitation
 
 
-class PythonExec(BaseModel):
-    """Execute Python code with step-by-step citation tracking
-
-    Each step you define gets a unique citation ID that can be referenced with <N> tags in your synthesis.
-    Focus on analytical conclusions, not code mechanics. Describe what you're calculating and why it's relevant.
-    Steps will appear as hoverable citations in the final response.
-    """
-
-    code: str = Field(
-        description="Python code to execute. Use pandas, numpy, matplotlib, etc."
-    )
-
-    steps: List[str] = Field(
-        description=(
-            "List of analytical steps this code performs. Each gets a citation ID. "
-            "Be specific about what is calculated and why. "
-            "Focus on insights and conclusions, not implementation details."
-        ),
-        min_length=1
-    )
-
+claud
 
 @action(schema=PythonExec)
 class E2BPythonExecWithSteps(BaseE2BPythonExec):

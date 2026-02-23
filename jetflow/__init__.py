@@ -10,6 +10,7 @@ from jetflow.agent.state import AgentState
 from jetflow.agent.context import ContextConfig
 from jetflow.action import action
 from jetflow.actions.web_search import WebSearch
+from jetflow.actions.text_editor import TextEditor
 from jetflow.models import (
     Message, Action, Thought,
     AgentResponse, ActionResult,
@@ -26,25 +27,40 @@ from jetflow.citations import CitationExtractor, AsyncCitationMiddleware, SyncCi
 from jetflow.utils.usage import Usage
 
 # Import clients (optional dependencies - each wrapped separately)
+# When a provider SDK is missing, we define a stub that raises a clear error
+# on instantiation instead of silently swallowing the ImportError.
+def _missing_client_stub(class_name: str, package: str, extra: str):
+    """Create a stub class that raises ImportError with install instructions."""
+    def __init__(self, *args, **kwargs):
+        raise ImportError(
+            f"{class_name} requires '{package}'. "
+            f"Install with: pip install jetflow[{extra}]"
+        )
+    return type(class_name, (), {"__init__": __init__})
+
 try:
     from jetflow.clients import AnthropicClient, AsyncAnthropicClient
 except ImportError:
-    pass
+    AnthropicClient = _missing_client_stub("AnthropicClient", "anthropic", "anthropic")
+    AsyncAnthropicClient = _missing_client_stub("AsyncAnthropicClient", "anthropic", "anthropic")
 
 try:
     from jetflow.clients import OpenAIClient, AsyncOpenAIClient
 except ImportError:
-    pass
+    OpenAIClient = _missing_client_stub("OpenAIClient", "openai", "openai")
+    AsyncOpenAIClient = _missing_client_stub("AsyncOpenAIClient", "openai", "openai")
 
 try:
     from jetflow.clients import GrokClient, AsyncGrokClient
 except ImportError:
-    pass
+    GrokClient = _missing_client_stub("GrokClient", "openai", "grok")
+    AsyncGrokClient = _missing_client_stub("AsyncGrokClient", "openai", "grok")
 
 try:
     from jetflow.clients import GeminiClient, AsyncGeminiClient
 except ImportError:
-    pass
+    GeminiClient = _missing_client_stub("GeminiClient", "google-genai", "gemini")
+    AsyncGeminiClient = _missing_client_stub("AsyncGeminiClient", "google-genai", "gemini")
 
 __all__ = [
     "__version__",
@@ -58,6 +74,7 @@ __all__ = [
     "AsyncExtract",
     "action",
     "WebSearch",
+    "TextEditor",
     "Message",
     "Action",
     "Thought",
@@ -87,12 +104,10 @@ __all__ = [
     "ChartSeries",
 ]
 
-# Add clients to __all__ if available
-for _client_name in [
+# All clients are always importable (real or stub), so add them to __all__
+__all__.extend([
     "AnthropicClient", "AsyncAnthropicClient",
     "OpenAIClient", "AsyncOpenAIClient",
     "GrokClient", "AsyncGrokClient",
     "GeminiClient", "AsyncGeminiClient",
-]:
-    if _client_name in dir():
-        __all__.append(_client_name)
+])

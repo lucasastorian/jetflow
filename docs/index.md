@@ -66,5 +66,6 @@ pip install jetflow[all]  # All providers + E2B
 ## Next
 
 - [Quickstart](quickstart.md) — Working agent in 5 minutes
+- [Streaming](streaming.md) — Message lifecycle and event reference
 - [E2B Code Execution](e2b.md) — Cloud Python with S3/GCS data
 - [API Reference](api.md) — Full documentation

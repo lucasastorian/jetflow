@@ -72,20 +72,24 @@ class AsyncGeminiClient(AsyncBaseClient):
         candidate = response.candidates[0]
 
         for part in candidate.content.parts:
-            if part.thought and part.text:
-                completion.blocks.append(ThoughtBlock(id="", summaries=[part.text], provider="gemini"))
-                if logger:
-                    logger.log_thought(part.text)
+            if part.thought:
+                if part.text:
+                    completion.blocks.append(ThoughtBlock(id="", summaries=[part.text], provider="gemini"))
+                    if logger:
+                        logger.log_thought(part.text)
 
             elif part.function_call:
                 thought_signature = getattr(part, 'thought_signature', None)
                 if thought_signature:
+                    # Base64 encode bytes for JSON serialization
+                    import base64
+                    sig_str = base64.b64encode(thought_signature).decode('ascii') if isinstance(thought_signature, bytes) else thought_signature
                     for block in reversed(completion.blocks):
                         if isinstance(block, ThoughtBlock):
-                            block.id = thought_signature
+                            block.id = sig_str
                             break
                     else:
-                        completion.blocks.append(ThoughtBlock(id=thought_signature, summaries=[], provider="gemini"))
+                        completion.blocks.append(ThoughtBlock(id=sig_str, summaries=[], provider="gemini"))
 
                 completion.blocks.append(ActionBlock(id=str(uuid.uuid4()), name=part.function_call.name, status="parsed", body=dict(part.function_call.args)))
 
@@ -128,23 +132,27 @@ class AsyncGeminiClient(AsyncBaseClient):
                 continue
 
             for part in chunk.candidates[0].content.parts:
-                if part.thought and part.text:
-                    completion.blocks.append(ThoughtBlock(id="", summaries=[part.text], provider="gemini"))
-                    yield ThoughtStart(id="")
-                    yield ThoughtDelta(id="", delta=part.text)
-                    yield ThoughtEnd(id="", thought=part.text)
-                    if logger:
-                        logger.log_thought(part.text)
+                if part.thought:
+                    if part.text:
+                        completion.blocks.append(ThoughtBlock(id="", summaries=[part.text], provider="gemini"))
+                        yield ThoughtStart(id="")
+                        yield ThoughtDelta(id="", delta=part.text)
+                        yield ThoughtEnd(id="", thought=part.text)
+                        if logger:
+                            logger.log_thought(part.text)
 
                 elif part.function_call:
                     thought_signature = getattr(part, 'thought_signature', None)
                     if thought_signature:
+                        # Base64 encode bytes for JSON serialization
+                        import base64
+                        sig_str = base64.b64encode(thought_signature).decode('ascii') if isinstance(thought_signature, bytes) else thought_signature
                         for block in reversed(completion.blocks):
                             if isinstance(block, ThoughtBlock):
-                                block.id = thought_signature
+                                block.id = sig_str
                                 break
                         else:
-                            completion.blocks.append(ThoughtBlock(id=thought_signature, summaries=[], provider="gemini"))
+                            completion.blocks.append(ThoughtBlock(id=sig_str, summaries=[], provider="gemini"))
 
                     action_id = str(uuid.uuid4())
                     action = ActionBlock(id=action_id, name=part.function_call.name, status="parsed", body=dict(part.function_call.args))

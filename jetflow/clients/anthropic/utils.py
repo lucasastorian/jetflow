@@ -164,6 +164,7 @@ def build_message_params(
     enable_caching: bool = False,
     cache_ttl: Literal['5m', '1h'] = '5m',
     context_cache_index: Optional[int] = None,
+    caching_strategy: Literal['auto', 'explicit'] = 'auto',
 ) -> Dict[str, Any]:
     """Build request parameters for Anthropic Messages API
 
@@ -233,15 +234,18 @@ def build_message_params(
         params['tool_choice'] = {"type": "none"}
     # tool_choice == "auto" is the default, no need to set
 
-    # Add cache control markers if caching is enabled
+    # Add cache control if caching is enabled
     if enable_caching:
-        add_cache_control_markers(
-            tools=params['tools'],
-            system=params['system'],
-            messages=params['messages'],
-            ttl=cache_ttl,
-            context_cache_index=context_cache_index
-        )
+        if caching_strategy == 'auto':
+            params["cache_control"] = {"type": "ephemeral", "ttl": cache_ttl}
+        else:
+            add_cache_control_markers(
+                tools=params['tools'],
+                system=params['system'],
+                messages=params['messages'],
+                ttl=cache_ttl,
+                context_cache_index=context_cache_index
+            )
 
     return params
 

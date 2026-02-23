@@ -208,6 +208,13 @@ PRICING = {
         }
     },
     "Gemini": {
+        # Gemini 3.1 models
+        "gemini-3.1-pro-preview": {
+            "input_per_million": 2.0,      # ≤200k ctx
+            "input_per_million_long": 4.0,  # >200k ctx
+            "output_per_million": 12.0,     # ≤200k ctx (including thinking)
+            "output_per_million_long": 18.0, # >200k ctx
+        },
         # Gemini 3 models
         "gemini-3-pro-preview": {
             "input_per_million": 2.0,      # ≤200k ctx
