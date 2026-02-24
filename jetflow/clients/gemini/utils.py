@@ -1,13 +1,16 @@
 """Gemini client utilities"""
 
+import base64 as b64
+import re
 import uuid
+from typing import List, Literal, Optional
+
 from google.genai import types
-from typing import List, Optional, Literal
 
 from jetflow.action import BaseAction
-from jetflow.models.message import Message, ActionBlock, ImageBlock, TextBlock
-from jetflow.models.sources import WebSource
 from jetflow.clients.base import ToolChoice
+from jetflow.models.message import ActionBlock, ImageBlock, Message, TextBlock
+from jetflow.models.sources import WebSource
 from jetflow.utils.server_tools import extract_server_tools
 
 # Thinking level options for Gemini 3 series
@@ -31,13 +34,15 @@ def _build_retryable_errors():
     errors = [ConnectionError, TimeoutError, OSError]
     try:
         from aiohttp.client_exceptions import (
-            ClientPayloadError, ServerDisconnectedError, ClientConnectionError
+            ClientConnectionError,
+            ClientPayloadError,
+            ServerDisconnectedError,
         )
         errors.extend([ClientPayloadError, ServerDisconnectedError, ClientConnectionError])
     except ImportError:
         pass
     try:
-        from httpx import ReadError, RemoteProtocolError, ConnectError
+        from httpx import ConnectError, ReadError, RemoteProtocolError
         errors.extend([ReadError, RemoteProtocolError, ConnectError])
     except ImportError:
         pass
@@ -310,7 +315,72 @@ def find_action_name(action_id: str, messages: List[Message]) -> str:
     return "unknown"
 
 
-def messages_to_contents(messages: List[Message]) -> List[types.Content]:
+def _safe_display_name(action_name: str, action_id: Optional[str], index: int, media_type: str) -> str:
+    """Build a deterministic, ref-safe display name for function-response media parts."""
+    ext = media_type.split('/')[-1] if '/' in media_type else 'bin'
+    ext = re.sub(r'[^a-zA-Z0-9]+', '', ext) or 'bin'
+    safe_action = re.sub(r'[^a-zA-Z0-9_-]+', '_', action_name or 'tool')
+    safe_action = safe_action[:32] or 'tool'
+    suffix = (action_id or uuid.uuid4().hex)[:12]
+    return f"{safe_action}_{suffix}_{index}.{ext}"
+
+
+def _build_tool_function_response_part(action_name: str, msg: Message, messages: List[Message]) -> dict:
+    """Build a Gemini functionResponse part as a raw dict.
+
+    We intentionally use raw dict payloads for functionResponse parts because
+    google-genai currently does not camelCase nested keys inside functionResponse
+    when serializing typed models, which breaks multimodal refs validation.
+    """
+    action_name = action_name or find_action_name(msg.action_id, messages)
+    response_data = {"result": msg.content}
+    multimodal_parts = []
+
+    image_index = 0
+    for block in msg.blocks:
+        if not isinstance(block, ImageBlock):
+            continue
+
+        display_name = _safe_display_name(action_name, msg.action_id, image_index, block.media_type)
+        media_ref_key = f"image_{image_index}"
+
+        if block.url:
+            # Prefer fileData for URL-backed images (no eager download).
+            multimodal_parts.append({
+                "fileData": {
+                    "fileUri": block.url,
+                    "mimeType": block.media_type,
+                    "displayName": display_name,
+                }
+            })
+            response_data[media_ref_key] = {"$ref": display_name}
+            image_index += 1
+            continue
+
+        if block.data:
+            multimodal_parts.append({
+                "inlineData": {
+                    "mimeType": block.media_type,
+                    "displayName": display_name,
+                    "data": b64.b64decode(block.data),
+                }
+            })
+            response_data[media_ref_key] = {"$ref": display_name}
+            image_index += 1
+
+    function_response = {
+        "name": action_name,
+        "response": response_data,
+    }
+    if multimodal_parts:
+        function_response["parts"] = multimodal_parts
+
+    # Return in snake_case at the outer field because _Part_to_mldev reads
+    # "function_response", then forwards nested dict keys untouched.
+    return {"function_response": function_response}
+
+
+def messages_to_contents(messages: List[Message]) -> List[types.Content | dict]:
     """Convert Message objects to Gemini Content format
 
     Gemini requires function responses to immediately follow function calls,
@@ -323,52 +393,16 @@ def messages_to_contents(messages: List[Message]) -> List[types.Content]:
         """Add accumulated tool parts as a single user Content"""
         nonlocal pending_tool_parts
         if pending_tool_parts:
-            contents.append(types.Content(role="user", parts=pending_tool_parts))
+            # Keep tool function responses as raw dicts so nested multimodal
+            # functionResponse payloads retain camelCase keys.
+            contents.append({"role": "user", "parts": pending_tool_parts})
             pending_tool_parts = []
 
     for msg in messages:
         if msg.role == "tool":
             # Function response - accumulate for grouping
             action_name = find_action_name(msg.action_id, messages)
-
-            # Build multimodal function response for Gemini 3 (images in tool results)
-            image_blocks = [b for b in msg.blocks if isinstance(b, ImageBlock)]
-            has_multimodal_fr = hasattr(types, 'FunctionResponsePart')
-
-            if image_blocks and has_multimodal_fr:
-                # Gemini 3 native multimodal function responses
-                response_data = {"result": msg.content}
-                multimodal_parts = []
-                for i, block in enumerate(image_blocks):
-                    ext = block.media_type.split('/')[-1] if '/' in block.media_type else 'jpg'
-                    display_name = f"image_{i}.{ext}"
-                    image_bytes = None
-                    if block.data:
-                        import base64 as b64
-                        image_bytes = b64.b64decode(block.data)
-                    elif block.url:
-                        import urllib.request
-                        with urllib.request.urlopen(block.url) as resp:
-                            image_bytes = resp.read()
-                    if image_bytes:
-                        multimodal_parts.append(types.FunctionResponsePart(
-                            inline_data=types.FunctionResponseBlob(
-                                mime_type=block.media_type,
-                                display_name=display_name,
-                                data=image_bytes,
-                            )
-                        ))
-                        response_data[f"image_{i}"] = {"$ref": display_name}
-                part = types.Part.from_function_response(
-                    name=action_name,
-                    response=response_data,
-                    parts=multimodal_parts
-                )
-            else:
-                part = types.Part.from_function_response(
-                    name=action_name,
-                    response={"result": msg.content}
-                )
+            part = _build_tool_function_response_part(action_name, msg, messages)
             pending_tool_parts.append(part)
 
         elif msg.role == "assistant":
