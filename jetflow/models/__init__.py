@@ -17,6 +17,7 @@ from jetflow.models.events import (
     ActionEnd,
     ActionExecutionStart,
     ActionExecuted,
+    ActionApprovalRequired,
     ChainAgentStart,
     ChainAgentEnd
 )
@@ -49,6 +50,7 @@ __all__ = [
     'ActionEnd',
     'ActionExecutionStart',
     'ActionExecuted',
+    'ActionApprovalRequired',
     'ChainAgentStart',
     'ChainAgentEnd',
     # Response types

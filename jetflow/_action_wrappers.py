@@ -66,7 +66,8 @@ def _build_response_from_result(result: Union[ActionResult, Any], action: Action
                 force=result.force_follow_up
             ) if result.follow_up_actions else None,
             summary=result.summary,
-            result=result.metadata
+            result=result.metadata,
+            requires_approval=result.requires_approval
         )
     else:
         return ActionResponse(
@@ -90,9 +91,10 @@ def _wrap_function_action(fn: Callable, schema: Type[BaseModel], exit: bool) -> 
     sig = inspect.signature(fn)
     accepts_citation_start = 'citation_start' in sig.parameters
     accepts_state = 'state' in sig.parameters
+    accepts_approved = 'approved' in sig.parameters
 
     class FunctionAction(BaseAction):
-        def __call__(self, action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
+        def __call__(self, action, state: AgentState = None, citation_start: int = 1, approved=None) -> ActionResponse:
             # Support direct schema calls for testing
             if isinstance(action, self.schema):
                 kwargs = {}
@@ -100,6 +102,8 @@ def _wrap_function_action(fn: Callable, schema: Type[BaseModel], exit: bool) -> 
                     kwargs['citation_start'] = citation_start
                 if accepts_state:
                     kwargs['state'] = state
+                if accepts_approved:
+                    kwargs['approved'] = approved
                 result = fn(action, **kwargs)
                 # For direct calls, return the result directly, not wrapped in ActionResponse
                 if isinstance(result, ActionResult):
@@ -126,6 +130,8 @@ def _wrap_function_action(fn: Callable, schema: Type[BaseModel], exit: bool) -> 
                     kwargs['citation_start'] = citation_start
                 if accepts_state:
                     kwargs['state'] = state
+                if accepts_approved:
+                    kwargs['approved'] = approved
 
                 result = fn(validated, **kwargs)
 
@@ -161,6 +167,7 @@ def _wrap_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> Type['
     sig = inspect.signature(cls.__call__)
     accepts_citation_start = 'citation_start' in sig.parameters
     accepts_state = 'state' in sig.parameters
+    accepts_approved = 'approved' in sig.parameters
 
     class ClassAction(BaseAction):
         def __init__(self, *args, **kwargs):
@@ -188,7 +195,7 @@ def _wrap_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> Type['
             if hasattr(self._instance, '__stop__'):
                 return self._instance.__stop__()
 
-        def __call__(self, action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
+        def __call__(self, action, state: AgentState = None, citation_start: int = 1, approved=None) -> ActionResponse:
             # Support direct schema calls for testing (executor(PythonExec(...)))
             if isinstance(action, self.schema):
                 kwargs = {}
@@ -196,6 +203,8 @@ def _wrap_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> Type['
                     kwargs['citation_start'] = citation_start
                 if accepts_state:
                     kwargs['state'] = state
+                if accepts_approved:
+                    kwargs['approved'] = approved
                 return self._instance(action, **kwargs)
 
             # Normal action call (from agent)
@@ -218,6 +227,8 @@ def _wrap_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> Type['
                     kwargs['citation_start'] = citation_start
                 if accepts_state:
                     kwargs['state'] = state
+                if accepts_approved:
+                    kwargs['approved'] = approved
 
                 result = self._instance(validated, **kwargs)
 
@@ -255,9 +266,10 @@ def _wrap_async_function_action(fn: Callable, schema: Type[BaseModel], exit: boo
     sig = inspect.signature(fn)
     accepts_citation_start = 'citation_start' in sig.parameters
     accepts_state = 'state' in sig.parameters
+    accepts_approved = 'approved' in sig.parameters
 
     class AsyncFunctionAction(AsyncBaseAction):
-        async def __call__(self, action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
+        async def __call__(self, action, state: AgentState = None, citation_start: int = 1, approved=None) -> ActionResponse:
             try:
                 validated = self.schema(**action.body)
             except ValidationError as e:
@@ -277,6 +289,8 @@ def _wrap_async_function_action(fn: Callable, schema: Type[BaseModel], exit: boo
                     kwargs['citation_start'] = citation_start
                 if accepts_state:
                     kwargs['state'] = state
+                if accepts_approved:
+                    kwargs['approved'] = approved
 
                 result = await fn(validated, **kwargs)
 
@@ -313,6 +327,7 @@ def _wrap_async_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> 
     sig = inspect.signature(cls.__call__)
     accepts_citation_start = 'citation_start' in sig.parameters
     accepts_state = 'state' in sig.parameters
+    accepts_approved = 'approved' in sig.parameters
 
     class AsyncClassAction(AsyncBaseAction):
         def __init__(self, *args, **kwargs):
@@ -346,7 +361,7 @@ def _wrap_async_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> 
                 if hasattr(result, '__await__'):
                     await result
 
-        async def __call__(self, action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
+        async def __call__(self, action, state: AgentState = None, citation_start: int = 1, approved=None) -> ActionResponse:
             try:
                 validated = self.schema(**action.body)
             except ValidationError as e:
@@ -366,6 +381,8 @@ def _wrap_async_class_action(cls: Type, schema: Type[BaseModel], exit: bool) -> 
                     kwargs['citation_start'] = citation_start
                 if accepts_state:
                     kwargs['state'] = state
+                if accepts_approved:
+                    kwargs['approved'] = approved
 
                 result = await self._instance(validated, **kwargs)
 

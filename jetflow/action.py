@@ -88,7 +88,7 @@ class BaseAction(ActionSchemaMixin, ABC):
     """Base class for sync actions"""
 
     @abstractmethod
-    def __call__(self, action: Action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
+    def __call__(self, action: Action, state: AgentState = None, citation_start: int = 1, approved=None) -> ActionResponse:
         raise NotImplementedError
 
 
@@ -96,7 +96,7 @@ class AsyncBaseAction(ActionSchemaMixin, ABC):
     """Base class for async actions"""
 
     @abstractmethod
-    async def __call__(self, action: Action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
+    async def __call__(self, action: Action, state: AgentState = None, citation_start: int = 1, approved=None) -> ActionResponse:
         raise NotImplementedError
 
 

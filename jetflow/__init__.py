@@ -17,7 +17,7 @@ from jetflow.models import (
     StreamEvent, MessageStart, MessageEnd, ContentDelta,
     ThoughtStart, ThoughtDelta, ThoughtEnd,
     ActionStart, ActionDelta, ActionEnd,
-    ActionExecutionStart, ActionExecuted,
+    ActionExecutionStart, ActionExecuted, ActionApprovalRequired,
     ChainAgentStart, ChainAgentEnd
 )
 from jetflow.models.chart import Chart, ChartSeries
@@ -98,6 +98,7 @@ __all__ = [
     "ActionEnd",
     "ActionExecutionStart",
     "ActionExecuted",
+    "ActionApprovalRequired",
     "ChainAgentStart",
     "ChainAgentEnd",
     # Chart models

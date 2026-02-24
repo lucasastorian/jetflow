@@ -2,7 +2,8 @@
 
 import datetime
 import logging
-from typing import List, Union, Type, Optional
+from dataclasses import dataclass, field
+from typing import List, Union, Type, Optional, Any
 from jetflow.clients.base import BaseClient, AsyncBaseClient
 from jetflow.action import BaseAction, AsyncBaseAction
 from jetflow.models import Message, Action
@@ -11,6 +12,14 @@ from jetflow.utils.usage import Usage
 from jetflow.utils.pricing import calculate_cost
 from jetflow.utils.timer import Timer
 from jetflow.utils.server_tools import ServerExecutedTool
+
+
+@dataclass
+class PendingApproval:
+    """Stored when an action needs user approval"""
+    action: Action          # parsed action (name, body, id)
+    action_impl: Any        # BaseAction/AsyncBaseAction to re-call
+    remaining: List[Action] = field(default_factory=list)  # unexecuted actions from same turn
 
 try:
     import tiktoken
@@ -117,7 +126,7 @@ def calculate_usage(messages: List[Message], provider: str, model: str) -> Usage
     return usage
 
 
-def _build_response(agent, timer: Timer, success: bool, exited_via_action: bool = False) -> AgentResponse:
+def _build_response(agent, timer: Timer, success: bool, exited_via_action: bool = False, pending_approval: bool = False) -> AgentResponse:
     """Build agent response with citations and usage calculation"""
     end_time = timer.end_time if timer.end_time is not None else datetime.datetime.now()
 
@@ -129,6 +138,7 @@ def _build_response(agent, timer: Timer, success: bool, exited_via_action: bool 
             iterations=agent.num_iter,
             success=success,
             exited_via_action=exited_via_action,
+            pending_approval=pending_approval,
             content=""
         )
 
@@ -161,6 +171,7 @@ def _build_response(agent, timer: Timer, success: bool, exited_via_action: bool 
         iterations=agent.num_iter,
         success=success,
         exited_via_action=exited_via_action,
+        pending_approval=pending_approval,
         content=last_message.content or None,
         citations=citations,
         parsed=output
@@ -254,6 +265,7 @@ def reset_agent_state(agent_instance):
     agent_instance.messages = []
     agent_instance.num_iter = 0
     agent_instance._consecutive_stream_errors = 0
+    agent_instance._pending_approval = None
     agent_instance.client.reset()
 
 

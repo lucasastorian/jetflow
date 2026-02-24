@@ -93,6 +93,15 @@ class ActionExecuted:
 
 
 @dataclass
+class ActionApprovalRequired:
+    """Action needs user approval before execution proceeds"""
+    action_id: str
+    name: str
+    body: dict
+    message: Message  # tool message with approval request content
+
+
+@dataclass
 class ChainAgentStart:
     """Chain agent execution begins"""
     agent_index: int  # 0-indexed
@@ -120,6 +129,7 @@ StreamEvent = Union[
     ActionEnd,
     ActionExecutionStart,
     ActionExecuted,
+    ActionApprovalRequired,
     ChainAgentStart,
     ChainAgentEnd
 ]

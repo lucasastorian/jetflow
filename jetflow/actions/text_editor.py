@@ -77,7 +77,7 @@ class TextEditor(BaseAction):
             schema["max_characters"] = self.max_characters
         return schema
 
-    def __call__(self, action, state: AgentState = None, citation_start: int = 1) -> ActionResponse:
+    def __call__(self, action, state: AgentState = None, citation_start: int = 1, approved=None) -> ActionResponse:
         body = action.body
         command = body.get("command")
         path = body.get("path", "")

@@ -10,7 +10,11 @@ from jetflow.models.response import ActionResult
 from jetflow.models.citations import CodeExecutionCitation
 
 
-claud
+class PythonExec(BaseModel):
+    """Execute Python code with step-by-step citation tracking."""
+    code: str = Field(description="Python code to execute.")
+    steps: List[str] = Field(description="Analysis steps being performed in this code execution.")
+
 
 @action(schema=PythonExec)
 class E2BPythonExecWithSteps(BaseE2BPythonExec):

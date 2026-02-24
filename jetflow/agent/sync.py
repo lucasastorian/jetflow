@@ -8,13 +8,14 @@ from jetflow.action import BaseAction
 from jetflow.models import Message, Action
 from jetflow.models import AgentResponse, ActionFollowUp, StepResult
 from jetflow.models import StreamEvent, MessageEnd, ActionExecutionStart, ActionExecuted
+from jetflow.models.events import ActionApprovalRequired
 from jetflow.agent.state import AgentState
 from jetflow.agent.context import ContextConfig, ContextManager
 from jetflow.agent.utils import (
     validate_client, prepare_and_validate_actions,
     _build_response, add_messages_to_history, find_action,
     handle_no_actions, handle_action_not_found, reset_agent_state,
-    count_message_tokens, should_enable_caching
+    count_message_tokens, should_enable_caching, PendingApproval
 )
 from jetflow.utils.base_logger import BaseLogger
 from jetflow.utils.verbose_logger import VerboseLogger
@@ -50,6 +51,7 @@ class Agent:
         self.messages: List[Message] = []
         self.num_iter = 0
         self._consecutive_stream_errors = 0
+        self._pending_approval = None
 
     def _should_enable_caching(self) -> bool:
         return should_enable_caching(self.max_iter, self.num_iter, bool(self.actions))
@@ -71,6 +73,9 @@ class Agent:
                     result = self._navigate_sequence_non_streaming(
                         actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, depth=0
                     )
+
+                    if result.pending_approval:
+                        return self._build_final_response(timer, success=True, pending_approval=True)
 
                     if result.is_exit:
                         return self._build_final_response(timer, success=True, exited_via_action=result.via_action)
@@ -107,6 +112,10 @@ class Agent:
                         else:
                             yield event
 
+                    if result.pending_approval:
+                        yield self._build_final_response(timer, success=True, pending_approval=True)
+                        return
+
                     if result.is_exit:
                         yield self._build_final_response(timer, success=True, exited_via_action=result.via_action)
                         return
@@ -125,6 +134,8 @@ class Agent:
             raise RuntimeError(f"Exceeded max follow-up depth {self.max_depth}")
 
         step_result = self._step(actions, system_prompt, allowed_actions)
+        if step_result.pending_approval:
+            return step_result
         if step_result.is_exit:
             return step_result  # Preserves via_action flag
 
@@ -156,6 +167,10 @@ class Agent:
                 step_result = event
             else:
                 yield event
+
+        if step_result.pending_approval:
+            yield step_result
+            return
 
         if step_result.is_exit:
             yield step_result  # Preserves via_action flag
@@ -213,6 +228,8 @@ class Agent:
             return StepResult(is_exit=False, follow_ups=result)
 
         action_result = self._consume_action_events(executable_actions, actions)
+        if action_result == 'pending_approval':
+            return StepResult(is_exit=False, pending_approval=True)
         if action_result is None:
             return StepResult(is_exit=True, via_action=True)  # Exit action
         return StepResult(is_exit=False, follow_ups=action_result)
@@ -269,6 +286,9 @@ class Agent:
         follow_ups = []
         for event in self._execute_actions(executable_actions, actions):
             yield event
+            if isinstance(event, ActionApprovalRequired):
+                yield StepResult(is_exit=False, pending_approval=True)
+                return
             if isinstance(event, ActionExecuted):
                 if event.is_exit:
                     yield StepResult(is_exit=True, via_action=True)  # Exit action
@@ -281,26 +301,44 @@ class Agent:
     def _execute_actions(self, called_actions: List[Action], actions: List[BaseAction]) -> Iterator[StreamEvent]:
         state = AgentState(messages=self.messages, citations=dict(self.client.citations))
 
-        for called_action in called_actions:
+        for i, called_action in enumerate(called_actions):
             action_impl = find_action(called_action.name, actions)
 
             if not action_impl:
                 handle_action_not_found(called_action, self.actions, self.messages, self.logger)
                 continue
 
-            for event in self._execute_action(called_action, action_impl, state):
+            remaining = called_actions[i + 1:]
+            for event in self._execute_action(called_action, action_impl, state, remaining_actions=remaining):
                 yield event
+                if isinstance(event, ActionApprovalRequired):
+                    return
                 if isinstance(event, ActionExecuted) and event.is_exit:
                     return
 
-    def _execute_action(self, called_action: Action, action_impl: BaseAction, state: AgentState) -> Iterator[StreamEvent]:
+    def _execute_action(self, called_action: Action, action_impl: BaseAction, state: AgentState, remaining_actions: List[Action] = None, approved: bool = None) -> Iterator[StreamEvent]:
         """Executes a single action"""
         citation_start = self.client.get_next_id()
         self.logger.log_action_start(called_action.name, called_action.body)
 
         yield ActionExecutionStart(id=called_action.id, name=called_action.name, body=called_action.body)
 
-        response = action_impl(called_action, state=state, citation_start=citation_start)
+        response = action_impl(called_action, state=state, citation_start=citation_start, approved=approved)
+
+        if response.requires_approval:
+            self._pending_approval = PendingApproval(
+                action=called_action,
+                action_impl=action_impl,
+                remaining=remaining_actions or [],
+            )
+            self.messages.append(response.message)
+            yield ActionApprovalRequired(
+                action_id=called_action.id,
+                name=called_action.name,
+                body=called_action.body,
+                message=response.message,
+            )
+            return
 
         if response.message.error:
             self.logger.log_error(f"Action '{called_action.name}' failed: {response.message.content}")
@@ -327,14 +365,108 @@ class Agent:
         )
 
     def _consume_action_events(self, called_actions: List[Action], actions: List[BaseAction]) -> Optional[List[ActionFollowUp]]:
+        """Returns follow_ups list, None for exit, or 'pending_approval' sentinel string."""
         follow_ups = []
         for event in self._execute_actions(called_actions, actions):
+            if isinstance(event, ActionApprovalRequired):
+                return 'pending_approval'
             if isinstance(event, ActionExecuted):
                 if event.is_exit:
                     return None
                 if event.follow_up:
                     follow_ups.append(event.follow_up)
         return follow_ups or []
+
+    def resume_approval(self, approved: bool) -> Iterator[Union[StreamEvent, AgentResponse]]:
+        """Resume after an action approval gate (streaming)."""
+        if not self._pending_approval:
+            raise RuntimeError("No pending approval to resume")
+
+        pending = self._pending_approval
+        self._pending_approval = None
+
+        self._call_start_hooks()
+        try:
+            with Timer.measure() as timer:
+                if approved:
+                    # Remove the "requires approval" tool message
+                    self.messages.pop()
+                    # Re-execute action with approved=True
+                    state = AgentState(messages=self.messages, citations=dict(self.client.citations))
+                    citation_start = self.client.get_next_id()
+                    response = pending.action_impl(pending.action, state=state, citation_start=citation_start, approved=True)
+                    self.messages.append(response.message)
+
+                    self.logger.log_action_end(response.summary, response.message.content, response.message.error)
+                    self.client.add_citations(new_citations=response.message.citations)
+                    pending.action.result = response.result
+                    pending.action.sources = response.message.sources
+
+                    is_exit = pending.action_impl.is_exit and not response.message.error
+                    yield ActionExecuted(
+                        action_id=pending.action.id,
+                        action=pending.action,
+                        message=response.message,
+                        summary=response.summary,
+                        follow_up=response.follow_up,
+                        is_exit=is_exit,
+                    )
+                    if is_exit:
+                        yield self._build_final_response(timer, success=True, exited_via_action=True)
+                        return
+                else:
+                    # Replace tool message with denial
+                    self.messages[-1] = Message(
+                        role="tool",
+                        content="User denied this action.",
+                        action_id=pending.action.id,
+                        status="completed",
+                    )
+
+                # Execute remaining actions from the same turn
+                if pending.remaining:
+                    for event in self._execute_actions(pending.remaining, self.actions):
+                        yield event
+                        if isinstance(event, ActionApprovalRequired):
+                            yield self._build_final_response(timer, success=True, pending_approval=True)
+                            return
+                        if isinstance(event, ActionExecuted) and event.is_exit:
+                            yield self._build_final_response(timer, success=True, exited_via_action=True)
+                            return
+
+                # Re-enter main loop
+                follow_up_actions = []
+                while self.num_iter < self.max_iter:
+                    result = None
+                    for event in self._navigate_sequence_streaming(
+                        actions=self.actions + follow_up_actions, system_prompt=self.system_prompt, depth=0
+                    ):
+                        if isinstance(event, StepResult):
+                            result = event
+                        else:
+                            yield event
+
+                    if result.pending_approval:
+                        yield self._build_final_response(timer, success=True, pending_approval=True)
+                        return
+                    if result.is_exit:
+                        yield self._build_final_response(timer, success=True, exited_via_action=result.via_action)
+                        return
+                    follow_up_actions = result.follow_ups
+
+                if self.force_exit_on_max_iter:
+                    self.logger.log_warning(f"max_iter ({self.max_iter}) reached without exit action, forcing exit")
+                yield self._build_final_response(timer, success=self.force_exit_on_max_iter)
+        finally:
+            self._call_stop_hooks()
+
+    def resume_approval_run(self, approved: bool) -> AgentResponse:
+        """Resume after an action approval gate (non-streaming)."""
+        response = None
+        for event in self.resume_approval(approved):
+            if isinstance(event, AgentResponse):
+                response = event
+        return response
 
     def _log_server_executed_action(self, event: ActionExecuted) -> None:
         self.logger.log_action_start(event.action.name, event.action.body)
@@ -376,8 +508,8 @@ class Agent:
             return [a for a in self.actions if a.is_exit]
         return []
 
-    def _build_final_response(self, timer: Timer, success: bool, exited_via_action: bool = False) -> AgentResponse:
-        return _build_response(self, timer, success, exited_via_action)
+    def _build_final_response(self, timer: Timer, success: bool, exited_via_action: bool = False, pending_approval: bool = False) -> AgentResponse:
+        return _build_response(self, timer, success, exited_via_action, pending_approval=pending_approval)
 
     @property
     def system_prompt(self) -> str:

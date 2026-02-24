@@ -21,6 +21,7 @@ class StepResult(BaseModel):
     is_exit: bool
     via_action: bool = False  # True if exit was via an exit action, False if responded directly
     follow_ups: List[ActionFollowUp] = Field(default_factory=list)
+    pending_approval: bool = False
 
 
 class ActionResponse(BaseModel):
@@ -31,6 +32,7 @@ class ActionResponse(BaseModel):
     follow_up: Optional[ActionFollowUp] = None
     summary: Optional[str] = None  # Optional summary for logging (from ActionResult.summary)
     result: Optional[dict] = None  # Structured result for UI rendering (from ActionResult.metadata)
+    requires_approval: bool = False
 
 
 class ActionResult(BaseModel):
@@ -45,6 +47,7 @@ class ActionResult(BaseModel):
     summary: Optional[str] = None
     citations: Optional[Dict[int, SerializeAsAny[BaseCitation]]] = None
     sources: Optional[List[SerializeAsAny[BaseSource]]] = None
+    requires_approval: bool = False
 
 
 class AgentResponse(BaseModel):
@@ -57,6 +60,7 @@ class AgentResponse(BaseModel):
     iterations: int
     success: bool
     exited_via_action: bool = False  # True if agent called an exit action, False if responded directly
+    pending_approval: bool = False
     content: Optional[str] = None  # None when require_action=True with no text
     citations: Optional[Dict[int, SerializeAsAny[BaseCitation]]] = None
     parsed: Optional[BaseModel] = None  # Parsed exit action params (when exit=True or require_action=True)

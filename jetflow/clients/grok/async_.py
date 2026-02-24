@@ -63,7 +63,7 @@ class AsyncGrokClient(AsyncOpenAIClient):
     async def stream(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> AsyncIterator[StreamEvent]:
         """Streaming completion - yields events"""
         params = build_grok_params(self.model, system_prompt, messages, actions, allowed_actions, tool_choice, self.temperature, self.reasoning_effort, stream=True)
-        async for event in self._stream_events_with_retry(params, actions, logger):
+        async for event in self._stream_with_retry(params, actions, logger):
             yield event
 
     async def extract(
