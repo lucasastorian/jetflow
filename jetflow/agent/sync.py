@@ -223,11 +223,13 @@ class Agent:
 
         if not executable_actions:
             result = handle_no_actions(self.require_action, self.messages, self.logger)
+            self.logger.log_step_end()
             if result is None:
                 return StepResult(is_exit=True, via_action=False)  # Direct response
             return StepResult(is_exit=False, follow_ups=result)
 
         action_result = self._consume_action_events(executable_actions, actions)
+        self.logger.log_step_end()
         if action_result == 'pending_approval':
             return StepResult(is_exit=False, pending_approval=True)
         if action_result is None:
@@ -277,6 +279,7 @@ class Agent:
 
         if not executable_actions:
             follow_ups = handle_no_actions(self.require_action, self.messages, self.logger)
+            self.logger.log_step_end()
             if follow_ups is None:
                 yield StepResult(is_exit=True, via_action=False)  # Direct response
             else:
@@ -287,15 +290,18 @@ class Agent:
         for event in self._execute_actions(executable_actions, actions):
             yield event
             if isinstance(event, ActionApprovalRequired):
+                self.logger.log_step_end()
                 yield StepResult(is_exit=False, pending_approval=True)
                 return
             if isinstance(event, ActionExecuted):
                 if event.is_exit:
+                    self.logger.log_step_end()
                     yield StepResult(is_exit=True, via_action=True)  # Exit action
                     return
                 if event.follow_up:
                     follow_ups.append(event.follow_up)
 
+        self.logger.log_step_end()
         yield StepResult(is_exit=False, follow_ups=follow_ups)
 
     def _execute_actions(self, called_actions: List[Action], actions: List[BaseAction]) -> Iterator[StreamEvent]:

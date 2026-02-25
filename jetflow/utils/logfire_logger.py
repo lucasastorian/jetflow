@@ -52,13 +52,15 @@ class LogfireLogger(BaseLogger):
     # ── LLM completion buffering ──────────────────────────────────
 
     def log_thought(self, content: str):
+        if self._thought:
+            self._thought += "\n"
         self._thought += content
 
     def log_content(self, content: str):
         self._content += content
 
     def log_content_delta(self, delta: str):
-        pass
+        self._content += delta
 
     def _flush_completion(self):
         """Emit buffered LLM completion as a single event, then reset."""
@@ -72,6 +74,9 @@ class LogfireLogger(BaseLogger):
         self._logfire.info("llm_completion", **attrs)
         self._thought = ""
         self._content = ""
+
+    def log_step_end(self):
+        self._flush_completion()
 
     # ── Action spans ──────────────────────────────────────────────
 

@@ -65,6 +65,10 @@ class BaseLogger(ABC):
         """Log action completion"""
         pass
 
+    def log_step_end(self):
+        """Called after each agent step completes. Override to flush buffered state."""
+        pass
+
     @abstractmethod
     def log_chain_transition_start(self, agent_index: int, total_agents: int):
         """Log start of agent in chain"""
