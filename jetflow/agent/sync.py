@@ -345,7 +345,7 @@ class Agent:
 
         self.messages.append(response.message)
 
-        self.logger.log_action_end(response.summary, response.message.content, response.message.error)
+        self.logger.log_action_end(response.summary, response.message.content, response.message.error, response.message.citations)
 
         self.client.add_citations(new_citations=response.message.citations)
 
@@ -397,7 +397,7 @@ class Agent:
                     response = pending.action_impl(pending.action, state=state, citation_start=citation_start, approved=True)
                     self.messages.append(response.message)
 
-                    self.logger.log_action_end(response.summary, response.message.content, response.message.error)
+                    self.logger.log_action_end(response.summary, response.message.content, response.message.error, response.message.citations)
                     self.client.add_citations(new_citations=response.message.citations)
                     pending.action.result = response.result
                     pending.action.sources = response.message.sources
@@ -470,7 +470,7 @@ class Agent:
 
     def _log_server_executed_action(self, event: ActionExecuted) -> None:
         self.logger.log_action_start(event.action.name, event.action.body)
-        self.logger.log_action_end(event.summary, event.message.content if event.message else "", False)
+        self.logger.log_action_end(event.summary, event.message.content if event.message else "", False, event.message.citations if event.message else None)
 
     def _call_start_hooks(self):
         for action in self.actions:

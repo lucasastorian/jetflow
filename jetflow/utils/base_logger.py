@@ -61,7 +61,7 @@ class BaseLogger(ABC):
         pass
 
     @abstractmethod
-    def log_action_end(self, summary: str = None, content: str = "", error: bool = False):
+    def log_action_end(self, summary: str = None, content: str = "", error: bool = False, citations: dict = None):
         """Log action completion"""
         pass
 

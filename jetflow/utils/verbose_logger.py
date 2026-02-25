@@ -143,7 +143,7 @@ class VerboseLogger(BaseLogger):
             if len(params) > 5:
                 print(f"  {self._c('→', 'dim')} ...{len(params) - 5} more param(s)", flush=True)
 
-    def log_action_end(self, summary: str = None, content: str = "", error: bool = False):
+    def log_action_end(self, summary: str = None, content: str = "", error: bool = False, citations: dict = None):
         """Log action completion with summary and accurate token count"""
         if not self.verbose:
             return

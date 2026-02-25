@@ -41,6 +41,7 @@ gemini = ["google-genai>=1.50.0"]  # >=1.50 required for Gemini 3 thinking_level
 exec = ["numpy>=2.3.0", "pandas>=2.3.0", "matplotlib>=3.0.0", "seaborn>=0.11.0"]
 e2b = ["e2b>=1.0.0", "e2b-code-interpreter>=2.4.1"]
 exa = ["exa-py>=2.0.0"]
+logfire = ["logfire>=3.0.0"]
 all = [
     "openai>=1.0.0",
     "anthropic>=0.80.0",

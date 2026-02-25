@@ -25,9 +25,10 @@ from jetflow.chain import Chain, AsyncChain
 from jetflow.extract import Extract, AsyncExtract
 from jetflow.citations import CitationExtractor, AsyncCitationMiddleware, SyncCitationMiddleware
 from jetflow.utils.usage import Usage
+from jetflow.utils.verbose_logger import VerboseLogger
 
-# Import clients (optional dependencies - each wrapped separately)
-# When a provider SDK is missing, we define a stub that raises a clear error
+# Import optional dependencies - each wrapped separately.
+# When a package is missing, we define a stub that raises a clear error
 # on instantiation instead of silently swallowing the ImportError.
 def _missing_client_stub(class_name: str, package: str, extra: str):
     """Create a stub class that raises ImportError with install instructions."""
@@ -37,6 +38,11 @@ def _missing_client_stub(class_name: str, package: str, extra: str):
             f"Install with: pip install jetflow[{extra}]"
         )
     return type(class_name, (), {"__init__": __init__})
+
+try:
+    from jetflow.utils.logfire_logger import LogfireLogger
+except ImportError:
+    LogfireLogger = _missing_client_stub("LogfireLogger", "logfire", "logfire")
 
 try:
     from jetflow.clients import AnthropicClient, AsyncAnthropicClient
@@ -82,6 +88,8 @@ __all__ = [
     "AgentResponse",
     "ActionResult",
     "Usage",
+    "VerboseLogger",
+    "LogfireLogger",
     "CitationExtractor",
     "AsyncCitationMiddleware",
     "SyncCitationMiddleware",
