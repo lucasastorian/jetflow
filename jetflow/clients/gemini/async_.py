@@ -3,6 +3,7 @@
 import os
 import uuid
 from google import genai
+from google.genai import types as genai_types
 from typing import List, AsyncIterator, Optional, Type
 from pydantic import BaseModel
 
@@ -21,7 +22,8 @@ class AsyncGeminiClient(AsyncBaseClient):
         model: str = "gemini-2.5-flash",
         api_key: str = None,
         thinking_budget: Optional[int] = None,
-        thinking_level: Optional[ThinkingLevel] = None
+        thinking_level: Optional[ThinkingLevel] = None,
+        max_retries: Optional[int] = None,
     ):
         """Initialize async Gemini client.
 
@@ -32,12 +34,20 @@ class AsyncGeminiClient(AsyncBaseClient):
                             -1 for dynamic, 0 to disable, or specific token count.
             thinking_level: Thinking level (Gemini 3 series only).
                            Options: "minimal", "low", "medium", "high"
+            max_retries: Max retry attempts for transient HTTP errors (429, 5xx).
+                        SDK default is 5. Set to 1 to disable retries.
         """
         self.model = model
         self.thinking_budget = thinking_budget
         self.thinking_level = thinking_level
         api_key = api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
-        self.client = genai.Client(api_key=api_key)
+
+        http_options = None
+        if max_retries is not None:
+            http_options = genai_types.HttpOptions(
+                retry_options=genai_types.HttpRetryOptions(attempts=max_retries)
+            )
+        self.client = genai.Client(api_key=api_key, http_options=http_options)
 
     async def complete(self, messages: List[Message], system_prompt: str, actions: List[BaseAction], allowed_actions: List[BaseAction] = None, tool_choice: ToolChoice = "auto", logger: 'VerboseLogger' = None, enable_caching: bool = False, context_cache_index: Optional[int] = None) -> Message:
         """Non-streaming completion"""
