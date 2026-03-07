@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, TypeVar, Union, Callable, Type, overload
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
+    from jetflow.agent.state import AgentState
     from jetflow.models.message import Action, Message
     from jetflow.models.response import ActionResponse
 

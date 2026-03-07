@@ -13,14 +13,14 @@ from jetflow.models.message import Message, TextBlock, ThoughtBlock, ActionBlock
 from jetflow.models.events import MessageStart, MessageEnd, ContentDelta, ThoughtStart, ThoughtDelta, ThoughtEnd, ActionStart, ActionDelta, ActionEnd, ActionExecuted, StreamEvent
 from jetflow.models.sources import WebSource
 from jetflow.clients.base import BaseClient, ToolChoice
-from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, extract_web_search_results, REASONING_BUDGET_MAP, make_schema_strict
+from jetflow.clients.anthropic.utils import build_message_params, apply_usage_to_message, extract_web_search_results, REASONING_BUDGET_MAP, make_schema_strict, STRUCTURED_OUTPUTS_BETA
 
 
 class AnthropicClient(BaseClient):
     provider: str = "Anthropic"
     max_tokens: int = 16384
 
-    def __init__(self, model: str = "claude-sonnet-4-5", api_key: str = None, temperature: float = 1.0, reasoning_effort: Literal['low', 'medium', 'high', 'none'] = 'medium', effort: Literal['low', 'medium', 'high'] = None, prompt_caching: Literal['never', 'agentic', 'conversational'] = 'agentic', cache_ttl: Literal['5m', '1h'] = '5m', caching_strategy: Literal['auto', 'explicit'] = 'auto'):
+    def __init__(self, model: str = "claude-sonnet-4-5", api_key: str = None, temperature: float = 1.0, reasoning_effort: Literal['low', 'medium', 'high', 'none'] = 'medium', effort: Literal['low', 'medium', 'high', 'max'] = None, prompt_caching: Literal['never', 'agentic', 'conversational'] = 'agentic', cache_ttl: Literal['5m', '1h'] = '5m', caching_strategy: Literal['auto', 'explicit'] = 'auto'):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
@@ -156,12 +156,12 @@ class AnthropicClient(BaseClient):
         yield MessageEnd(message=completion)
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1.0, min=1.0, max=10.0), retry=retry_if_exception_type((httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError, httpx.RemoteProtocolError, anthropic.APIError)), reraise=True)
-    def _complete_with_retry(self, params: dict, logger) -> List[Message]:
+    def _complete_with_retry(self, params: dict, logger) -> Message:
         """Non-streaming completion with retries"""
         response = self.client.beta.messages.create(**params)
         return self._process_completion(response, logger)
 
-    def _process_completion(self, response, logger) -> List[Message]:
+    def _process_completion(self, response, logger) -> Message:
         """Process non-streaming response into Message"""
         completion = Message(role="assistant", status="completed")
 
@@ -206,9 +206,28 @@ class AnthropicClient(BaseClient):
 
     def extract(self, schema: Type[BaseModel], query: str, system_prompt: str = "Extract the requested information.") -> BaseModel:
         """Extract structured data using Anthropic's native structured output"""
-        response = self.client.beta.messages.create(
-            model=self.model, max_tokens=self.max_tokens, betas=["structured-outputs-2025-11-13"],
-            system=system_prompt, messages=[{"role": "user", "content": query}],
-            output_format={"type": "json_schema", "schema": make_schema_strict(schema.model_json_schema())}
-        )
-        return schema.model_validate_json(response.content[0].text)
+        output_schema = make_schema_strict(schema.model_json_schema())
+
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                system=system_prompt,
+                messages=[{"role": "user", "content": query}],
+                output_config={"format": {"type": "json_schema", "schema": output_schema}},
+            )
+        except (TypeError, AttributeError):
+            # Fallback for older anthropic SDK versions that only support beta/output_format.
+            response = self.client.beta.messages.create(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                betas=[STRUCTURED_OUTPUTS_BETA],
+                system=system_prompt,
+                messages=[{"role": "user", "content": query}],
+                output_format={"type": "json_schema", "schema": output_schema},
+            )
+
+        text_block = next((block for block in response.content if getattr(block, "type", None) == "text"), None)
+        if not text_block:
+            raise ValueError("Anthropic structured output did not return a text block with JSON content.")
+        return schema.model_validate_json(text_block.text)

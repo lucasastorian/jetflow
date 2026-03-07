@@ -2,6 +2,13 @@
 
 PRICING = {
     "Anthropic": {
+        "claude-opus-4-6": {
+            "input_per_million": 5.0,
+            "cache_write_5m_per_million": 6.25,    # 1.25x base
+            "cache_write_1h_per_million": 10.0,    # 2x base
+            "cache_read_per_million": 0.50,        # 0.1x base
+            "output_per_million": 25.0,
+        },
         "claude-opus-4-5": {
             "input_per_million": 5.0,
             "cache_write_5m_per_million": 6.25,    # 1.25x base
@@ -22,6 +29,13 @@ PRICING = {
             "cache_write_1h_per_million": 30.0,    # 2x base
             "cache_read_per_million": 1.50,        # 0.1x base
             "output_per_million": 75.0,
+        },
+        "claude-sonnet-4-6": {
+            "input_per_million": 3.0,
+            "cache_write_5m_per_million": 3.75,    # 1.25x base
+            "cache_write_1h_per_million": 6.0,     # 2x base
+            "cache_read_per_million": 0.30,        # 0.1x base
+            "output_per_million": 15.0,
         },
         "claude-sonnet-4-5": {
             "input_per_million": 3.0,

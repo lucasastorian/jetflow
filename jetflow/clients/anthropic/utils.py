@@ -7,7 +7,8 @@ from jetflow.clients.base import ToolChoice
 from jetflow.utils.server_tools import extract_server_tools
 
 
-BETAS = ["interleaved-thinking-2025-05-14", "effort-2025-11-24"]
+INTERLEAVED_THINKING_BETA = "interleaved-thinking-2025-05-14"
+STRUCTURED_OUTPUTS_BETA = "structured-outputs-2025-11-13"
 
 
 def make_schema_strict(schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -49,10 +50,14 @@ def make_schema_strict(schema: Dict[str, Any]) -> Dict[str, Any]:
         result["allOf"] = [make_schema_strict(s) for s in result["allOf"]]
 
     return result
+
+
 THINKING_MODELS = [
+    'claude-opus-4-6',
     'claude-opus-4-5',
     'claude-opus-4-1',
     'claude-opus-4',
+    'claude-sonnet-4-6',
     'claude-sonnet-4-5',
     'claude-sonnet-4-1',
     'claude-sonnet-4',
@@ -160,7 +165,7 @@ def build_message_params(
     reasoning_budget: int,
     tool_choice: ToolChoice = "auto",
     stream: bool = True,
-    effort: Optional[Literal['low', 'medium', 'high']] = None,
+    effort: Optional[Literal['low', 'medium', 'high', 'max']] = None,
     enable_caching: bool = False,
     cache_ttl: Literal['5m', '1h'] = '5m',
     context_cache_index: Optional[int] = None,
@@ -171,7 +176,7 @@ def build_message_params(
     Args:
         allowed_actions: Restrict which actions can be called (None = all, [] = none)
         tool_choice: "auto" (LLM decides), "required" (must call tool), "none" (no tools)
-        effort: Token usage control (low/medium/high). Only for Claude Opus 4.5.
+        effort: Token usage control (low/medium/high/max) for supported Anthropic models.
         enable_caching: Whether to add cache_control markers for prompt caching
         cache_ttl: Cache time-to-live, either '5m' or '1h'
         context_cache_index: Message index after last truncation for cache placement
@@ -186,22 +191,27 @@ def build_message_params(
     for server_tool in server_tools:
         tools.append(server_tool.anthropic_schema)
 
+    thinking_enabled = reasoning_budget > 0 and supports_thinking(model)
+    if thinking_enabled and temperature != 1.0:
+        raise ValueError(
+            "Anthropic extended thinking is not compatible with temperature changes. "
+            "Use temperature=1.0 or set reasoning_effort='none'."
+        )
+
     params = {
         "model": model,
-        "temperature": temperature,
         "max_tokens": max_tokens,
         "system": system_prompt,
         "messages": formatted_messages,
-        "betas": BETAS,
         "tools": tools,
-        "stream": stream
+        "stream": stream,
     }
+    if not thinking_enabled:
+        params["temperature"] = temperature
 
-    # Add effort parameter (Opus 4.5 only)
+    # Add effort parameter for models that support effort controls
     if effort:
         params['output_config'] = {"effort": effort}
-
-    thinking_enabled = reasoning_budget > 0 and supports_thinking(model)
 
     if thinking_enabled:
         params['thinking'] = {
@@ -234,11 +244,20 @@ def build_message_params(
         params['tool_choice'] = {"type": "none"}
     # tool_choice == "auto" is the default, no need to set
 
+    # Interleaved thinking beta is required for thinking+tools and
+    # for token-efficient streaming with thinking.
+    if thinking_enabled and (params.get("tools") or stream):
+        params["betas"] = [INTERLEAVED_THINKING_BETA]
+
     # Add cache control if caching is enabled
     if enable_caching:
         if caching_strategy == 'auto':
+            # Automatic caching via top-level cache_control.
             params["cache_control"] = {"type": "ephemeral", "ttl": cache_ttl}
         else:
+            # Explicit breakpoints on cacheable blocks.
+            if isinstance(params["system"], str):
+                params["system"] = [{"type": "text", "text": params["system"]}]
             add_cache_control_markers(
                 tools=params['tools'],
                 system=params['system'],
@@ -272,7 +291,7 @@ def apply_usage_to_message(usage_obj, message: Message) -> None:
     message.completion_tokens = usage_obj.output_tokens or 0
 
 
-def process_completion(response, logger) -> List[Message]:
+def process_completion(response, logger) -> Message:
     """Process a non-streaming Anthropic response into a Message"""
     from jetflow.models.message import Action, Thought
 
