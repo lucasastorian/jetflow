@@ -61,6 +61,8 @@ class AnthropicClient(BaseClient):
         """Stream completion and yield events"""
         completion = Message(role="assistant", status="in_progress")
         tool_call_arguments = ""
+        current_thought_event_id: Optional[str] = None
+        thought_counter = 0
 
         yield MessageStart(role="assistant")
 
@@ -71,7 +73,13 @@ class AnthropicClient(BaseClient):
             elif event.type == 'content_block_start':
                 if event.content_block.type == 'thinking':
                     signature = getattr(event.content_block, 'signature', '')
+                    if isinstance(signature, bytes):
+                        signature = signature.decode("utf-8", errors="ignore")
+                    if not signature:
+                        signature = f"thought_{thought_counter}"
+                        thought_counter += 1
                     completion.blocks.append(ThoughtBlock(id=signature, summaries=[""], provider="anthropic"))
+                    current_thought_event_id = signature
                     yield ThoughtStart(id=signature)
 
                 elif event.content_block.type == 'text':
@@ -105,12 +113,20 @@ class AnthropicClient(BaseClient):
                         if isinstance(block, ThoughtBlock):
                             block.summaries[0] += event.delta.thinking
                             break
-                    yield ThoughtDelta(id=completion.blocks[-1].id if isinstance(completion.blocks[-1], ThoughtBlock) else "", delta=event.delta.thinking)
+                    yield ThoughtDelta(id=current_thought_event_id or "", delta=event.delta.thinking)
 
                 elif event.delta.type == 'signature_delta':
+                    signature_delta = event.delta.signature
+                    if isinstance(signature_delta, bytes):
+                        signature_delta = signature_delta.decode("utf-8", errors="ignore")
                     for block in reversed(completion.blocks):
                         if isinstance(block, ThoughtBlock):
-                            block.id += event.delta.signature
+                            if isinstance(block.id, bytes):
+                                block.id = block.id.decode("utf-8", errors="ignore")
+                            if isinstance(block.id, str) and block.id.startswith("thought_"):
+                                block.id = signature_delta
+                            else:
+                                block.id += signature_delta
                             break
 
                 elif event.delta.type == 'input_json_delta':
@@ -141,7 +157,12 @@ class AnthropicClient(BaseClient):
                 if completion.blocks:
                     last_block = completion.blocks[-1]
                     if isinstance(last_block, ThoughtBlock) and last_block.summaries:
-                        yield ThoughtEnd(id=last_block.id, thought=last_block.summaries[0])
+                        thought_end_id = current_thought_event_id or (
+                            last_block.id.decode("utf-8", errors="ignore")
+                            if isinstance(last_block.id, bytes) else last_block.id
+                        )
+                        yield ThoughtEnd(id=thought_end_id, thought=last_block.summaries[0])
+                        current_thought_event_id = None
                     elif isinstance(last_block, ActionBlock) and last_block.status == 'streaming':
                         last_block.status = 'parsed'
                         yield ActionEnd(id=last_block.id, name=last_block.name, body=last_block.body)
